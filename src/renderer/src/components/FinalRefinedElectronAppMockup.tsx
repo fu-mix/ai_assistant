@@ -28,12 +28,22 @@ import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 
+/**
+ * ElectronAPI の型定義
+ * preload/index.ts で expose しているメソッドを合わせる
+ */
 interface ElectronAPI {
   postChatAI: (message: Messages[], apiKey: string, systemPrompt: string) => Promise<any>
   readKnowledgeFiles: (knowledgeFiles: string[]) => Promise<any>
   readKnowledgeFile: (knowledgeFile: string) => Promise<any>
   readPromptFile: (pipeline: string, usecase: string) => Promise<any>
+
+  // ★ 追加: loadAgents / saveAgents
+  loadAgents: () => Promise<ChatInfo[]>
+  saveAgents: (agentsData: ChatInfo[]) => Promise<any>
 }
+
+// declare globalへ
 declare global {
   interface Window {
     electronAPI: ElectronAPI
@@ -50,7 +60,7 @@ export type Messages = {
   parts: [{ text: string }, { inline_data?: { mime_type: string; data: string } }?]
 }
 
-// エージェント(チャット)情報
+// ★ 各エージェント(チャット)情報
 type ChatInfo = {
   id: number
   customTitle: string
@@ -60,27 +70,31 @@ type ChatInfo = {
   createdAt: string
   inputMessage: string
 
-  // モーダルで設定したファイル情報 (Base64等)
   agentFileData?: string
   agentFileMimeType?: string
 }
 
 export const FinalRefinedElectronAppMockup = () => {
+  const toast = useToast()
+
+  // -------------------------------------------------------
+  // ステート
+  // -------------------------------------------------------
   const [chats, setChats] = useState<ChatInfo[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
-  const [inputMessage, setInputMessage] = useState<string>('')
-  const [apiKey, setApiKey] = useState<string>('')
+  const [inputMessage, setInputMessage] = useState('')
+  const [apiKey, setApiKey] = useState('')
 
-  // 画面で一時添付するファイル
+  // チャット画面で1回限り添付するファイル
   const [tempFileName, setTempFileName] = useState<string | null>(null)
   const [tempFileData, setTempFileData] = useState<string | null>(null)
   const [tempFileMimeType, setTempFileMimeType] = useState<string | null>(null)
 
-  // モーダル：エージェント
+  // 新しいエージェント作成モーダル
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
-  // ★ モーダンUIファイル入力
+
   const [modalAgentFileData, setModalAgentFileData] = useState<string | null>(null)
   const [modalAgentFileMimeType, setModalAgentFileMimeType] = useState<string | null>(null)
   const [modalAgentFileName, setModalAgentFileName] = useState('')
@@ -89,22 +103,42 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
 
-  // チャットフォームチェック
-  const [useAgentFile, setUseAgentFile] = useState<boolean>(false)
+  // チャットフォームの「関連ファイルを使う」チェック
+  const [useAgentFile, setUseAgentFile] = useState(false)
+
   const [isLoading, setIsLoading] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
-  const toast = useToast()
 
   // DOM参照
   const chatHistoryRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // ★ モーダンUIファイル入力の hidden ref
   const hiddenModalFileRef = useRef<HTMLInputElement>(null)
 
-  // ------------------------------------------------------
-  //  新しいエージェントの作成モーダル
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // Electronストアからロード
+  // -------------------------------------------------------
+  useEffect(() => {
+    window.electronAPI.loadAgents().then((stored) => {
+      if (Array.isArray(stored)) {
+        setChats(stored)
+      }
+    })
+  }, [])
+
+  // -------------------------------------------------------
+  // 必要に応じて都度save あるいはイベント駆動
+  // -------------------------------------------------------
+  // 例: アプリ中で "メッセージ送信" "エージェント作成" など変更タイミングで呼ぶ
+  const saveAll = () => {
+    window.electronAPI.saveAgents(chats).catch((err) => {
+      console.error('Failed to save agents:', err)
+    })
+  }
+
+  // -------------------------------------------------------
+  // 新しいエージェント作成モーダル
+  // -------------------------------------------------------
   const openCustomChatModal = () => {
     setModalChatTitle('')
     setModalSystemPrompt('')
@@ -115,7 +149,6 @@ export const FinalRefinedElectronAppMockup = () => {
   }
   const closeCustomChatModal = () => setIsModalOpen(false)
 
-  // ★ モダンUIのドラッグ＆ドロップ / クリック
   const handleModalAgentFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
@@ -131,12 +164,9 @@ export const FinalRefinedElectronAppMockup = () => {
     e.preventDefault()
     e.stopPropagation()
   }
-
   const handleModalAgentFileBoxClick = () => {
     hiddenModalFileRef.current?.click()
   }
-
-  // ★ 従来の onChange
   const handleModalAgentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -148,7 +178,6 @@ export const FinalRefinedElectronAppMockup = () => {
     e.target.value = ''
   }
 
-  // ★ ユーティリティ：ファイルをBase64変換
   const fileToBase64 = (file: File, callback: (base64: string, mime: string) => void) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -166,6 +195,7 @@ export const FinalRefinedElectronAppMockup = () => {
     reader.readAsDataURL(file)
   }
 
+  // エージェント作成
   const handleCreateCustomChat = () => {
     if (!modalChatTitle.trim()) {
       toast({
@@ -177,7 +207,6 @@ export const FinalRefinedElectronAppMockup = () => {
 
       return
     }
-
     const newChat: ChatInfo = {
       id: Date.now(),
       customTitle: modalChatTitle,
@@ -189,26 +218,30 @@ export const FinalRefinedElectronAppMockup = () => {
       agentFileData: modalAgentFileData || undefined,
       agentFileMimeType: modalAgentFileMimeType || undefined
     }
-    setChats((prev) => [...prev, newChat])
+    const updated = [...chats, newChat]
+    setChats(updated)
     setSelectedChatId(newChat.id)
     setInputMessage('')
     setIsModalOpen(false)
+
+    // 保存
+    window.electronAPI.saveAgents(updated).catch((err) => console.error(err))
   }
 
-  // ------------------------------------------------------
-  //  チャット選択
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // チャット選択
+  // -------------------------------------------------------
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
-    const targetChat = chats.find((c) => c.id === id)
-    if (targetChat) {
-      setInputMessage(targetChat.inputMessage)
+    const sel = chats.find((c) => c.id === id)
+    if (sel) {
+      setInputMessage(sel.inputMessage)
     }
   }
 
-  // ------------------------------------------------------
-  //  送信 (ファイルは履歴に保存しない)
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // メッセージ送信
+  // -------------------------------------------------------
   const sendMessage = async () => {
     if (!inputMessage.trim() && !tempFileData) return
     setIsLoading(true)
@@ -218,13 +251,13 @@ export const FinalRefinedElectronAppMockup = () => {
       content: inputMessage
     }
 
-    // リクエスト用 ephemeralMessage
+    // ephemeral
     const ephemeralMessage: Messages = {
       role: 'user',
       parts: [{ text: inputMessage }]
     }
 
-    // チャット画面で一時添付ファイル
+    // 添付ファイル(一時)
     if (tempFileData && tempFileMimeType) {
       ephemeralMessage.parts.push({
         inline_data: {
@@ -234,7 +267,7 @@ export const FinalRefinedElectronAppMockup = () => {
       })
     }
 
-    // モーダルで設定したファイル (useAgentFileがtrueの場合のみ)
+    // モーダルファイル
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (useAgentFile && selectedChat?.agentFileData && selectedChat?.agentFileMimeType) {
       ephemeralMessage.parts.push({
@@ -245,29 +278,28 @@ export const FinalRefinedElectronAppMockup = () => {
       })
     }
 
-    // 会話履歴にはファイルを含めず、テキストのみ
-    setChats((prev) =>
-      prev.map((chat) => {
-        if (chat.id === selectedChatId) {
-          return {
-            ...chat,
-            messages: [...chat.messages, newMessage],
-            postMessages: [
-              ...chat.postMessages,
-              {
-                role: 'user',
-                parts: [{ text: inputMessage }] // テキストのみ
-              }
-            ],
-            inputMessage: ''
-          }
+    // 会話履歴にはBase64を含めずにメッセージだけ
+    const updated = chats.map((chat) => {
+      if (chat.id === selectedChatId) {
+        return {
+          ...chat,
+          messages: [...chat.messages, newMessage],
+          postMessages: [
+            ...chat.postMessages,
+            {
+              role: 'user',
+              parts: [{ text: inputMessage }]
+            }
+          ],
+          inputMessage: ''
         }
+      }
 
-        return chat
-      })
-    )
+      return chat
+    })
+    setChats(updated)
 
-    // UIリセット
+    // 画面クリア
     setInputMessage('')
     setTempFileName(null)
     setTempFileData(null)
@@ -275,10 +307,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
     try {
       const systemPrompt = selectedChat ? selectedChat.systemPrompt : ''
-      const ephemeralMessages = [
-        ...(selectedChat?.postMessages || []), // テキストのみ
-        ephemeralMessage // 今回送信するファイル付メッセージ
-      ]
+      const ephemeralMessages = [...(selectedChat?.postMessages || []), ephemeralMessage]
 
       const responseData = await window.electronAPI.postChatAI(
         ephemeralMessages,
@@ -287,45 +316,46 @@ export const FinalRefinedElectronAppMockup = () => {
       )
 
       // AIメッセージ (テキストのみ)
-      const aiMsg: Message = { type: 'ai', content: responseData }
+      const aiMessage: Message = { type: 'ai', content: responseData }
 
-      // 履歴にもテキストのみ保存
-      setChats((prev) =>
-        prev.map((chat) => {
-          if (chat.id === selectedChatId) {
-            return {
-              ...chat,
-              messages: [...chat.messages, aiMsg],
-              postMessages: [
-                ...chat.postMessages,
-                {
-                  role: 'model',
-                  parts: [{ text: responseData }]
-                }
-              ]
-            }
+      const finalUpdated = updated.map((chat) => {
+        if (chat.id === selectedChatId) {
+          return {
+            ...chat,
+            messages: [...chat.messages, aiMessage],
+            postMessages: [
+              ...chat.postMessages,
+              {
+                role: 'model',
+                parts: [{ text: responseData }]
+              }
+            ]
           }
+        }
 
-          return chat
-        })
-      )
+        return chat
+      })
+
+      setChats(finalUpdated)
+      // 保存
+      window.electronAPI.saveAgents(finalUpdated).catch((err) => console.error(err))
     } catch (err) {
       console.error('sendMessageエラー:', err)
-      setChats((prev) =>
-        prev.map((chat) => {
-          if (chat.id === selectedChatId) {
-            return {
-              ...chat,
-              postMessages: [
-                ...chat.postMessages,
-                { role: 'model', parts: [{ text: 'sendMessageエラー' }] }
-              ]
-            }
+      const finalUpdated = updated.map((chat) => {
+        if (chat.id === selectedChatId) {
+          return {
+            ...chat,
+            postMessages: [
+              ...chat.postMessages,
+              { role: 'model', parts: [{ text: 'sendMessageエラー' }] }
+            ]
           }
+        }
 
-          return chat
-        })
-      )
+        return chat
+      })
+      setChats(finalUpdated)
+
       toast({
         title: 'エラー',
         description: 'メッセージの送信に失敗しました。',
@@ -345,9 +375,9 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // ------------------------------------------------------
-  //  チャット画面で一時ファイル添付
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // チャット画面でファイル添付(一時)
+  // -------------------------------------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -404,12 +434,13 @@ export const FinalRefinedElectronAppMockup = () => {
     setTempFileMimeType(null)
   }
 
-  // ------------------------------------------------------
-  //  入力欄やスクロール
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // 入力欄やスクロール
+  // -------------------------------------------------------
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInputMessage(val)
+    // 選択中チャットのinputMessageを更新
     setChats((prev) =>
       prev.map((chat) => {
         if (chat.id === selectedChatId) {
@@ -428,27 +459,27 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [inputMessage])
 
+  const chatHistoryRefCurrent = chatHistoryRef.current
   useEffect(() => {
-    if (chatHistoryRef.current) {
-      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
+    if (chatHistoryRefCurrent) {
+      chatHistoryRefCurrent.scrollTop = chatHistoryRefCurrent.scrollHeight
     }
-  }, [chats, selectedChatId])
+  }, [chats, selectedChatId, chatHistoryRefCurrent])
 
-  // ------------------------------------------------------
-  //  使用期限
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // 使用期限
+  // -------------------------------------------------------
   useEffect(() => {
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
-    // const expiryDate = new Date('2024-10-01') // テスト
     const currentDate = new Date()
     if (currentDate.getTime() > expiryDate.getTime()) {
       setIsExpired(true)
     }
   }, [])
 
-  // ------------------------------------------------------
-  //  システムプロンプト編集
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // システムプロンプト編集
+  // -------------------------------------------------------
   const selectedChat = chats.find((c) => c.id === selectedChatId)
 
   const openSystemPromptModal = () => {
@@ -456,22 +487,22 @@ export const FinalRefinedElectronAppMockup = () => {
     setEditingSystemPrompt(selectedChat.systemPrompt)
     setIsPromptModalOpen(true)
   }
-
   const closeSystemPromptModal = () => setIsPromptModalOpen(false)
 
   const handleSaveSystemPrompt = () => {
     if (!selectedChatId) return
-    setChats((prev) =>
-      prev.map((chat) => {
-        if (chat.id === selectedChatId) {
-          return { ...chat, systemPrompt: editingSystemPrompt }
-        }
+    const updated = chats.map((chat) => {
+      if (chat.id === selectedChatId) {
+        return { ...chat, systemPrompt: editingSystemPrompt }
+      }
 
-        return chat
-      })
-    )
+      return chat
+    })
+    setChats(updated)
+    window.electronAPI.saveAgents(updated).catch((err) => console.error(err))
+
     toast({
-      title: '指示の内容を更新しました',
+      title: 'システムプロンプトを更新しました',
       status: 'success',
       duration: 2000,
       isClosable: true
@@ -482,7 +513,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const handleCopySystemPrompt = () => {
     navigator.clipboard.writeText(editingSystemPrompt).then(() => {
       toast({
-        title: '指示の内容をコピーしました',
+        title: 'システムプロンプトをコピーしました',
         status: 'info',
         duration: 1000,
         isClosable: true
@@ -490,9 +521,9 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
-  // ------------------------------------------------------
-  //  JSX
-  // ------------------------------------------------------
+  // -------------------------------------------------------
+  // JSX表示
+  // -------------------------------------------------------
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
       {/* ヘッダー */}
@@ -506,8 +537,9 @@ export const FinalRefinedElectronAppMockup = () => {
         align="center"
       >
         <Heading as="h1" size="lg" fontWeight="extrabold" color="gray.800">
-          DesAIn Assistant
+          DesAIn_Assistant
         </Heading>
+
         <HStack spacing={4}>
           <Input
             value={apiKey}
@@ -517,7 +549,6 @@ export const FinalRefinedElectronAppMockup = () => {
             size="md"
             isDisabled={isExpired}
           />
-          {/* ボタン幅を確保して文字切れ回避 */}
           <Button
             onClick={openCustomChatModal}
             colorScheme="teal"
@@ -568,7 +599,7 @@ export const FinalRefinedElectronAppMockup = () => {
           </Box>
         </Box>
 
-        {/* 右カラム：チャット本文 */}
+        {/* 右カラム：チャット内容 */}
         <Box w="80%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
           {/* メッセージ一覧 */}
           <Box ref={chatHistoryRef} flex="1" overflowY="auto" p={4}>
@@ -614,6 +645,7 @@ export const FinalRefinedElectronAppMockup = () => {
                 maxHeight="200px"
                 isDisabled={apiKey.length === 0 || isExpired}
               />
+
               <Checkbox
                 isChecked={useAgentFile}
                 onChange={(e) => setUseAgentFile(e.target.checked)}
@@ -621,6 +653,7 @@ export const FinalRefinedElectronAppMockup = () => {
               >
                 関連ファイル
               </Checkbox>
+
               <IconButton
                 icon={<LuPaperclip />}
                 aria-label="ファイル添付"
@@ -651,7 +684,7 @@ export const FinalRefinedElectronAppMockup = () => {
             </HStack>
           </Flex>
 
-          {/* 一時添付ファイル表示 */}
+          {/* 一時添付ファイル(画面だけ) */}
           {tempFileName && (
             <Box p={4} borderTop="1px" borderColor="gray.200" display="flex" alignItems="center">
               <Text flex="1" fontSize="sm" color="gray.500">
@@ -710,7 +743,6 @@ export const FinalRefinedElectronAppMockup = () => {
               />
             </FormControl>
 
-            {/* ★ モダンUIファイル入力: ドラッグ＆ドロップ + クリック */}
             <FormControl>
               <FormLabel>関連ファイル (任意)</FormLabel>
               <Box
@@ -730,7 +762,6 @@ export const FinalRefinedElectronAppMockup = () => {
                 ) : (
                   <Text color="gray.500">クリックまたはファイルをドラッグ＆ドロップ</Text>
                 )}
-                {/* hidden input */}
                 <Input
                   ref={hiddenModalFileRef}
                   type="file"
