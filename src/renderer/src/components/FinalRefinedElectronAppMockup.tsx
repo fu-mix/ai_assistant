@@ -27,6 +27,7 @@ import remarkGfm from 'remark-gfm'
 import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
+import { MdOutlineContentCopy } from 'react-icons/md' // コピーアイコン
 
 interface ElectronAPI {
   postChatAI: (message: Messages[], apiKey: string, systemPrompt: string) => Promise<any>
@@ -90,10 +91,13 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
 
-  // チャットフォーム: agentFile
+  // フォーム: agentFile
   const [useAgentFile, setUseAgentFile] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
+
+  // ★ メッセージ Hover state
+  const [hoveredMessageIndex, setHoveredMessageIndex] = useState<number | null>(null)
 
   const chatHistoryRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -177,23 +181,20 @@ export const FinalRefinedElectronAppMockup = () => {
   // 削除 (モーダルで確認)
   // --------------------------------------------------
   const handleDeleteChatClick = (chatId: number, e: React.MouseEvent) => {
-    e.stopPropagation() // リスト項目のonClickを防ぐ
+    e.stopPropagation()
     setDeleteTargetId(chatId)
     setIsDeleteModalOpen(true)
   }
-
   const closeDeleteModal = () => {
     setIsDeleteModalOpen(false)
     setDeleteTargetId(null)
   }
-
   const confirmDeleteChat = async () => {
     if (deleteTargetId == null) {
       closeDeleteModal()
 
       return
     }
-    // 実際に削除実行
     await handleDeleteChat(deleteTargetId)
     closeDeleteModal()
   }
@@ -202,7 +203,6 @@ export const FinalRefinedElectronAppMockup = () => {
     const target = chats.find((c) => c.id === chatId)
     if (!target) return
 
-    // ファイル削除
     if (target.agentFilePath) {
       try {
         await window.electronAPI.deleteFileInUserData(target.agentFilePath)
@@ -211,12 +211,10 @@ export const FinalRefinedElectronAppMockup = () => {
       }
     }
 
-    // chatsから
     const updated = chats.filter((c) => c.id !== chatId)
     setChats(updated)
     window.electronAPI.saveAgents(updated).catch(console.error)
 
-    // 選択解除
     if (chatId === selectedChatId) {
       setSelectedChatId(null)
       setInputMessage('')
@@ -359,7 +357,7 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // ドラッグ&ドロップ
+  // 一時ファイル添付
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -413,6 +411,7 @@ export const FinalRefinedElectronAppMockup = () => {
     setTempFileMimeType(null)
   }
 
+  // 入力欄
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInputMessage(val)
@@ -446,7 +445,9 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [])
 
-  // システムプロンプト編集
+  // -------------------------------------------
+  // システムプロンプト
+  // -------------------------------------------
   const selectedChat = chats.find((c) => c.id === selectedChatId)
 
   const openSystemPromptModal = () => {
@@ -488,6 +489,9 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
+  // -------------------------------------------
+  // JSX
+  // -------------------------------------------
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
       {/* ヘッダー */}
@@ -559,7 +563,7 @@ export const FinalRefinedElectronAppMockup = () => {
                       </Text>
                     </Box>
 
-                    {/* 選択中のアシスタントだけ削除アイコンを表示 */}
+                    {/* 削除アイコン(選択中のみ表示) */}
                     {chat.id === selectedChatId && (
                       <IconButton
                         icon={<AiOutlineDelete />}
@@ -567,7 +571,11 @@ export const FinalRefinedElectronAppMockup = () => {
                         variant="ghost"
                         colorScheme="red"
                         size="sm"
-                        onClick={(e) => handleDeleteChatClick(chat.id, e)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleteTargetId(chat.id)
+                          setIsDeleteModalOpen(true)
+                        }}
                       />
                     )}
                   </Flex>
@@ -588,6 +596,10 @@ export const FinalRefinedElectronAppMockup = () => {
                   p={3}
                   rounded="lg"
                   bg={msg.type === 'user' ? 'gray.300' : 'gray.50'}
+                  position="relative"
+                  // マウスホバーの検知
+                  onMouseEnter={() => setHoveredMessageIndex(idx)}
+                  onMouseLeave={() => setHoveredMessageIndex(null)}
                 >
                   {msg.type === 'user' ? (
                     <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
@@ -595,6 +607,29 @@ export const FinalRefinedElectronAppMockup = () => {
                     <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
                       {msg.content}
                     </ReactMarkdown>
+                  )}
+                  {/* ★ コピーアイコンを、ホバー中のみ表示 */}
+                  {hoveredMessageIndex === idx && (
+                    <IconButton
+                      icon={<MdOutlineContentCopy />}
+                      aria-label="コピー"
+                      size="sm"
+                      position="absolute"
+                      top="4px"
+                      right="6px"
+                      variant="ghost"
+                      colorScheme="blue"
+                      onClick={() => {
+                        navigator.clipboard.writeText(msg.content).then(() => {
+                          toast({
+                            title: 'メッセージをコピーしました',
+                            status: 'info',
+                            duration: 1000,
+                            isClosable: true
+                          })
+                        })
+                      }}
+                    />
                   )}
                 </Box>
               ))
@@ -775,7 +810,7 @@ export const FinalRefinedElectronAppMockup = () => {
         </ModalContent>
       </Modal>
 
-      {/* ★ 削除確認モーダル */}
+      {/* 削除確認モーダル */}
       <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal} isCentered>
         <ModalOverlay />
         <ModalContent>
