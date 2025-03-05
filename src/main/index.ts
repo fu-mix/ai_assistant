@@ -25,7 +25,7 @@ type Message = {
 }
 
 /**
- * エージェントの型。load/saveAgentsで管理
+ * エージェント(アシスタント)の型。load/saveAgentsで管理
  */
 type AgentData = {
   id: number
@@ -188,6 +188,26 @@ ipcMain.handle('readFileByPath', (_event, filePath: string) => {
     console.error('Failed to read file:', err)
 
     return null
+  }
+})
+
+// ----------------------
+// ★ ファイル削除IPC
+// ----------------------
+ipcMain.handle('delete-file-in-userdata', (_event, filePath: string) => {
+  if (!filePath) return false
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+
+      return true
+    }
+
+    return false
+  } catch (err) {
+    console.error('Failed to delete file:', err)
+
+    return false
   }
 })
 

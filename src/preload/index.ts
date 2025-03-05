@@ -35,6 +35,10 @@ if (process.contextIsolated) {
       // userData配下のファイルをbase64化
       readFileByPath: async (filePath: string) => {
         return await ipcRenderer.invoke('readFileByPath', filePath)
+      },
+      // ★ userDataファイル削除
+      deleteFileInUserData: async (filePath: string) => {
+        return await ipcRenderer.invoke('delete-file-in-userdata', filePath)
       }
     })
   } catch (error) {

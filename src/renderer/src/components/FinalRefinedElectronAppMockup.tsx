@@ -28,15 +28,13 @@ import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 
-/**
- * ElectronAPI
- */
 interface ElectronAPI {
   postChatAI: (message: Messages[], apiKey: string, systemPrompt: string) => Promise<any>
   loadAgents: () => Promise<ChatInfo[]>
   saveAgents: (agentsData: ChatInfo[]) => Promise<any>
   copyFileToUserData: () => Promise<string | null>
   readFileByPath: (filePath: string) => Promise<string | null>
+  deleteFileInUserData: (filePath: string) => Promise<boolean>
 }
 declare global {
   interface Window {
@@ -44,26 +42,16 @@ declare global {
   }
 }
 
-/**
- * Basic message for UI
- */
 type Message = {
   type: 'user' | 'ai'
   content: string
 }
 
-/**
- * ChatAI message: multiple parts
- */
 export type Messages = {
   role: string
   parts: [{ text: string }, { inline_data?: { mime_type: string; data: string } }?]
 }
 
-/**
- * Chat(エージェント)情報
- * agentFilePath: userDataにコピーしたファイルのパス
- */
 type ChatInfo = {
   id: number
   customTitle: string
@@ -78,18 +66,17 @@ type ChatInfo = {
 export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
-  // ステート
   const [chats, setChats] = useState<ChatInfo[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
   const [inputMessage, setInputMessage] = useState('')
   const [apiKey, setApiKey] = useState('')
 
-  // チャットフォーム 一時ファイル
+  // 一時ファイル(フォーム)
   const [tempFileName, setTempFileName] = useState<string | null>(null)
   const [tempFileData, setTempFileData] = useState<string | null>(null)
   const [tempFileMimeType, setTempFileMimeType] = useState<string | null>(null)
 
-  // エージェント作成モーダル
+  // 新しいアシスタントモーダル
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
@@ -99,20 +86,19 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
 
-  // フォームで「モーダルファイルを使う」チェック
-  const [useAgentFile, setUseAgentFile] = useState(false)
+  // 削除確認モーダル
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
 
+  // チャットフォーム: agentFile
+  const [useAgentFile, setUseAgentFile] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
 
-  // Refs
   const chatHistoryRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ----------------------------------------------
-  // アプリ起動時に loadAgents
-  // ----------------------------------------------
   useEffect(() => {
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
@@ -121,9 +107,9 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }, [])
 
-  // ----------------------------------------------
-  // 新しいエージェント作成モーダル
-  // ----------------------------------------------
+  // --------------------------------------------------
+  // 新しいアシスタント
+  // --------------------------------------------------
   const openCustomChatModal = () => {
     setModalChatTitle('')
     setModalSystemPrompt('')
@@ -132,7 +118,6 @@ export const FinalRefinedElectronAppMockup = () => {
   }
   const closeCustomChatModal = () => setIsModalOpen(false)
 
-  // ファイルを userData にコピー
   const handleSelectAgentFile = async () => {
     const copiedPath = await window.electronAPI.copyFileToUserData()
     if (copiedPath) {
@@ -147,11 +132,10 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // エージェント作成
   const handleCreateCustomChat = () => {
     if (!modalChatTitle.trim()) {
       toast({
-        title: 'チャット名が入力されていません',
+        title: 'アシスタント名が入力されていません',
         status: 'warning',
         duration: 3000,
         isClosable: true
@@ -178,9 +162,9 @@ export const FinalRefinedElectronAppMockup = () => {
     window.electronAPI.saveAgents(updated).catch(console.error)
   }
 
-  // ----------------------------------------------
-  // チャット選択
-  // ----------------------------------------------
+  // --------------------------------------------------
+  // 選択
+  // --------------------------------------------------
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
     const target = chats.find((c) => c.id === id)
@@ -189,28 +173,79 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // ----------------------------------------------
-  // メッセージ送信
-  // ----------------------------------------------
+  // --------------------------------------------------
+  // 削除 (モーダルで確認)
+  // --------------------------------------------------
+  const handleDeleteChatClick = (chatId: number, e: React.MouseEvent) => {
+    e.stopPropagation() // リスト項目のonClickを防ぐ
+    setDeleteTargetId(chatId)
+    setIsDeleteModalOpen(true)
+  }
+
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false)
+    setDeleteTargetId(null)
+  }
+
+  const confirmDeleteChat = async () => {
+    if (deleteTargetId == null) {
+      closeDeleteModal()
+
+      return
+    }
+    // 実際に削除実行
+    await handleDeleteChat(deleteTargetId)
+    closeDeleteModal()
+  }
+
+  const handleDeleteChat = async (chatId: number) => {
+    const target = chats.find((c) => c.id === chatId)
+    if (!target) return
+
+    // ファイル削除
+    if (target.agentFilePath) {
+      try {
+        await window.electronAPI.deleteFileInUserData(target.agentFilePath)
+      } catch (err) {
+        console.error('Failed to delete userData file:', err)
+      }
+    }
+
+    // chatsから
+    const updated = chats.filter((c) => c.id !== chatId)
+    setChats(updated)
+    window.electronAPI.saveAgents(updated).catch(console.error)
+
+    // 選択解除
+    if (chatId === selectedChatId) {
+      setSelectedChatId(null)
+      setInputMessage('')
+    }
+
+    toast({
+      title: 'アシスタントを削除しました',
+      status: 'info',
+      duration: 2000,
+      isClosable: true
+    })
+  }
+
+  // --------------------------------------------------
+  // 送信
+  // --------------------------------------------------
   const sendMessage = async () => {
     if (!inputMessage.trim() && !tempFileData) return
     setIsLoading(true)
 
-    // UI表示用
     const newMsg: Message = {
       type: 'user',
       content: inputMessage
     }
-
-    // API送信用 ephemeral
     const ephemeralMsg: Messages = {
       role: 'user',
-      parts: [
-        { text: inputMessage } // part[0] -> テキスト
-      ]
+      parts: [{ text: inputMessage }]
     }
 
-    // (1) 一時ファイル (フォーム添付)
     if (tempFileData && tempFileMimeType) {
       ephemeralMsg.parts.push({
         inline_data: {
@@ -220,22 +255,17 @@ export const FinalRefinedElectronAppMockup = () => {
       })
     }
 
-    // (2) モーダルファイルを使う場合
     const selectedChat = chats.find((c) => c.id === selectedChatId)
-
     if (useAgentFile && selectedChat?.agentFilePath) {
       const fileBase64 = await window.electronAPI.readFileByPath(selectedChat.agentFilePath)
       if (fileBase64) {
-        // 拡張子をチェックしてMIMEを判別
         const filePathLower = selectedChat.agentFilePath.toLowerCase()
         let derivedMime = 'application/octet-stream'
-
         if (filePathLower.endsWith('.pdf')) {
           derivedMime = 'application/pdf'
         } else if (filePathLower.endsWith('.txt')) {
           derivedMime = 'text/plain'
         }
-
         ephemeralMsg.parts.push({
           inline_data: {
             mime_type: derivedMime,
@@ -245,7 +275,6 @@ export const FinalRefinedElectronAppMockup = () => {
       }
     }
 
-    // 履歴にはテキストのみ
     const updated = chats.map((chat) => {
       if (chat.id === selectedChatId) {
         return {
@@ -275,7 +304,6 @@ export const FinalRefinedElectronAppMockup = () => {
       const ephemeralAll = [...(selectedChat?.postMessages || []), ephemeralMsg]
       const responseData = await window.electronAPI.postChatAI(ephemeralAll, apiKey, systemPrompt)
 
-      // AIメッセージ
       const aiMsg: Message = { type: 'ai', content: responseData }
       const finalUpdated = updated.map((chat) => {
         if (chat.id === selectedChatId) {
@@ -295,7 +323,6 @@ export const FinalRefinedElectronAppMockup = () => {
         return chat
       })
       setChats(finalUpdated)
-
       window.electronAPI.saveAgents(finalUpdated).catch(console.error)
     } catch (err) {
       console.error('sendMessageエラー:', err)
@@ -313,7 +340,6 @@ export const FinalRefinedElectronAppMockup = () => {
         return chat
       })
       setChats(finalErr)
-
       toast({
         title: 'エラー',
         description: 'メッセージの送信に失敗しました。',
@@ -333,7 +359,7 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // チャット画面: 一時ファイル添付
+  // ドラッグ&ドロップ
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -355,8 +381,6 @@ export const FinalRefinedElectronAppMockup = () => {
     }
     reader.readAsDataURL(file)
   }
-
-  // ドラッグ＆ドロップ
   const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
@@ -389,7 +413,6 @@ export const FinalRefinedElectronAppMockup = () => {
     setTempFileMimeType(null)
   }
 
-  // 入力欄やスクロール
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInputMessage(val)
@@ -409,13 +432,13 @@ export const FinalRefinedElectronAppMockup = () => {
       chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`
     }
   }, [inputMessage])
+
   useEffect(() => {
     if (chatHistoryRef.current) {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
     }
   }, [chats, selectedChatId])
 
-  // 使用期限
   useEffect(() => {
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
@@ -425,6 +448,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
   // システムプロンプト編集
   const selectedChat = chats.find((c) => c.id === selectedChatId)
+
   const openSystemPromptModal = () => {
     if (!selectedChat) return
     setEditingSystemPrompt(selectedChat.systemPrompt)
@@ -445,7 +469,7 @@ export const FinalRefinedElectronAppMockup = () => {
     window.electronAPI.saveAgents(updated).catch(console.error)
 
     toast({
-      title: 'プロンプトを更新しました',
+      title: 'アシスタント指示を更新しました',
       status: 'success',
       duration: 2000,
       isClosable: true
@@ -456,7 +480,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const handleCopySystemPrompt = () => {
     navigator.clipboard.writeText(editingSystemPrompt).then(() => {
       toast({
-        title: 'プロンプトをコピーしました',
+        title: '指示内容をコピーしました',
         status: 'info',
         duration: 1000,
         isClosable: true
@@ -499,9 +523,8 @@ export const FinalRefinedElectronAppMockup = () => {
         </HStack>
       </Flex>
 
-      {/* メイン */}
       <Flex as="main" flex="1" overflow="hidden" p={4}>
-        {/* 左: チャット一覧 */}
+        {/* 左カラム: アシスタント一覧 */}
         <Box
           w="20%"
           bg="white"
@@ -526,21 +549,36 @@ export const FinalRefinedElectronAppMockup = () => {
                   whiteSpace="nowrap"
                   _hover={{ bg: chat.id === selectedChatId ? 'blue.100' : 'blue.50' }}
                 >
-                  <Text fontSize="xs" color="gray.500">
-                    {chat.createdAt}
-                  </Text>
-                  <Text fontSize="md" fontWeight="bold">
-                    {chat.customTitle || '無題のチャット'}
-                  </Text>
+                  <Flex justify="space-between" align="center">
+                    <Box>
+                      <Text fontSize="xs" color="gray.500">
+                        {chat.createdAt}
+                      </Text>
+                      <Text fontSize="md" fontWeight="bold">
+                        {chat.customTitle || '無題のアシスタント'}
+                      </Text>
+                    </Box>
+
+                    {/* 選択中のアシスタントだけ削除アイコンを表示 */}
+                    {chat.id === selectedChatId && (
+                      <IconButton
+                        icon={<AiOutlineDelete />}
+                        aria-label="アシスタント削除"
+                        variant="ghost"
+                        colorScheme="red"
+                        size="sm"
+                        onClick={(e) => handleDeleteChatClick(chat.id, e)}
+                      />
+                    )}
+                  </Flex>
                 </ListItem>
               ))}
             </List>
           </Box>
         </Box>
 
-        {/* 右: 会話内容 */}
+        {/* 右カラム: 会話本文 */}
         <Box w="80%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
-          {/* 履歴表示 */}
           <Box ref={chatHistoryRef} flex="1" overflowY="auto" p={4}>
             {selectedChat ? (
               selectedChat.messages.map((msg, idx) => (
@@ -562,7 +600,7 @@ export const FinalRefinedElectronAppMockup = () => {
               ))
             ) : (
               <Text fontWeight="bold" color="gray.500">
-                チャットを作成して開始してください
+                アシスタントを作成して開始してください
               </Text>
             )}
           </Box>
@@ -656,7 +694,7 @@ export const FinalRefinedElectronAppMockup = () => {
         </ModalContent>
       </Modal>
 
-      {/* 新しいエージェント作成モーダル */}
+      {/* 新しいアシスタント作成モーダル */}
       <Modal isOpen={isModalOpen} onClose={closeCustomChatModal} isCentered>
         <ModalOverlay />
         <ModalContent maxW="3xl">
@@ -684,14 +722,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
             <FormControl>
               <FormLabel>関連ファイル (任意)</FormLabel>
-              <Button
-                border="2px dashed"
-                borderColor="gray.300"
-                colorScheme="blue"
-                variant="outline"
-                w="full"
-                onClick={handleSelectAgentFile}
-              >
+              <Button colorScheme="blue" variant="outline" w="full" onClick={handleSelectAgentFile}>
                 ファイルを選択
               </Button>
               {modalAgentFilePath && (
@@ -701,7 +732,6 @@ export const FinalRefinedElectronAppMockup = () => {
               )}
             </FormControl>
           </ModalBody>
-
           <ModalFooter>
             <Button mr={3} onClick={closeCustomChatModal}>
               キャンセル
@@ -740,6 +770,25 @@ export const FinalRefinedElectronAppMockup = () => {
             </Button>
             <Button colorScheme="blue" onClick={handleSaveSystemPrompt}>
               保存
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ★ 削除確認モーダル */}
+      <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>アシスタント削除の確認</ModalHeader>
+          <ModalBody>
+            <Text>このアシスタントを削除しますか？</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button mr={3} onClick={closeDeleteModal}>
+              キャンセル
+            </Button>
+            <Button colorScheme="red" onClick={confirmDeleteChat}>
+              削除
             </Button>
           </ModalFooter>
         </ModalContent>
