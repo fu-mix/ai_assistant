@@ -1,52 +1,73 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 import axios from 'axios'
 import { HttpsProxyAgent } from 'https-proxy-agent'
+import * as fs from 'fs'
+import * as path from 'path'
 
 /**
- * AgentData型 (会話履歴やエージェント情報を保存する例)
+ * Messages定義
+ */
+type Messages = {
+  role: string
+  parts: [{ text: string }, { inline_data?: { mime_type: string; data: string } }?]
+}
+
+/**
+ * 会話ログ用
  */
 type Message = {
-  type: string
+  type: 'user' | 'ai'
   content: string
 }
+
+/**
+ * エージェントの型。load/saveAgentsで管理
+ */
 type AgentData = {
   id: number
   customTitle: string
   systemPrompt: string
   messages: Message[]
+  postMessages: Messages[]
   createdAt: string
+  inputMessage: string
+  agentFilePath?: string // userDataにコピーしたファイルパス
+  agentFileData?: string // 互換のため残す場合
+  agentFileMimeType?: string
+}
+
+interface StoreSchema {
+  agents: AgentData[]
 }
 
 /**
- * Electron-store を動的 import するための関数
+ * electron-storeなどを動的importで初期化
  */
-async function initElectronStore() {
-  // 動的インポート
-  const { default: Store } = await import('electron-store')
-  // userData パスを取得 (ビルド時 productName=desain_assistant であれば
-  // C:\Users\<USERNAME>\AppData\Roaming\desain_assistant になる想定)
-  const userDataPath = app.getPath('userData')
-  const storePath = join(userDataPath, 'history')
+import { createRequire } from 'module'
+let store: any = null
 
-  const store = new Store<{
-    agents: AgentData[]
-  }>({
+async function initStore() {
+  const myRequire = createRequire(import.meta.url)
+  const storeModule = myRequire('electron-store')
+  const ElectronStore = storeModule.default
+
+  const userDataPath = app.getPath('userData')
+  const historyDir = path.join(userDataPath, 'history')
+
+  const storeInstance = new ElectronStore<StoreSchema>({
     name: 'myhistory',
-    cwd: storePath,
+    cwd: historyDir,
     defaults: {
       agents: []
     }
   })
 
-  return store
+  return storeInstance
 }
-
-// グローバル変数
-let store: any = null
 
 /**
  * createWindow
@@ -85,32 +106,97 @@ function createWindow(): void {
   }
 }
 
-/**
- * Electron起動
- */
 app.whenReady().then(async () => {
+  try {
+    store = await initStore()
+  } catch (err) {
+    console.error('Error init store:', err)
+  }
+
   electronApp.setAppUserModelId('com.electron')
-
-  // ここで electron-store を動的に import
-  store = await initElectronStore()
-
-  // IPC
-  ipcMain.on('ping', () => console.log('pong'))
-
-  // load-agents
-  ipcMain.handle('load-agents', () => {
-    return store.get('agents')
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
   })
 
-  // save-agents
-  ipcMain.handle('save-agents', (_event, newAgents: AgentData[]) => {
-    store.set('agents', newAgents)
+  createWindow()
 
-    return true
+  app.on('activate', function () {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
 
-  // postChatAI
-  ipcMain.handle('postChatAI', async (_event, message, apiKey: string, systemPrompt: string) => {
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+// ----------------------
+// load/save Agents
+// ----------------------
+ipcMain.handle('load-agents', () => {
+  return store?.get('agents') || []
+})
+
+ipcMain.handle('save-agents', (_event, agents: AgentData[]) => {
+  store?.set('agents', agents)
+
+  return true
+})
+
+// ----------------------
+// copy-file-to-userdata
+//  -> userData配下にコピーしてパスを返す
+// ----------------------
+ipcMain.handle('copy-file-to-userdata', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile']
+  })
+  if (canceled || filePaths.length === 0) {
+    return null
+  }
+  const originalPath = filePaths[0]
+
+  try {
+    const userDataDir = app.getPath('userData')
+    const filesDir = path.join(userDataDir, 'files')
+    if (!fs.existsSync(filesDir)) {
+      fs.mkdirSync(filesDir, { recursive: true })
+    }
+    const fileName = path.basename(originalPath)
+    const destPath = path.join(filesDir, fileName)
+
+    fs.copyFileSync(originalPath, destPath)
+
+    return destPath
+  } catch (err) {
+    console.error('Failed to copy file:', err)
+
+    return null
+  }
+})
+
+// ----------------------
+// readFileByPath -> base64
+// ----------------------
+ipcMain.handle('readFileByPath', (_event, filePath: string) => {
+  try {
+    const data = fs.readFileSync(filePath)
+
+    return data.toString('base64')
+  } catch (err) {
+    console.error('Failed to read file:', err)
+
+    return null
+  }
+})
+
+// ----------------------
+// postChatAI
+// ----------------------
+ipcMain.handle(
+  'postChatAI',
+  async (_event, message: Messages[], apiKey: string, systemPrompt: string) => {
     const API_ENDPOINT =
       'https://ai-foundation-api.app/ai-foundation/chat-ai/gemini/pro:generateContent'
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
@@ -118,7 +204,7 @@ app.whenReady().then(async () => {
       const response = await axios.post(
         API_ENDPOINT,
         {
-          contents: message,
+          contents: [...message],
           system_instruction: {
             parts: [
               {
@@ -147,18 +233,5 @@ app.whenReady().then(async () => {
       console.error('Error sending message:', error)
       throw error
     }
-  })
-
-  // Window
-  createWindow()
-
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
   }
-})
+)

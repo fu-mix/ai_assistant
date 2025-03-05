@@ -3,66 +3,45 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 type Messages = {
   role: string
-  parts: [
-    {
-      text: string
-    },
-    {
-      inline_data?: {
-        mime_type: string
-        data: string
-      }
-    }?
-  ]
+  parts: [{ text: string }, { inline_data?: { mime_type: string; data: string } }?]
+}
+
+type AgentData = {
+  // 略
 }
 
 // カスタムAPI
 const api = {}
 
-// ElectronがcontextIsolationを有効にしている場合、contextBridgeを介してAPIを注入
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
 
-    // ★ ここに ElectronAPI をまとめて定義
     contextBridge.exposeInMainWorld('electronAPI', {
-      // すでにある postChatAI
-      postChatAI: async (message: Messages[], apiKey: string, systemPrompt: string) => {
-        try {
-          return await ipcRenderer.invoke('postChatAI', message, apiKey, systemPrompt)
-        } catch (error) {
-          console.error('Error sending message (preload):', error)
-          throw error
-        }
+      postChatAI: async (messages: Messages[], apiKey: string, systemPrompt: string) => {
+        return await ipcRenderer.invoke('postChatAI', messages, apiKey, systemPrompt)
       },
-
-      // readXXX系 (すでにあるなら変更不要)
-      readKnowledgeFiles: async (knowledgeFiles: string[]) => {
-        return await ipcRenderer.invoke('read-knowledge-files', knowledgeFiles)
-      },
-      readKnowledgeFile: async (knowledgeFile: string) => {
-        return await ipcRenderer.invoke('read-knowledge-file', knowledgeFile)
-      },
-      readPromptFile: async (pipeline: string, usecase: string) => {
-        return await ipcRenderer.invoke('read-prompt-file', pipeline, usecase)
-      },
-
-      // ★ 追加: loadAgents / saveAgents
       loadAgents: async () => {
-        // IPC経由で main/index.ts の store.get('agents') を呼び出す
         return await ipcRenderer.invoke('load-agents')
       },
       saveAgents: async (agentsData: any) => {
-        // IPC経由で store.set('agents', ...) を呼び出す
         return await ipcRenderer.invoke('save-agents', agentsData)
+      },
+      // ファイルを userDataにコピー
+      copyFileToUserData: async () => {
+        return await ipcRenderer.invoke('copy-file-to-userdata')
+      },
+      // userData配下のファイルをbase64化
+      readFileByPath: async (filePath: string) => {
+        return await ipcRenderer.invoke('readFileByPath', filePath)
       }
     })
   } catch (error) {
     console.error(error)
   }
 } else {
-  // contextIsolationがfalseの場合のフォールバック
+  // fallback if contextIsolation=false
   // @ts-ignore
   window.electron = electronAPI
   // @ts-ignore

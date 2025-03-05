@@ -28,7 +28,7 @@
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
     "axios": "^1.7.3",
-    "electron-store": "^10.0.1",
+    "electron-store": "^7.0.3",
     "electron-updater": "^6.1.7",
     "framer-motion": "^11.3.30",
     "https-proxy-agent": "^7.0.5",
