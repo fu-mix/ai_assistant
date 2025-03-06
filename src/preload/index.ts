@@ -3,17 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 type Messages = {
   role: string
-  parts: [
-    {
-      text: string
-    },
-    {
-      inline_data?: {
-        mime_type: string
-        data: string
-      }
-    }?
-  ]
+  parts: [{ text: string }, { inline_data?: { mime_type: string; data: string } }?]
 }
 
 // カスタムAPI
@@ -23,29 +13,35 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
+
     contextBridge.exposeInMainWorld('electronAPI', {
-      postChatAI: async (message: Messages[], apiKey: string, systemPrompt: string) => {
-        try {
-          return await ipcRenderer.invoke('postChatAI', message, apiKey, systemPrompt)
-        } catch (error) {
-          console.error('Error sending message (preload):', error)
-          throw error
-        }
+      postChatAI: async (messages: Messages[], apiKey: string, systemPrompt: string) => {
+        return await ipcRenderer.invoke('postChatAI', messages, apiKey, systemPrompt)
       },
-      readKnowledgeFiles: async (knowledgeFiles: string[]) => {
-        return await ipcRenderer.invoke('read-knowledge-files', knowledgeFiles)
+      loadAgents: async () => {
+        return await ipcRenderer.invoke('load-agents')
       },
-      readKnowledgeFile: async (knowledgeFile: string) => {
-        return await ipcRenderer.invoke('read-knowledge-file', knowledgeFile)
+      saveAgents: async (agentsData: any) => {
+        return await ipcRenderer.invoke('save-agents', agentsData)
       },
-      readPromptFile: async (pipeline: string, usecase: string) => {
-        return await ipcRenderer.invoke('read-prompt-file', pipeline, usecase)
+      // ファイルを userDataにコピー
+      copyFileToUserData: async () => {
+        return await ipcRenderer.invoke('copy-file-to-userdata')
+      },
+      // userData配下のファイルをbase64化
+      readFileByPath: async (filePath: string) => {
+        return await ipcRenderer.invoke('readFileByPath', filePath)
+      },
+      // ★ userDataファイル削除
+      deleteFileInUserData: async (filePath: string) => {
+        return await ipcRenderer.invoke('delete-file-in-userdata', filePath)
       }
     })
   } catch (error) {
     console.error(error)
   }
 } else {
+  // fallback if contextIsolation=false
   // @ts-ignore
   window.electron = electronAPI
   // @ts-ignore

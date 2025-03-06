@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: desain_assistant
+productName: desain_assistant_1_1
 directories:
   buildResources: build
 files:
