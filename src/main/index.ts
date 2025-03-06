@@ -74,7 +74,7 @@ async function initStore() {
  */
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 1280,
+    width: 1366,
     height: 768,
     show: false,
     autoHideMenuBar: true,

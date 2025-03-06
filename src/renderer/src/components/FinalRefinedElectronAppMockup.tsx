@@ -458,12 +458,12 @@ export const FinalRefinedElectronAppMockup = () => {
       })
     )
   }
-  useEffect(() => {
-    if (chatInputRef.current) {
-      chatInputRef.current.style.height = 'auto'
-      chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`
-    }
-  }, [inputMessage])
+  // useEffect(() => {
+  //   if (chatInputRef.current) {
+  //     chatInputRef.current.style.height = 'auto'
+  //     chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`
+  //   }
+  // }, [inputMessage])
 
   useEffect(() => {
     if (chatHistoryRef.current) {
@@ -519,6 +519,53 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
+  // ★↓↓↓↓ ここから追加・修正 ★↓↓↓↓
+  // モーダル内でファイルを変更する関数
+  const handleChangeFileInPromptModal = async () => {
+    if (!selectedChat) return
+
+    // 古いファイルがあれば削除
+    if (selectedChat.agentFilePath) {
+      try {
+        await window.electronAPI.deleteFileInUserData(selectedChat.agentFilePath)
+      } catch (err) {
+        console.error('Failed to delete old file:', err)
+      }
+    }
+
+    // 新しいファイルをコピー
+    const newPath = await window.electronAPI.copyFileToUserData()
+    if (!newPath) {
+      toast({
+        title: 'ファイルが選択されませんでした',
+        status: 'info',
+        duration: 2000,
+        isClosable: true
+      })
+
+      return
+    }
+
+    // agentFilePathを更新
+    const updated = chats.map((chat) => {
+      if (chat.id === selectedChatId) {
+        return { ...chat, agentFilePath: newPath }
+      }
+
+      return chat
+    })
+    setChats(updated)
+    window.electronAPI.saveAgents(updated).catch(console.error)
+
+    toast({
+      title: '関連ファイルを変更しました',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+  }
+  // ★↑↑↑↑ ここまで追加・修正 ★↑↑↑↑
+
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
       {/* ヘッダー */}
@@ -532,7 +579,7 @@ export const FinalRefinedElectronAppMockup = () => {
         align="center"
       >
         <Heading as="h1" size="lg" fontWeight="extrabold" color="gray.800">
-          DesAIn_Assistant
+          DesAIn Assistant
         </Heading>
         <HStack spacing={4}>
           <Input
@@ -682,10 +729,11 @@ export const FinalRefinedElectronAppMockup = () => {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 placeholder="メッセージを入力..."
-                rows={1}
-                resize="none"
+                //rows={1}
+                resize="vertical"
                 flex="1"
-                maxHeight="200px"
+                // maxHeight="500px"
+                // height="100px"
                 isDisabled={apiKey.length === 0 || isExpired}
               />
 
@@ -697,7 +745,7 @@ export const FinalRefinedElectronAppMockup = () => {
                 関連ファイル
               </Checkbox>
 
-              {/* ★acceptを PDF/TXT/画像 のみ */}
+              {/* acceptを PDF/TXT/画像 のみ */}
               <IconButton
                 icon={<LuPaperclip />}
                 aria-label="ファイル添付"
@@ -777,7 +825,7 @@ export const FinalRefinedElectronAppMockup = () => {
             </FormControl>
 
             <FormControl mb={4}>
-              <FormLabel>アシスタントへの指示</FormLabel>
+              <FormLabel>指示</FormLabel>
               <Textarea
                 rows={5}
                 w="full"
@@ -789,7 +837,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
             <FormControl>
               <FormLabel>関連ファイル (任意)</FormLabel>
-              <Button colorScheme="blue" variant="outline" w="full" onClick={handleSelectAgentFile}>
+              <Button colorScheme="blue" variant="outline" onClick={handleSelectAgentFile}>
                 ファイルを選択
               </Button>
               {modalAgentFilePath && (
@@ -813,7 +861,7 @@ export const FinalRefinedElectronAppMockup = () => {
       {/* システムプロンプト編集モーダル */}
       <Modal isOpen={isPromptModalOpen} onClose={closeSystemPromptModal} isCentered>
         <ModalOverlay />
-        <ModalContent>
+        <ModalContent maxW="3xl">
           <ModalHeader>アシスタント指示の編集</ModalHeader>
           <ModalBody>
             <FormControl>
@@ -823,6 +871,7 @@ export const FinalRefinedElectronAppMockup = () => {
                 value={editingSystemPrompt}
                 onChange={(e) => setEditingSystemPrompt(e.target.value)}
                 placeholder="アシスタントへの指示を入力/編集"
+                height="500px"
               />
             </FormControl>
             <HStack spacing={2} mt={3}>
@@ -830,6 +879,25 @@ export const FinalRefinedElectronAppMockup = () => {
                 コピー
               </Button>
             </HStack>
+
+            {/* 追加: 関連ファイル変更UI */}
+            {selectedChat && (
+              <FormControl mt={5}>
+                <FormLabel>関連ファイルの変更</FormLabel>
+                <Button
+                  colorScheme="blue"
+                  variant="outline"
+                  onClick={handleChangeFileInPromptModal}
+                >
+                  新しいファイルを選択
+                </Button>
+                {selectedChat.agentFilePath && (
+                  <Text fontSize="xs" color="gray.600" mt={1}>
+                    現在のファイル: {selectedChat.agentFilePath}
+                  </Text>
+                )}
+              </FormControl>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
