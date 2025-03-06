@@ -180,11 +180,6 @@ export const FinalRefinedElectronAppMockup = () => {
   // -------------------------------------------
   // アシスタント削除 (確認モーダル)
   // -------------------------------------------
-  const handleDeleteChatClick = (chatId: number, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setDeleteTargetId(chatId)
-    setIsDeleteModalOpen(true)
-  }
   const closeDeleteModal = () => {
     setIsDeleteModalOpen(false)
     setDeleteTargetId(null)
@@ -228,6 +223,29 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
+  // ★ CSV → JSON に変換する簡易関数
+  //    CSV文字列を改行・カンマで区切って JSON に整形
+  function csvToJson(csv: string): string {
+    const lines = csv.trim().split('\n')
+    if (lines.length < 1) return JSON.stringify([])
+
+    const headers = lines[0].split(',')
+    const result = []
+
+    for (let i = 1; i < lines.length; i++) {
+      const row = lines[i].split(',')
+      if (row.length !== headers.length) continue
+      const obj: Record<string, string> = {}
+      headers.forEach((h, idx) => {
+        obj[h.trim()] = row[idx].trim()
+      })
+      // @ts-ignore
+      result.push(obj)
+    }
+
+    return JSON.stringify(result, null, 2)
+  }
+
   // -------------------------------------------
   // メッセージ送信
   // -------------------------------------------
@@ -246,15 +264,29 @@ export const FinalRefinedElectronAppMockup = () => {
 
     // (1) チャットフォームで一時添付ファイル
     if (tempFileData && tempFileMimeType) {
-      ephemeralMsg.parts.push({
-        inline_data: {
-          mime_type: tempFileMimeType,
-          data: tempFileData
+      // ★ CSV の場合は inline_data ではなく、CSV→JSONにして text に付加
+      if (tempFileMimeType === 'text/csv') {
+        try {
+          const csvString = window.atob(tempFileData) // base64→文字列
+          const jsonStr = csvToJson(csvString) // CSV→JSON
+          // ephemeralMsg のテキスト末尾に JSON を追加
+          ephemeralMsg.parts[0].text += `\n---\n以下はCSVをJSON化した結果です:\n${jsonStr}`
+        } catch (err) {
+          console.error('CSV parse error:', err)
+          ephemeralMsg.parts[0].text += `\n(CSV→JSON変換に失敗しました)`
         }
-      })
+      } else {
+        // CSV以外は従来通り inline_data として送る
+        ephemeralMsg.parts.push({
+          inline_data: {
+            mime_type: tempFileMimeType,
+            data: tempFileData
+          }
+        })
+      }
     }
 
-    // (2) モーダルファイル
+    // (2) モーダルファイル (useAgentFile)
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (useAgentFile && selectedChat?.agentFilePath) {
       const fileBase64 = await window.electronAPI.readFileByPath(selectedChat.agentFilePath)
@@ -272,13 +304,25 @@ export const FinalRefinedElectronAppMockup = () => {
           derivedMime = 'image/jpeg'
         } else if (pathLower.endsWith('.gif')) {
           derivedMime = 'image/gif'
-        }
-        ephemeralMsg.parts.push({
-          inline_data: {
-            mime_type: derivedMime,
-            data: fileBase64
+        } else if (pathLower.endsWith('.csv')) {
+          // ★ CSV→JSON
+          try {
+            const csvString = window.atob(fileBase64)
+            const jsonStr = csvToJson(csvString)
+            ephemeralMsg.parts[0].text += `\n---\n(モーダルファイルCSVをJSON化):\n${jsonStr}`
+          } catch (err) {
+            console.error('Modal CSV parse error:', err)
+            ephemeralMsg.parts[0].text += `\n(CSV→JSON変換に失敗しました)`
           }
-        })
+        } else {
+          // CSV 以外の場合は inline_data
+          ephemeralMsg.parts.push({
+            inline_data: {
+              mime_type: derivedMime,
+              data: fileBase64
+            }
+          })
+        }
       }
     }
 
@@ -301,6 +345,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
       return chat
     })
+    // @ts-ignore
     setChats(updated)
     setInputMessage('')
     setTempFileName(null)
@@ -318,19 +363,15 @@ export const FinalRefinedElectronAppMockup = () => {
           return {
             ...chat,
             messages: [...chat.messages, aiMsg],
-            postMessages: [
-              ...chat.postMessages,
-              {
-                role: 'model',
-                parts: [{ text: responseData }]
-              }
-            ]
+            postMessages: [...chat.postMessages, { role: 'model', parts: [{ text: responseData }] }]
           }
         }
 
         return chat
       })
+      // @ts-ignore
       setChats(finalUpdated)
+      // @ts-ignore
       window.electronAPI.saveAgents(finalUpdated).catch(console.error)
     } catch (err) {
       console.error('sendMessageエラー:', err)
@@ -347,6 +388,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
         return chat
       })
+      // @ts-ignore
       setChats(finalErr)
       toast({
         title: 'エラー',
@@ -380,7 +422,7 @@ export const FinalRefinedElectronAppMockup = () => {
         setTempFileData(base64Data)
         setTempFileName(file.name)
 
-        // 拡張子判定 (PDF/TXT/画像 のみ)
+        // CSVも受け付ける→ MIMEを text/csv とする
         const lowerName = file.name.toLowerCase()
         if (lowerName.endsWith('.pdf')) {
           setTempFileMimeType('application/pdf')
@@ -392,6 +434,8 @@ export const FinalRefinedElectronAppMockup = () => {
           setTempFileMimeType('image/jpeg')
         } else if (lowerName.endsWith('.gif')) {
           setTempFileMimeType('image/gif')
+        } else if (lowerName.endsWith('.csv')) {
+          setTempFileMimeType('text/csv') // ★ CSV
         } else {
           setTempFileMimeType('application/octet-stream')
         }
@@ -415,7 +459,6 @@ export const FinalRefinedElectronAppMockup = () => {
         setTempFileData(base64Data)
         setTempFileName(file.name)
 
-        // 同じ拡張子判定 (PDF/TXT/画像 のみ)
         const lowerName = file.name.toLowerCase()
         if (lowerName.endsWith('.pdf')) {
           setTempFileMimeType('application/pdf')
@@ -427,6 +470,8 @@ export const FinalRefinedElectronAppMockup = () => {
           setTempFileMimeType('image/jpeg')
         } else if (lowerName.endsWith('.gif')) {
           setTempFileMimeType('image/gif')
+        } else if (lowerName.endsWith('.csv')) {
+          setTempFileMimeType('text/csv') // ★ CSV
         } else {
           setTempFileMimeType('application/octet-stream')
         }
@@ -458,12 +503,6 @@ export const FinalRefinedElectronAppMockup = () => {
       })
     )
   }
-  // useEffect(() => {
-  //   if (chatInputRef.current) {
-  //     chatInputRef.current.style.height = 'auto'
-  //     chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`
-  //   }
-  // }, [inputMessage])
 
   useEffect(() => {
     if (chatHistoryRef.current) {
@@ -519,12 +558,10 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
-  // ★↓↓↓↓ ここから追加・修正 ★↓↓↓↓
-  // モーダル内でファイルを変更する関数
+  // 追加: 関連ファイル変更
   const handleChangeFileInPromptModal = async () => {
     if (!selectedChat) return
 
-    // 古いファイルがあれば削除
     if (selectedChat.agentFilePath) {
       try {
         await window.electronAPI.deleteFileInUserData(selectedChat.agentFilePath)
@@ -532,8 +569,6 @@ export const FinalRefinedElectronAppMockup = () => {
         console.error('Failed to delete old file:', err)
       }
     }
-
-    // 新しいファイルをコピー
     const newPath = await window.electronAPI.copyFileToUserData()
     if (!newPath) {
       toast({
@@ -545,8 +580,6 @@ export const FinalRefinedElectronAppMockup = () => {
 
       return
     }
-
-    // agentFilePathを更新
     const updated = chats.map((chat) => {
       if (chat.id === selectedChatId) {
         return { ...chat, agentFilePath: newPath }
@@ -564,7 +597,6 @@ export const FinalRefinedElectronAppMockup = () => {
       isClosable: true
     })
   }
-  // ★↑↑↑↑ ここまで追加・修正 ★↑↑↑↑
 
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
@@ -610,6 +642,7 @@ export const FinalRefinedElectronAppMockup = () => {
           rounded="lg"
           display="flex"
           flexDirection="column"
+          minW="280px"
           mr={4}
         >
           <Box overflowY="auto" flex="1">
@@ -632,7 +665,15 @@ export const FinalRefinedElectronAppMockup = () => {
                       <Text fontSize="xs" color="gray.500">
                         {chat.createdAt}
                       </Text>
-                      <Text fontSize="md" fontWeight="bold">
+
+                      <Text
+                        fontSize="md"
+                        fontWeight="bold"
+                        overflow="hidden"
+                        textOverflow="ellipsis"
+                        whiteSpace="nowrap"
+                        maxW="220px" // 約10文字分の幅を指定
+                      >
                         {chat.customTitle || '無題のアシスタント'}
                       </Text>
                     </Box>
@@ -729,11 +770,8 @@ export const FinalRefinedElectronAppMockup = () => {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 placeholder="メッセージを入力..."
-                //rows={1}
                 resize="vertical"
                 flex="1"
-                // maxHeight="500px"
-                // height="100px"
                 isDisabled={apiKey.length === 0 || isExpired}
               />
 
@@ -745,7 +783,6 @@ export const FinalRefinedElectronAppMockup = () => {
                 関連ファイル
               </Checkbox>
 
-              {/* acceptを PDF/TXT/画像 のみ */}
               <IconButton
                 icon={<LuPaperclip />}
                 aria-label="ファイル添付"
@@ -755,7 +792,7 @@ export const FinalRefinedElectronAppMockup = () => {
               <Input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt,.png,.jpg,.jpeg,.gif"
+                accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
                 onChange={handleTempFileChange}
                 display="none"
               />
@@ -776,7 +813,6 @@ export const FinalRefinedElectronAppMockup = () => {
             </HStack>
           </Flex>
 
-          {/* 一時添付ファイル表示 */}
           {tempFileName && (
             <Box p={4} borderTop="1px" borderColor="gray.200" display="flex" alignItems="center">
               <Text flex="1" fontSize="sm" color="gray.500">
@@ -793,7 +829,6 @@ export const FinalRefinedElectronAppMockup = () => {
         </Box>
       </Flex>
 
-      {/* 使用期限切れモーダル */}
       <Modal isOpen={isExpired} onClose={() => {}} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -809,7 +844,6 @@ export const FinalRefinedElectronAppMockup = () => {
         </ModalContent>
       </Modal>
 
-      {/* 新しいアシスタント作成モーダル */}
       <Modal isOpen={isModalOpen} onClose={closeCustomChatModal} isCentered>
         <ModalOverlay />
         <ModalContent maxW="3xl">
@@ -858,7 +892,6 @@ export const FinalRefinedElectronAppMockup = () => {
         </ModalContent>
       </Modal>
 
-      {/* システムプロンプト編集モーダル */}
       <Modal isOpen={isPromptModalOpen} onClose={closeSystemPromptModal} isCentered>
         <ModalOverlay />
         <ModalContent maxW="3xl">
@@ -880,7 +913,6 @@ export const FinalRefinedElectronAppMockup = () => {
               </Button>
             </HStack>
 
-            {/* 追加: 関連ファイル変更UI */}
             {selectedChat && (
               <FormControl mt={5}>
                 <FormLabel>関連ファイルの変更</FormLabel>
@@ -910,7 +942,6 @@ export const FinalRefinedElectronAppMockup = () => {
         </ModalContent>
       </Modal>
 
-      {/* 削除確認モーダル */}
       <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal} isCentered>
         <ModalOverlay />
         <ModalContent>

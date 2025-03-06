@@ -40,9 +40,10 @@ type AgentData = {
   agentFileMimeType?: string
 }
 
-interface StoreSchema {
-  agents: AgentData[]
-}
+// ※ StoreSchema は使わないので削除/コメントアウト
+// interface StoreSchema {
+//   agents: AgentData[]
+// }
 
 /**
  * electron-storeなどを動的importで初期化
@@ -58,7 +59,7 @@ async function initStore() {
   const userDataPath = app.getPath('userData')
   const historyDir = path.join(userDataPath, 'history')
 
-  const storeInstance = new ElectronStore<StoreSchema>({
+  const storeInstance = new ElectronStore({
     name: 'myhistory',
     cwd: historyDir,
     defaults: {
@@ -74,8 +75,8 @@ async function initStore() {
  */
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 1366,
-    height: 768,
+    width: 1566,
+    height: 1000,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),

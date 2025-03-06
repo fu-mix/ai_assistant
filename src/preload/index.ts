@@ -6,10 +6,6 @@ type Messages = {
   parts: [{ text: string }, { inline_data?: { mime_type: string; data: string } }?]
 }
 
-type AgentData = {
-  // 略
-}
-
 // カスタムAPI
 const api = {}
 
