@@ -27,7 +27,7 @@ import remarkGfm from 'remark-gfm'
 import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
-import { MdOutlineContentCopy } from 'react-icons/md' // コピーアイコン
+import { MdOutlineContentCopy } from 'react-icons/md' // 既にコピーアイコンを入れている想定
 
 interface ElectronAPI {
   postChatAI: (message: Messages[], apiKey: string, systemPrompt: string) => Promise<any>
@@ -77,7 +77,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const [tempFileData, setTempFileData] = useState<string | null>(null)
   const [tempFileMimeType, setTempFileMimeType] = useState<string | null>(null)
 
-  // 新しいアシスタントモーダル
+  // 新しいアシスタント(エージェント)モーダル
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
@@ -96,13 +96,14 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
 
-  // ★ メッセージ Hover state
+  // メッセージ Hover (コピー用)
   const [hoveredMessageIndex, setHoveredMessageIndex] = useState<number | null>(null)
 
   const chatHistoryRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // アプリ起動時: 履歴をロード
   useEffect(() => {
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
@@ -111,9 +112,9 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }, [])
 
-  // --------------------------------------------------
-  // 新しいアシスタント
-  // --------------------------------------------------
+  // -------------------------------------------
+  // 新しいアシスタント作成
+  // -------------------------------------------
   const openCustomChatModal = () => {
     setModalChatTitle('')
     setModalSystemPrompt('')
@@ -162,13 +163,12 @@ export const FinalRefinedElectronAppMockup = () => {
     setSelectedChatId(newChat.id)
     setInputMessage('')
     setIsModalOpen(false)
-
     window.electronAPI.saveAgents(updated).catch(console.error)
   }
 
-  // --------------------------------------------------
-  // 選択
-  // --------------------------------------------------
+  // -------------------------------------------
+  // アシスタント選択
+  // -------------------------------------------
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
     const target = chats.find((c) => c.id === id)
@@ -177,9 +177,9 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // --------------------------------------------------
-  // 削除 (モーダルで確認)
-  // --------------------------------------------------
+  // -------------------------------------------
+  // アシスタント削除 (確認モーダル)
+  // -------------------------------------------
   const handleDeleteChatClick = (chatId: number, e: React.MouseEvent) => {
     e.stopPropagation()
     setDeleteTargetId(chatId)
@@ -228,9 +228,9 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
-  // --------------------------------------------------
-  // 送信
-  // --------------------------------------------------
+  // -------------------------------------------
+  // メッセージ送信
+  // -------------------------------------------
   const sendMessage = async () => {
     if (!inputMessage.trim() && !tempFileData) return
     setIsLoading(true)
@@ -244,6 +244,7 @@ export const FinalRefinedElectronAppMockup = () => {
       parts: [{ text: inputMessage }]
     }
 
+    // (1) チャットフォームで一時添付ファイル
     if (tempFileData && tempFileMimeType) {
       ephemeralMsg.parts.push({
         inline_data: {
@@ -253,16 +254,24 @@ export const FinalRefinedElectronAppMockup = () => {
       })
     }
 
+    // (2) モーダルファイル
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (useAgentFile && selectedChat?.agentFilePath) {
       const fileBase64 = await window.electronAPI.readFileByPath(selectedChat.agentFilePath)
       if (fileBase64) {
-        const filePathLower = selectedChat.agentFilePath.toLowerCase()
+        // 拡張子判定
+        const pathLower = selectedChat.agentFilePath.toLowerCase()
         let derivedMime = 'application/octet-stream'
-        if (filePathLower.endsWith('.pdf')) {
+        if (pathLower.endsWith('.pdf')) {
           derivedMime = 'application/pdf'
-        } else if (filePathLower.endsWith('.txt')) {
+        } else if (pathLower.endsWith('.txt')) {
           derivedMime = 'text/plain'
+        } else if (pathLower.endsWith('.png')) {
+          derivedMime = 'image/png'
+        } else if (pathLower.endsWith('.jpg') || pathLower.endsWith('.jpeg')) {
+          derivedMime = 'image/jpeg'
+        } else if (pathLower.endsWith('.gif')) {
+          derivedMime = 'image/gif'
         }
         ephemeralMsg.parts.push({
           inline_data: {
@@ -273,6 +282,7 @@ export const FinalRefinedElectronAppMockup = () => {
       }
     }
 
+    // 履歴上はテキストのみ
     const updated = chats.map((chat) => {
       if (chat.id === selectedChatId) {
         return {
@@ -357,7 +367,9 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // 一時ファイル添付
+  // -------------------------------------------
+  // チャットフォームのファイル選択
+  // -------------------------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -367,18 +379,30 @@ export const FinalRefinedElectronAppMockup = () => {
         const base64Data = reader.result.toString().split(',')[1]
         setTempFileData(base64Data)
         setTempFileName(file.name)
-        if (file.name.endsWith('.pdf')) {
+
+        // 拡張子判定 (PDF/TXT/画像 のみ)
+        const lowerName = file.name.toLowerCase()
+        if (lowerName.endsWith('.pdf')) {
           setTempFileMimeType('application/pdf')
-        } else if (file.name.endsWith('.txt')) {
+        } else if (lowerName.endsWith('.txt')) {
           setTempFileMimeType('text/plain')
+        } else if (lowerName.endsWith('.png')) {
+          setTempFileMimeType('image/png')
+        } else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+          setTempFileMimeType('image/jpeg')
+        } else if (lowerName.endsWith('.gif')) {
+          setTempFileMimeType('image/gif')
         } else {
           setTempFileMimeType('application/octet-stream')
         }
+
         e.target.value = ''
       }
     }
     reader.readAsDataURL(file)
   }
+
+  // ドラッグ&ドロップ
   const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
@@ -390,10 +414,19 @@ export const FinalRefinedElectronAppMockup = () => {
         const base64Data = reader.result.toString().split(',')[1]
         setTempFileData(base64Data)
         setTempFileName(file.name)
-        if (file.name.endsWith('.pdf')) {
+
+        // 同じ拡張子判定 (PDF/TXT/画像 のみ)
+        const lowerName = file.name.toLowerCase()
+        if (lowerName.endsWith('.pdf')) {
           setTempFileMimeType('application/pdf')
-        } else if (file.name.endsWith('.txt')) {
+        } else if (lowerName.endsWith('.txt')) {
           setTempFileMimeType('text/plain')
+        } else if (lowerName.endsWith('.png')) {
+          setTempFileMimeType('image/png')
+        } else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+          setTempFileMimeType('image/jpeg')
+        } else if (lowerName.endsWith('.gif')) {
+          setTempFileMimeType('image/gif')
         } else {
           setTempFileMimeType('application/octet-stream')
         }
@@ -411,7 +444,7 @@ export const FinalRefinedElectronAppMockup = () => {
     setTempFileMimeType(null)
   }
 
-  // 入力欄
+  // 入力欄/履歴スクロール
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInputMessage(val)
@@ -445,9 +478,7 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [])
 
-  // -------------------------------------------
-  // システムプロンプト
-  // -------------------------------------------
+  // システムプロンプト編集
   const selectedChat = chats.find((c) => c.id === selectedChatId)
 
   const openSystemPromptModal = () => {
@@ -468,7 +499,6 @@ export const FinalRefinedElectronAppMockup = () => {
     })
     setChats(updated)
     window.electronAPI.saveAgents(updated).catch(console.error)
-
     toast({
       title: 'アシスタント指示を更新しました',
       status: 'success',
@@ -489,9 +519,6 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
-  // -------------------------------------------
-  // JSX
-  // -------------------------------------------
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
       {/* ヘッダー */}
@@ -588,8 +615,17 @@ export const FinalRefinedElectronAppMockup = () => {
         {/* 右カラム: 会話本文 */}
         <Box w="80%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
           <Box ref={chatHistoryRef} flex="1" overflowY="auto" p={4}>
-            {selectedChat ? (
-              selectedChat.messages.map((msg, idx) => (
+            {(() => {
+              const selectedChatObj = chats.find((c) => c.id === selectedChatId)
+              if (!selectedChatObj) {
+                return (
+                  <Text fontWeight="bold" color="gray.500">
+                    アシスタントを作成して開始してください
+                  </Text>
+                )
+              }
+
+              return selectedChatObj.messages.map((msg, idx) => (
                 <Box
                   key={idx}
                   mb={4}
@@ -597,7 +633,6 @@ export const FinalRefinedElectronAppMockup = () => {
                   rounded="lg"
                   bg={msg.type === 'user' ? 'gray.300' : 'gray.50'}
                   position="relative"
-                  // マウスホバーの検知
                   onMouseEnter={() => setHoveredMessageIndex(idx)}
                   onMouseLeave={() => setHoveredMessageIndex(null)}
                 >
@@ -608,7 +643,7 @@ export const FinalRefinedElectronAppMockup = () => {
                       {msg.content}
                     </ReactMarkdown>
                   )}
-                  {/* ★ コピーアイコンを、ホバー中のみ表示 */}
+
                   {hoveredMessageIndex === idx && (
                     <IconButton
                       icon={<MdOutlineContentCopy />}
@@ -633,11 +668,7 @@ export const FinalRefinedElectronAppMockup = () => {
                   )}
                 </Box>
               ))
-            ) : (
-              <Text fontWeight="bold" color="gray.500">
-                アシスタントを作成して開始してください
-              </Text>
-            )}
+            })()}
           </Box>
 
           {/* 入力フォーム */}
@@ -661,11 +692,12 @@ export const FinalRefinedElectronAppMockup = () => {
               <Checkbox
                 isChecked={useAgentFile}
                 onChange={(e) => setUseAgentFile(e.target.checked)}
-                isDisabled={!selectedChat || isExpired}
+                isDisabled={selectedChatId == null || isExpired}
               >
                 関連ファイル
               </Checkbox>
 
+              {/* ★acceptを PDF/TXT/画像 のみ */}
               <IconButton
                 icon={<LuPaperclip />}
                 aria-label="ファイル添付"
@@ -675,7 +707,7 @@ export const FinalRefinedElectronAppMockup = () => {
               <Input
                 ref={fileInputRef}
                 type="file"
-                accept="application/pdf, text/plain"
+                accept=".pdf,.txt,.png,.jpg,.jpeg,.gif"
                 onChange={handleTempFileChange}
                 display="none"
               />
@@ -684,7 +716,7 @@ export const FinalRefinedElectronAppMockup = () => {
                 icon={<LuSettings />}
                 aria-label="システムプロンプト編集"
                 onClick={openSystemPromptModal}
-                isDisabled={!selectedChat || isExpired}
+                isDisabled={selectedChatId == null || isExpired}
               />
               <IconButton
                 icon={<IoSend />}
