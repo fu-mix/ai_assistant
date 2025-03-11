@@ -108,6 +108,7 @@ type SubtaskInfo = {
  *    - ID=999999(オートアシスト本体)はリストから除外
  *    - オートアシスト会話履歴リセット時に確認モーダルを出す代わりに、
  *      モーダルから直接削除ではなく “確認モーダル” を表示するよう変更
+ *    - テーブル部分のみスクロールするように修正（固定高さ + スクロール）
  */
 function AutoAssistSettingsModal({
   isOpen,
@@ -168,47 +169,53 @@ function AutoAssistSettingsModal({
     <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>オートアシスト設定 / 要約デバッグ</ModalHeader>
+        <ModalHeader>オートアシスト設定</ModalHeader>
+
         <ModalBody>
           <Text mb={4} fontSize="sm" color="gray.600">
             各アシスタントの「得意分野要約」を確認・編集できます。
           </Text>
-          <Table size="sm">
-            <Thead>
-              <Tr>
-                <Th>ID</Th>
-                <Th>アシスタント名</Th>
-                <Th>要約(assistantSummary)</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {/** ID=999999(オートアシスト本体)を除外 */}
-              {localChats
-                .filter((chat) => chat.id !== AUTO_ASSIST_ID)
-                .map((c) => (
-                  <Tr key={c.id}>
-                    <Td>{c.id}</Td>
-                    <Td>{c.customTitle}</Td>
-                    <Td>
-                      <Textarea
-                        value={c.assistantSummary || ''}
-                        onChange={(e) => handleChangeSummary(c.id, e.target.value)}
-                        size="sm"
-                        placeholder="得意分野要約"
-                      />
-                    </Td>
-                  </Tr>
-                ))}
-            </Tbody>
-          </Table>
 
-          {/* ★「オートアシストの会話履歴をリセット」 -> 確認モーダル表示をトリガー */}
-          <Box mt={6} textAlign="center">
+          {/* ▼ テーブル部分をスクロール可能にする為のラッパ */}
+          <Box maxH="480px" overflowY="auto" mb={4}>
+            <Table size="sm">
+              <Thead>
+                <Tr>
+                  <Th>ID</Th>
+                  <Th>アシスタント名</Th>
+                  <Th>要約(assistantSummary)</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {/** ID=999999(オートアシスト本体)を除外 */}
+                {localChats
+                  .filter((chat) => chat.id !== AUTO_ASSIST_ID)
+                  .map((c) => (
+                    <Tr key={c.id}>
+                      <Td>{c.id}</Td>
+                      <Td>{c.customTitle}</Td>
+                      <Td>
+                        <Textarea
+                          value={c.assistantSummary || ''}
+                          onChange={(e) => handleChangeSummary(c.id, e.target.value)}
+                          size="sm"
+                          placeholder="得意分野要約"
+                        />
+                      </Td>
+                    </Tr>
+                  ))}
+              </Tbody>
+            </Table>
+          </Box>
+
+          {/* リセットボタンはスクロール領域の外に配置 */}
+          <Box textAlign="center">
             <Button colorScheme="red" variant="outline" onClick={onConfirmResetAutoAssist}>
               オートアシストの会話履歴をリセット
             </Button>
           </Box>
         </ModalBody>
+
         <ModalFooter>
           <Button mr={3} onClick={onClose}>
             キャンセル
