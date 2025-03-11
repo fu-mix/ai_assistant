@@ -106,20 +106,21 @@ type SubtaskInfo = {
  * デバッグ用: 要約編集モーダル
  * ※ 修正ポイント:
  *    - ID=999999(オートアシスト本体)はリストから除外
- *    - オートアシスト会話履歴のリセットボタンを追加
+ *    - オートアシスト会話履歴リセット時に確認モーダルを出す代わりに、
+ *      モーダルから直接削除ではなく “確認モーダル” を表示するよう変更
  */
 function AutoAssistSettingsModal({
   isOpen,
   onClose,
   chats,
   setChats,
-  onResetAutoAssist
+  onConfirmResetAutoAssist
 }: {
   isOpen: boolean
   onClose: () => void
   chats: ChatInfo[]
   setChats: (c: ChatInfo[]) => void
-  onResetAutoAssist: () => void
+  onConfirmResetAutoAssist: () => void
 }) {
   const toast = useToast()
   const [localChats, setLocalChats] = useState<ChatInfo[]>([])
@@ -201,9 +202,9 @@ function AutoAssistSettingsModal({
             </Tbody>
           </Table>
 
-          {/* ★ オートアシスト会話履歴リセットボタン */}
+          {/* ★「オートアシストの会話履歴をリセット」 -> 確認モーダル表示をトリガー */}
           <Box mt={6} textAlign="center">
-            <Button colorScheme="red" variant="outline" onClick={onResetAutoAssist}>
+            <Button colorScheme="red" variant="outline" onClick={onConfirmResetAutoAssist}>
               オートアシストの会話履歴をリセット
             </Button>
           </Box>
@@ -266,6 +267,8 @@ export const FinalRefinedElectronAppMockup = () => {
 
   // 会話履歴リセット用
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
+  // ★オートアシスト設定モーダルでボタン押下時の確認モーダル
+  const [isResetAutoAssistConfirm, setIsResetAutoAssistConfirm] = useState(false)
 
   // 通常
   const [useAgentFile, setUseAgentFile] = useState(false)
@@ -1113,7 +1116,6 @@ ${cleanTask}
   }
   async function handleResetConversation() {
     closeResetConfirm()
-
     if (selectedChatId === 'autoAssist') {
       // オートアシストリセット
       setAutoAssistMessages([])
@@ -1197,9 +1199,13 @@ ${cleanTask}
     })
   }
 
-  // ★ オートアシスト設定モーダル内の「オートアシスト会話履歴リセット」ボタン押下時
-  const handleResetAutoAssistFromModal = async () => {
-    // AUTO_ASSIST_IDの会話を消す
+  // ★ 「オートアシスト設定モーダル」から呼ばれる => 確認モーダルで最終決定
+  const handleConfirmResetAutoAssist = () => {
+    setIsResetAutoAssistConfirm(true)
+  }
+  // ★ 実際にリセットを行う処理
+  async function handleResetAutoAssistFromModal() {
+    setIsResetAutoAssistConfirm(false) // 確認モーダル閉じ
     setAutoAssistMessages([])
     const updated = chats.map((c) => {
       if (c.id === AUTO_ASSIST_ID) {
@@ -1683,7 +1689,7 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* リセット確認モーダル */}
+      {/* リセット確認モーダル(通常/オートアシスト共通) */}
       <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -1696,6 +1702,29 @@ ${cleanTask}
               キャンセル
             </Button>
             <Button colorScheme="red" onClick={handleResetConversation}>
+              消去
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ★ オートアシスト設定モーダル → 会話リセット確認モーダル */}
+      <Modal
+        isOpen={isResetAutoAssistConfirm}
+        onClose={() => setIsResetAutoAssistConfirm(false)}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>オートアシスト会話履歴リセット</ModalHeader>
+          <ModalBody>
+            <Text>オートアシストの会話履歴を消去しますか？</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button mr={3} onClick={() => setIsResetAutoAssistConfirm(false)}>
+              キャンセル
+            </Button>
+            <Button colorScheme="red" onClick={handleResetAutoAssistFromModal}>
               消去
             </Button>
           </ModalFooter>
@@ -1727,7 +1756,7 @@ ${cleanTask}
         onClose={() => setIsAutoAssistSettingsOpen(false)}
         chats={chats}
         setChats={setChats}
-        onResetAutoAssist={handleResetAutoAssistFromModal}
+        onConfirmResetAutoAssist={handleConfirmResetAutoAssist}
       />
     </Flex>
   )
