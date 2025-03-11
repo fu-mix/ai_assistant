@@ -45,9 +45,6 @@ type AgentData = {
 //   agents: AgentData[]
 // }
 
-/**
- * electron-storeなどを動的importで初期化
- */
 import { createRequire } from 'module'
 let store: any = null
 
@@ -70,9 +67,6 @@ async function initStore() {
   return storeInstance
 }
 
-/**
- * createWindow
- */
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1566,
@@ -147,7 +141,6 @@ ipcMain.handle('save-agents', (_event, agents: AgentData[]) => {
 
 // ----------------------
 // copy-file-to-userdata
-//  -> userData配下にコピーしてパスを返す
 // ----------------------
 ipcMain.handle('copy-file-to-userdata', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
@@ -214,13 +207,20 @@ ipcMain.handle('delete-file-in-userdata', (_event, filePath: string) => {
 
 // ----------------------
 // postChatAI
+//    - ★ APIリクエスト・レスポンスを console.log で出力
 // ----------------------
 ipcMain.handle(
   'postChatAI',
   async (_event, message: Messages[], apiKey: string, systemPrompt: string) => {
+    console.log('\n=== postChatAI Request ===')
+    console.log('messages:', JSON.stringify(message, null, 2))
+    console.log('apiKey:', apiKey ? '********' : '(none)')
+    console.log('systemPrompt:', systemPrompt)
+
     const API_ENDPOINT =
       'https://ai-foundation-api.app/ai-foundation/chat-ai/gemini/pro:generateContent'
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
+
     try {
       const response = await axios.post(
         API_ENDPOINT,
@@ -248,6 +248,10 @@ ipcMain.handle(
         throw new Error(`API request failed with status ${response.status}`)
       }
       const resData: string = response.data.candidates[0].content.parts[0].text
+
+      console.log('\n=== postChatAI Response ===')
+      console.log(resData)
+      console.log('============================\n')
 
       return resData
     } catch (error) {
