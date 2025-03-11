@@ -218,7 +218,7 @@ ipcMain.handle(
     console.log('systemPrompt:', systemPrompt)
 
     const API_ENDPOINT =
-      'https://ai-foundation-api.app/ai-foundation/chat-ai/gemini/pro:generateContent'
+      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
 
     try {

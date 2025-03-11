@@ -214,6 +214,9 @@ export const FinalRefinedElectronAppMockup = () => {
   const [pendingSubtasks, setPendingSubtasks] = useState<SubtaskInfo[]>([])
   const [pendingEphemeralMsg, setPendingEphemeralMsg] = useState<Messages | null>(null)
 
+  // ★ 固定ID(オートアシスト用)
+  const AUTO_ASSIST_ID = 999999
+
   const [agentMode, setAgentMode] = useState<boolean>(false)
 
   // -----------------------------
@@ -243,6 +246,9 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
 
+  // 会話履歴リセット用
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
+
   // 通常
   const [useAgentFile, setUseAgentFile] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -261,7 +267,26 @@ export const FinalRefinedElectronAppMockup = () => {
   useEffect(() => {
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
+        const foundAuto = stored.find((c) => c.id === AUTO_ASSIST_ID)
+        if (!foundAuto) {
+          // オートアシスト用ChatInfoを新規作成
+          const newAutoAssist: ChatInfo = {
+            id: AUTO_ASSIST_ID,
+            customTitle: 'AutoAssistSystem',
+            systemPrompt: '',
+            messages: [],
+            postMessages: [],
+            createdAt: new Date().toLocaleString(),
+            inputMessage: ''
+          }
+          stored.push(newAutoAssist)
+        }
         setChats(stored)
+        // オートアシスト用 messages を state へ
+        const auto = stored.find((c) => c.id === AUTO_ASSIST_ID)
+        if (auto) {
+          setAutoAssistMessages(auto.messages)
+        }
       }
     })
   }, [])
@@ -393,6 +418,10 @@ export const FinalRefinedElectronAppMockup = () => {
       sendMessage()
     }
   }
+
+  // -----------------------------
+  // handleSelectChat
+  // -----------------------------
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
     const target = chats.find((c) => c.id === id)
@@ -467,11 +496,9 @@ ${out}
   }
 
   // -----------------------------
-  // ■ JSON parse の際にコードフェンス等を削除する小関数
+  // removeCodeFence
   // -----------------------------
   function removeCodeFence(str: string): string {
-    // 「```json」「```」などを除去する簡易処理
-    // さらに trim する
     return str.replaceAll('```json', '').replaceAll('```', '').trim()
   }
 
@@ -485,7 +512,6 @@ ${out}
       .join('\n')
 
     for (const rawTask of tasks) {
-      // 先頭に "タスク\d+: " があれば除去 (重複ラベルを防ぐ)
       const cleanTask = rawTask.replace(/^タスク\d+\s*:\s*/, '')
 
       const systemPrompt = `
@@ -512,8 +538,6 @@ ${cleanTask}
       let recommended: string | null = null
       try {
         const resp = await window.electronAPI.postChatAI(msgs, apiKey, systemPrompt)
-
-        // ★ JSON.parse 前に余計なコードブロックを除去
         const cleanResp = removeCodeFence(resp)
         const parsed = JSON.parse(cleanResp)
         recommended = parsed.assistantTitle ?? null
@@ -529,26 +553,28 @@ ${cleanTask}
 
   // -----------------------------
   // handleAutoAssistSend
+  //   修正: 重複メッセージ追加を削除
   // -----------------------------
   async function handleAutoAssistSend() {
-    const userMsg: Message = { type: 'user', content: inputMessage }
-    setAutoAssistMessages((prev) => [...prev, userMsg])
-
-    const ephemeralMsg: Messages = {
-      role: 'user',
-      parts: [{ text: inputMessage }]
-    }
-    if (tempFileData && tempFileMimeType) {
-      ephemeralMsg.parts.push({
-        inline_data: {
-          mime_type: tempFileMimeType,
-          data: tempFileData
-        }
-      })
-    }
+    // ★ (削除) ユーザーメッセージ追加は sendMessage で行うため、ここでは行わない
+    // => これにより二重表示を防ぐ
 
     setIsLoading(true)
     try {
+      // ephemeralMsg準備
+      const ephemeralMsg: Messages = {
+        role: 'user',
+        parts: [{ text: inputMessage }]
+      }
+      if (tempFileData && tempFileMimeType) {
+        ephemeralMsg.parts.push({
+          inline_data: {
+            mime_type: tempFileMimeType,
+            data: tempFileData
+          }
+        })
+      }
+
       // タスク分割プロンプト
       const parseSystemPrompt = `
 ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
@@ -562,8 +588,6 @@ ${cleanTask}
         apiKey,
         parseSystemPrompt
       )
-
-      // ★ ここでも removeCodeFence
       const splittedRaw = removeCodeFence(parseResp)
       let splitted: string[] = []
       try {
@@ -585,16 +609,44 @@ ${cleanTask}
       const summaryMsg = `以下のタスクに分割し、推奨アシスタントを割り当てました:\n\n${lines.join('\n\n')}`
       setAutoAssistMessages((prev) => [...prev, { type: 'ai', content: summaryMsg }])
 
+      // storeにも "AIメッセージ" を追加
+      const updatedStore = chats.map((c) => {
+        if (c.id === AUTO_ASSIST_ID) {
+          return {
+            ...c,
+            messages: [...c.messages, { type: 'ai', content: summaryMsg }]
+          }
+        }
+
+        return c
+      })
+      setChats(updatedStore)
+      await window.electronAPI.saveAgents(updatedStore)
+
       if (agentMode) {
-        // ON -> 実行
         await executeSubtasksAndShowOnce(subtaskInfos)
       } else {
-        // OFF -> Yes/No
         setAutoAssistState('awaitConfirm')
         setAutoAssistMessages((prev) => [
           ...prev,
           { type: 'ai', content: '実行しますか？ (Yesで実行 / Noでキャンセル)' }
         ])
+
+        const updated2 = updatedStore.map((c) => {
+          if (c.id === AUTO_ASSIST_ID) {
+            return {
+              ...c,
+              messages: [
+                ...c.messages,
+                { type: 'ai', content: '実行しますか？ (Yesで実行 / Noでキャンセル)' }
+              ]
+            }
+          }
+
+          return c
+        })
+        setChats(updated2)
+        await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
       console.error('handleAutoAssistSend error:', err)
@@ -602,6 +654,21 @@ ${cleanTask}
         ...prev,
         { type: 'ai', content: 'タスク分割処理中にエラーが発生しました。' }
       ])
+      const updatedErr = chats.map((c) => {
+        if (c.id === AUTO_ASSIST_ID) {
+          return {
+            ...c,
+            messages: [
+              ...c.messages,
+              { type: 'ai', content: 'タスク分割処理中にエラーが発生しました。' }
+            ]
+          }
+        }
+
+        return c
+      })
+      setChats(updatedErr)
+      await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setInputMessage('')
       setTempFileName(null)
@@ -630,8 +697,24 @@ ${cleanTask}
     // autoAssist Yes/No
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
       const ans = inputMessage.trim().toLowerCase()
+
+      // 先にユーザー発言をautoAssistMessagesに追加 + store反映
+      const userMsg: Message = { type: 'user', content: inputMessage }
+      setAutoAssistMessages((prev) => [...prev, userMsg])
+      let updated = chats.map((c) => {
+        if (c.id === AUTO_ASSIST_ID) {
+          return {
+            ...c,
+            messages: [...c.messages, userMsg]
+          }
+        }
+
+        return c
+      })
+      setChats(updated)
+      await window.electronAPI.saveAgents(updated)
+
       if (ans === 'yes') {
-        setAutoAssistMessages((prev) => [...prev, { type: 'user', content: inputMessage }])
         setIsLoading(true)
         await executeSubtasksAndShowOnce(pendingSubtasks)
         setIsLoading(false)
@@ -642,9 +725,21 @@ ${cleanTask}
       } else if (ans === 'no') {
         setAutoAssistMessages((prev) => [
           ...prev,
-          { type: 'user', content: inputMessage },
           { type: 'ai', content: 'タスク実行をキャンセルしました。' }
         ])
+        updated = updated.map((c) => {
+          if (c.id === AUTO_ASSIST_ID) {
+            return {
+              ...c,
+              messages: [...c.messages, { type: 'ai', content: 'タスク実行をキャンセルしました。' }]
+            }
+          }
+
+          return c
+        })
+        setChats(updated)
+        await window.electronAPI.saveAgents(updated)
+
         setPendingSubtasks([])
         setPendingEphemeralMsg(null)
         setAutoAssistState('idle')
@@ -654,9 +749,24 @@ ${cleanTask}
       } else {
         setAutoAssistMessages((prev) => [
           ...prev,
-          { type: 'user', content: inputMessage },
           { type: 'ai', content: 'Yes で実行 / No でキャンセル です。' }
         ])
+        updated = updated.map((c) => {
+          if (c.id === AUTO_ASSIST_ID) {
+            return {
+              ...c,
+              messages: [
+                ...c.messages,
+                { type: 'ai', content: 'Yes で実行 / No でキャンセル です。' }
+              ]
+            }
+          }
+
+          return c
+        })
+        setChats(updated)
+        await window.electronAPI.saveAgents(updated)
+
         setInputMessage('')
 
         return
@@ -665,6 +775,20 @@ ${cleanTask}
 
     // autoAssist start
     if (selectedChatId === 'autoAssist') {
+      // ★ ここでユーザーメッセージを追加 (handleAutoAssistSendでは追加しない)
+      const userMsg: Message = { type: 'user', content: inputMessage }
+      setAutoAssistMessages((prev) => [...prev, userMsg])
+
+      const updated = chats.map((c) => {
+        if (c.id === AUTO_ASSIST_ID) {
+          return { ...c, messages: [...c.messages, userMsg] }
+        }
+
+        return c
+      })
+      setChats(updated)
+      await window.electronAPI.saveAgents(updated)
+
       setIsLoading(true)
       await handleAutoAssistSend()
       setIsLoading(false)
@@ -684,7 +808,6 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
 
-      // CSVファイルなど添付処理
       if (tempFileData && tempFileMimeType) {
         if (tempFileMimeType === 'text/csv') {
           try {
@@ -733,7 +856,6 @@ ${cleanTask}
         }
       }
 
-      // 履歴に追加
       const updated = chats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
@@ -752,7 +874,6 @@ ${cleanTask}
       setTempFileData(null)
       setTempFileMimeType(null)
 
-      // 実行
       const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
       const resp = await window.electronAPI.postChatAI(
         ephemeralAll,
@@ -791,14 +912,15 @@ ${cleanTask}
   // --------------------------
   // 新アシスタント作成モーダル
   // --------------------------
-  const openCustomChatModal = () => {
+  function openCustomChatModal() {
     setModalChatTitle('')
     setModalSystemPrompt('')
     setModalAgentFilePath(null)
     setIsModalOpen(true)
   }
-  const closeCustomChatModal = () => setIsModalOpen(false)
-
+  function closeCustomChatModal() {
+    setIsModalOpen(false)
+  }
   async function handleSelectAgentFile() {
     const copiedPath = await window.electronAPI.copyFileToUserData()
     if (copiedPath) {
@@ -812,7 +934,6 @@ ${cleanTask}
       })
     }
   }
-
   async function handleCreateCustomChat() {
     if (!modalChatTitle.trim()) {
       toast({
@@ -828,7 +949,6 @@ ${cleanTask}
     let summaryText = ''
     if (apiKey) {
       try {
-        // 要約
         const summaryRequest: Messages = {
           role: 'user',
           parts: [
@@ -876,11 +996,11 @@ ${cleanTask}
   // --------------------------
   // アシスタント削除
   // --------------------------
-  const closeDeleteModal = () => {
+  function closeDeleteModal() {
     setIsDeleteModalOpen(false)
     setDeleteTargetId(null)
   }
-  const confirmDeleteChat = async () => {
+  async function confirmDeleteChat() {
     if (deleteTargetId == null) {
       closeDeleteModal()
 
@@ -919,15 +1039,16 @@ ${cleanTask}
   // --------------------------
   // システムプロンプト編集
   // --------------------------
-  const openSystemPromptModal = () => {
+  function openSystemPromptModal() {
     if (typeof selectedChatId !== 'number') return
     const sc = chats.find((c) => c.id === selectedChatId)
     if (!sc) return
     setEditingSystemPrompt(sc.systemPrompt)
     setIsPromptModalOpen(true)
   }
-  const closeSystemPromptModal = () => setIsPromptModalOpen(false)
-
+  function closeSystemPromptModal() {
+    setIsPromptModalOpen(false)
+  }
   function handleSaveSystemPrompt() {
     if (typeof selectedChatId !== 'number') return
     const sc = chats.find((c) => c.id === selectedChatId)
@@ -958,6 +1079,59 @@ ${cleanTask}
         isClosable: true
       })
     })
+  }
+
+  // リセットモーダル
+  function openResetConfirm() {
+    setIsResetConfirmOpen(true)
+  }
+  function closeResetConfirm() {
+    setIsResetConfirmOpen(false)
+  }
+  async function handleResetConversation() {
+    closeResetConfirm()
+
+    if (selectedChatId === 'autoAssist') {
+      // オートアシストリセット
+      setAutoAssistMessages([])
+      const updated = chats.map((c) => {
+        if (c.id === AUTO_ASSIST_ID) {
+          return { ...c, messages: [], postMessages: [], inputMessage: '' }
+        }
+
+        return c
+      })
+      setChats(updated)
+      await window.electronAPI.saveAgents(updated)
+      toast({
+        title: 'オートアシストの会話履歴をリセットしました',
+        status: 'info',
+        duration: 2000,
+        isClosable: true
+      })
+    } else if (typeof selectedChatId === 'number') {
+      // 通常アシスタント
+      const updated = chats.map((c) => {
+        if (c.id === selectedChatId) {
+          return {
+            ...c,
+            messages: [],
+            postMessages: [],
+            inputMessage: ''
+          }
+        }
+
+        return c
+      })
+      setChats(updated)
+      await window.electronAPI.saveAgents(updated)
+      toast({
+        title: 'アシスタントの会話履歴をリセットしました',
+        status: 'info',
+        duration: 2000,
+        isClosable: true
+      })
+    }
   }
 
   async function handleChangeFileInPromptModal() {
@@ -1020,15 +1194,17 @@ ${cleanTask}
             DesAIn Assistant
           </Heading>
 
-          {/* エージェントモード ON/OFF */}
-          <HStack align="center">
-            <Text fontSize="sm">エージェントモード</Text>
-            <Switch
-              isChecked={agentMode}
-              onChange={(e) => setAgentMode(e.target.checked)}
-              colorScheme="teal"
-            />
-          </HStack>
+          {/* ★ エージェントモード: オートアシストのときだけ表示 */}
+          {selectedChatId === 'autoAssist' && (
+            <HStack align="center">
+              <Text fontSize="sm">エージェントモード</Text>
+              <Switch
+                isChecked={agentMode}
+                onChange={(e) => setAgentMode(e.target.checked)}
+                colorScheme="teal"
+              />
+            </HStack>
+          )}
         </HStack>
 
         <HStack spacing={4}>
@@ -1089,54 +1265,61 @@ ${cleanTask}
               </ListItem>
 
               {/* 通常アシスタント一覧 */}
-              {chats.map((chat) => (
-                <ListItem
-                  key={chat.id}
-                  p={2}
-                  bg={chat.id === selectedChatId ? 'blue.100' : 'white'}
-                  borderRadius="md"
-                  cursor="pointer"
-                  onClick={() => handleSelectChat(chat.id)}
-                  overflow="hidden"
-                  textOverflow="ellipsis"
-                  whiteSpace="nowrap"
-                  _hover={{ bg: chat.id === selectedChatId ? 'blue.100' : 'blue.50' }}
-                >
-                  <Flex justify="space-between" align="center">
-                    <Box>
-                      <Text fontSize="xs" color="gray.500">
-                        {chat.createdAt}
-                      </Text>
-                      <Text
-                        fontSize="md"
-                        fontWeight="bold"
-                        overflow="hidden"
-                        textOverflow="ellipsis"
-                        whiteSpace="nowrap"
-                        maxW="220px"
-                      >
-                        {chat.customTitle || '無題のアシスタント'}
-                      </Text>
-                    </Box>
+              {chats.map((chat) => {
+                if (chat.id === AUTO_ASSIST_ID) {
+                  // オートアシスト用はリストに表示しない
+                  return null
+                }
 
-                    {/* アシスタント削除 */}
-                    {chat.id === selectedChatId && (
-                      <IconButton
-                        icon={<AiOutlineDelete />}
-                        aria-label="アシスタント削除"
-                        variant="ghost"
-                        colorScheme="red"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDeleteTargetId(chat.id)
-                          setIsDeleteModalOpen(true)
-                        }}
-                      />
-                    )}
-                  </Flex>
-                </ListItem>
-              ))}
+                return (
+                  <ListItem
+                    key={chat.id}
+                    p={2}
+                    bg={chat.id === selectedChatId ? 'blue.100' : 'white'}
+                    borderRadius="md"
+                    cursor="pointer"
+                    onClick={() => handleSelectChat(chat.id)}
+                    overflow="hidden"
+                    textOverflow="ellipsis"
+                    whiteSpace="nowrap"
+                    _hover={{ bg: chat.id === selectedChatId ? 'blue.100' : 'blue.50' }}
+                  >
+                    <Flex justify="space-between" align="center">
+                      <Box>
+                        <Text fontSize="xs" color="gray.500">
+                          {chat.createdAt}
+                        </Text>
+                        <Text
+                          fontSize="md"
+                          fontWeight="bold"
+                          overflow="hidden"
+                          textOverflow="ellipsis"
+                          whiteSpace="nowrap"
+                          maxW="220px"
+                        >
+                          {chat.customTitle || '無題のアシスタント'}
+                        </Text>
+                      </Box>
+
+                      {/* アシスタント削除 */}
+                      {chat.id === selectedChatId && (
+                        <IconButton
+                          icon={<AiOutlineDelete />}
+                          aria-label="アシスタント削除"
+                          variant="ghost"
+                          colorScheme="red"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteTargetId(chat.id)
+                            setIsDeleteModalOpen(true)
+                          }}
+                        />
+                      )}
+                    </Flex>
+                  </ListItem>
+                )
+              })}
             </List>
           </Box>
         </Box>
@@ -1430,6 +1613,18 @@ ${cleanTask}
                 )}
               </FormControl>
             )}
+            {selectedChat && (
+              <FormControl mt={5}>
+                <FormLabel>会話履歴のリセット</FormLabel>
+                <Button
+                  colorScheme="red"
+                  variant="outline"
+                  onClick={() => setIsResetConfirmOpen(true)}
+                >
+                  会話履歴リセット
+                </Button>
+              </FormControl>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
@@ -1437,6 +1632,25 @@ ${cleanTask}
             </Button>
             <Button colorScheme="blue" onClick={handleSaveSystemPrompt}>
               保存
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ★ リセット確認モーダル */}
+      <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>会話履歴のリセット</ModalHeader>
+          <ModalBody>
+            <Text>本当にこの会話の履歴を消去しますか？</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button mr={3} onClick={closeResetConfirm}>
+              キャンセル
+            </Button>
+            <Button colorScheme="red" onClick={handleResetConversation}>
+              消去
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -1454,7 +1668,7 @@ ${cleanTask}
             <Button mr={3} onClick={closeDeleteModal}>
               キャンセル
             </Button>
-            <Button colorScheme="red" onClick={confirmDeleteChat}>
+            <Button colorScheme="red" onClick={() => confirmDeleteChat()}>
               削除
             </Button>
           </ModalFooter>
