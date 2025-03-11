@@ -574,7 +574,7 @@ ${cleanTask}
 
   // -----------------------------
   // handleAutoAssistSend
-  //   修正: 重複メッセージ追加を削除
+  //   修正: メッセージを即座にクリア
   // -----------------------------
   async function handleAutoAssistSend() {
     setIsLoading(true)
@@ -592,6 +592,12 @@ ${cleanTask}
           }
         })
       }
+
+      // ★ オートアシストのときも他と同様に、実行直後にフォームをクリア
+      setInputMessage('')
+      setTempFileName(null)
+      setTempFileData(null)
+      setTempFileMimeType(null)
 
       // タスク分割プロンプト
       const parseSystemPrompt = `
@@ -611,7 +617,7 @@ ${cleanTask}
       try {
         splitted = JSON.parse(splittedRaw)
       } catch (err) {
-        splitted = [inputMessage]
+        splitted = [ephemeralMsg.parts[0].text] // fallback
       }
 
       setPendingEphemeralMsg(ephemeralMsg)
@@ -688,10 +694,6 @@ ${cleanTask}
       setChats(updatedErr)
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
-      setInputMessage('')
-      setTempFileName(null)
-      setTempFileData(null)
-      setTempFileMimeType(null)
       setIsLoading(false)
     }
   }
@@ -808,6 +810,12 @@ ${cleanTask}
       await window.electronAPI.saveAgents(updated)
 
       setIsLoading(true)
+      // ★ 実行開始と同時にフォームを初期化
+      setInputMessage('')
+      setTempFileName(null)
+      setTempFileData(null)
+      setTempFileMimeType(null)
+
       await handleAutoAssistSend()
       setIsLoading(false)
 
@@ -874,7 +882,7 @@ ${cleanTask}
         }
       }
 
-      const updated = chats.map((chat) => {
+      const updatedChats = chats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
             ...chat,
@@ -886,7 +894,8 @@ ${cleanTask}
 
         return chat
       })
-      setChats(updated)
+      setChats(updatedChats)
+      // ★ ここでフォームをクリア
       setInputMessage('')
       setTempFileName(null)
       setTempFileData(null)
@@ -900,7 +909,7 @@ ${cleanTask}
       )
       const aiMsg: Message = { type: 'ai', content: resp }
 
-      const finalUpdated = updated.map((chat) => {
+      const finalUpdated = updatedChats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
             ...chat,
