@@ -104,20 +104,28 @@ type SubtaskInfo = {
 
 /**
  * デバッグ用: 要約編集モーダル
+ * ※ 修正ポイント:
+ *    - ID=999999(オートアシスト本体)はリストから除外
+ *    - オートアシスト会話履歴のリセットボタンを追加
  */
 function AutoAssistSettingsModal({
   isOpen,
   onClose,
   chats,
-  setChats
+  setChats,
+  onResetAutoAssist
 }: {
   isOpen: boolean
   onClose: () => void
   chats: ChatInfo[]
   setChats: (c: ChatInfo[]) => void
+  onResetAutoAssist: () => void
 }) {
   const toast = useToast()
   const [localChats, setLocalChats] = useState<ChatInfo[]>([])
+
+  // ★ 固定ID(オートアシスト用)
+  const AUTO_ASSIST_ID = 999999
 
   useEffect(() => {
     if (isOpen) {
@@ -173,22 +181,32 @@ function AutoAssistSettingsModal({
               </Tr>
             </Thead>
             <Tbody>
-              {localChats.map((c) => (
-                <Tr key={c.id}>
-                  <Td>{c.id}</Td>
-                  <Td>{c.customTitle}</Td>
-                  <Td>
-                    <Textarea
-                      value={c.assistantSummary || ''}
-                      onChange={(e) => handleChangeSummary(c.id, e.target.value)}
-                      size="sm"
-                      placeholder="得意分野要約"
-                    />
-                  </Td>
-                </Tr>
-              ))}
+              {/** ID=999999(オートアシスト本体)を除外 */}
+              {localChats
+                .filter((chat) => chat.id !== AUTO_ASSIST_ID)
+                .map((c) => (
+                  <Tr key={c.id}>
+                    <Td>{c.id}</Td>
+                    <Td>{c.customTitle}</Td>
+                    <Td>
+                      <Textarea
+                        value={c.assistantSummary || ''}
+                        onChange={(e) => handleChangeSummary(c.id, e.target.value)}
+                        size="sm"
+                        placeholder="得意分野要約"
+                      />
+                    </Td>
+                  </Tr>
+                ))}
             </Tbody>
           </Table>
+
+          {/* ★ オートアシスト会話履歴リセットボタン */}
+          <Box mt={6} textAlign="center">
+            <Button colorScheme="red" variant="outline" onClick={onResetAutoAssist}>
+              オートアシストの会話履歴をリセット
+            </Button>
+          </Box>
         </ModalBody>
         <ModalFooter>
           <Button mr={3} onClick={onClose}>
@@ -556,12 +574,9 @@ ${cleanTask}
   //   修正: 重複メッセージ追加を削除
   // -----------------------------
   async function handleAutoAssistSend() {
-    // ★ (削除) ユーザーメッセージ追加は sendMessage で行うため、ここでは行わない
-    // => これにより二重表示を防ぐ
-
     setIsLoading(true)
     try {
-      // ephemeralMsg準備
+      // ephemeralMsg
       const ephemeralMsg: Messages = {
         role: 'user',
         parts: [{ text: inputMessage }]
@@ -775,7 +790,7 @@ ${cleanTask}
 
     // autoAssist start
     if (selectedChatId === 'autoAssist') {
-      // ★ ここでユーザーメッセージを追加 (handleAutoAssistSendでは追加しない)
+      // ユーザーメッセージを追加 (handleAutoAssistSendでは追加しない)
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
 
@@ -953,11 +968,20 @@ ${cleanTask}
           role: 'user',
           parts: [
             {
-              text: `以下のテキストを1～2行で要約してください:\n\n${modalSystemPrompt}`
+              text: `${modalSystemPrompt}`
             }
           ]
         }
-        const summarizerPrompt = `あなたは有能な要約者です。テキストを1～2行でまとめてください。`
+        const summarizerPrompt = `
+        #命令書
+        あなたは有能な要約者です。
+        テキストは、生成AIのシステムプロンプトになります。
+        この内容を要約してどのような事が出来るかをまとめます。
+        #制約条件
+        - テキストの内容について、どのような事が出来るのか、得意なのかを考えて、重要なキーワードを取りこぼさないように詳細に要約してください
+        - 要約したもののみ出力してください。返事などは不要です。
+        - 要約文は20~30文字程度にまとめてください。
+        `
         const sumResp = await window.electronAPI.postChatAI(
           [summaryRequest],
           apiKey,
@@ -1081,7 +1105,6 @@ ${cleanTask}
     })
   }
 
-  // リセットモーダル
   function openResetConfirm() {
     setIsResetConfirmOpen(true)
   }
@@ -1169,6 +1192,27 @@ ${cleanTask}
     toast({
       title: '関連ファイルを変更しました',
       status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+  }
+
+  // ★ オートアシスト設定モーダル内の「オートアシスト会話履歴リセット」ボタン押下時
+  const handleResetAutoAssistFromModal = async () => {
+    // AUTO_ASSIST_IDの会話を消す
+    setAutoAssistMessages([])
+    const updated = chats.map((c) => {
+      if (c.id === AUTO_ASSIST_ID) {
+        return { ...c, messages: [], postMessages: [], inputMessage: '' }
+      }
+
+      return c
+    })
+    setChats(updated)
+    await window.electronAPI.saveAgents(updated)
+    toast({
+      title: 'オートアシストの会話履歴をリセットしました',
+      status: 'info',
       duration: 2000,
       isClosable: true
     })
@@ -1613,7 +1657,9 @@ ${cleanTask}
                 )}
               </FormControl>
             )}
-            {selectedChat && (
+
+            {/* 会話履歴リセットボタン */}
+            {selectedChatId && (
               <FormControl mt={5}>
                 <FormLabel>会話履歴のリセット</FormLabel>
                 <Button
@@ -1637,7 +1683,7 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* ★ リセット確認モーダル */}
+      {/* リセット確認モーダル */}
       <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -1681,6 +1727,7 @@ ${cleanTask}
         onClose={() => setIsAutoAssistSettingsOpen(false)}
         chats={chats}
         setChats={setChats}
+        onResetAutoAssist={handleResetAutoAssistFromModal}
       />
     </Flex>
   )
