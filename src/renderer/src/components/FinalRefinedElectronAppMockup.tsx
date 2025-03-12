@@ -651,7 +651,9 @@ ${cleanTask}
 
         return c
       })
+      // @ts-ignore
       setChats(updatedStore)
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -676,7 +678,9 @@ ${cleanTask}
 
           return c
         })
+        // @ts-ignore
         setChats(updated2)
+        // @ts-ignore
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -698,7 +702,9 @@ ${cleanTask}
 
         return c
       })
+      // @ts-ignore
       setChats(updatedErr)
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
@@ -901,6 +907,7 @@ ${cleanTask}
 
         return chat
       })
+      // @ts-ignore
       setChats(updatedChats)
       // ★ ここでフォームをクリア
       setInputMessage('')
@@ -927,7 +934,9 @@ ${cleanTask}
 
         return chat
       })
+      // @ts-ignore
       setChats(finalUpdated)
+      // @ts-ignore
       await window.electronAPI.saveAgents(finalUpdated)
     } catch (err) {
       console.error('sendMessageエラー:', err)
@@ -1124,9 +1133,6 @@ ${cleanTask}
     })
   }
 
-  function openResetConfirm() {
-    setIsResetConfirmOpen(true)
-  }
   function closeResetConfirm() {
     setIsResetConfirmOpen(false)
   }
@@ -1307,9 +1313,9 @@ ${cleanTask}
           minW="280px"
           mr={4}
         >
-          <Box overflowY="auto" flex="1">
-            <List spacing={3} p={4}>
-              {/* オートアシスト */}
+          {/* ここで「オートアシスト」を上部に固定 */}
+          <Box p={4} borderBottom="1px solid #eee">
+            <List spacing={3}>
               <ListItem
                 key="autoAssist"
                 p={2}
@@ -1329,11 +1335,15 @@ ${cleanTask}
                   自動で最適アシスタントを提案
                 </Text>
               </ListItem>
+            </List>
+          </Box>
 
-              {/* 通常アシスタント一覧 */}
+          {/* 通常アシスタントをスクロール表示 */}
+          <Box overflowY="auto" flex="1">
+            <List spacing={3} p={4}>
               {chats.map((chat) => {
+                // オートアシスト用は除外（上部に固定したため）
                 if (chat.id === AUTO_ASSIST_ID) {
-                  // オートアシスト用はリストに表示しない
                   return null
                 }
 
@@ -1488,7 +1498,7 @@ ${cleanTask}
               ))
             ) : (
               <Text fontWeight="bold" color="gray.500">
-                アシスタントを作成して開始してください
+                アシスタントを作成 or 選択して開始してください
               </Text>
             )}
           </Box>
