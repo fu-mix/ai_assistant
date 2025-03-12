@@ -86,7 +86,7 @@ type ChatInfo = {
   createdAt: string
   inputMessage: string
   agentFilePath?: string
-  assistantSummary?: string // "得意分野"などを保持
+  assistantSummary?: string
 }
 
 /**
@@ -104,11 +104,6 @@ type SubtaskInfo = {
 
 /**
  * デバッグ用: 要約編集モーダル
- * ※ 修正ポイント:
- *    - ID=999999(オートアシスト本体)はリストから除外
- *    - オートアシスト会話履歴リセット時に確認モーダルを出す代わりに、
- *      モーダルから直接削除ではなく “確認モーダル” を表示するよう変更
- *    - テーブル部分のみスクロールするように修正（固定高さ + スクロール）
  */
 function AutoAssistSettingsModal({
   isOpen,
@@ -126,12 +121,10 @@ function AutoAssistSettingsModal({
   const toast = useToast()
   const [localChats, setLocalChats] = useState<ChatInfo[]>([])
 
-  // ★ 固定ID(オートアシスト用)
   const AUTO_ASSIST_ID = 999999
 
   useEffect(() => {
     if (isOpen) {
-      // モーダルを開くときに chats をコピー
       setLocalChats(JSON.parse(JSON.stringify(chats)))
     }
   }, [isOpen, chats])
@@ -170,13 +163,11 @@ function AutoAssistSettingsModal({
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>オートアシスト設定</ModalHeader>
-
         <ModalBody>
           <Text mb={4} fontSize="sm" color="gray.600">
             各アシスタントの「得意分野要約」を確認・編集できます。
           </Text>
 
-          {/* ▼ テーブル部分をスクロール可能にする為のラッパ */}
           <Box maxH="480px" overflowY="auto" mb={4}>
             <Table size="sm">
               <Thead>
@@ -187,7 +178,6 @@ function AutoAssistSettingsModal({
                 </Tr>
               </Thead>
               <Tbody>
-                {/** ID=999999(オートアシスト本体)を除外 */}
                 {localChats
                   .filter((chat) => chat.id !== AUTO_ASSIST_ID)
                   .map((c) => (
@@ -208,7 +198,6 @@ function AutoAssistSettingsModal({
             </Table>
           </Box>
 
-          {/* リセットボタンはスクロール領域の外に配置 */}
           <Box textAlign="center">
             <Button colorScheme="red" variant="outline" onClick={onConfirmResetAutoAssist}>
               オートアシストの会話履歴をリセット
@@ -233,16 +222,14 @@ export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
   // -----------------------------
-  // オートアシスト関連state
+  // オートアシスト関連
   // -----------------------------
   const [autoAssistMessages, setAutoAssistMessages] = useState<Message[]>([])
   const [autoAssistState, setAutoAssistState] = useState<AutoAssistState>('idle')
   const [pendingSubtasks, setPendingSubtasks] = useState<SubtaskInfo[]>([])
   const [pendingEphemeralMsg, setPendingEphemeralMsg] = useState<Messages | null>(null)
 
-  // ★ 固定ID(オートアシスト用)
   const AUTO_ASSIST_ID = 999999
-
   const [agentMode, setAgentMode] = useState<boolean>(false)
 
   // -----------------------------
@@ -258,23 +245,17 @@ export const FinalRefinedElectronAppMockup = () => {
   const [tempFileData, setTempFileData] = useState<string | null>(null)
   const [tempFileMimeType, setTempFileMimeType] = useState<string | null>(null)
 
-  // 新アシスタント作成モーダル
+  // モーダル
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
   const [modalAgentFilePath, setModalAgentFilePath] = useState<string | null>(null)
 
-  // システムプロンプト編集モーダル
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
-
-  // アシスタント削除モーダル
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
-
-  // 会話履歴リセット用
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
-  // ★オートアシスト設定モーダルでボタン押下時の確認モーダル
   const [isResetAutoAssistConfirm, setIsResetAutoAssistConfirm] = useState(false)
 
   // 通常
@@ -289,15 +270,12 @@ export const FinalRefinedElectronAppMockup = () => {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // -----------------------------
-  // 初期ロード: chats読み込み
-  // -----------------------------
+  // 初期ロード
   useEffect(() => {
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
         const foundAuto = stored.find((c) => c.id === AUTO_ASSIST_ID)
         if (!foundAuto) {
-          // オートアシスト用ChatInfoを新規作成
           const newAutoAssist: ChatInfo = {
             id: AUTO_ASSIST_ID,
             customTitle: 'AutoAssistSystem',
@@ -310,7 +288,6 @@ export const FinalRefinedElectronAppMockup = () => {
           stored.push(newAutoAssist)
         }
         setChats(stored)
-        // オートアシスト用 messages を state へ
         const auto = stored.find((c) => c.id === AUTO_ASSIST_ID)
         if (auto) {
           setAutoAssistMessages(auto.messages)
@@ -319,9 +296,7 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }, [])
 
-  // -----------------------------
   // ライセンス期限チェック
-  // -----------------------------
   useEffect(() => {
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
@@ -329,9 +304,7 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [])
 
-  // -----------------------------
   // チャット欄を常にスクロール最下部
-  // -----------------------------
   useEffect(() => {
     if (chatHistoryRef.current) {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
@@ -359,7 +332,7 @@ export const FinalRefinedElectronAppMockup = () => {
   }
 
   // -----------------------------
-  // ファイル添付ハンドラ
+  // ファイル添付ハンドラ (一時)
   // -----------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -586,27 +559,44 @@ ${cleanTask}
   async function handleAutoAssistSend() {
     setIsLoading(true)
     try {
-      // ephemeralMsg
       const ephemeralMsg: Messages = {
         role: 'user',
         parts: [{ text: inputMessage }]
       }
       if (tempFileData && tempFileMimeType) {
-        ephemeralMsg.parts.push({
-          inline_data: {
-            mime_type: tempFileMimeType,
-            data: tempFileData
+        // ▼ CSVでも inline_data を push
+        if (tempFileMimeType === 'text/csv') {
+          try {
+            const csvString = window.atob(tempFileData)
+            const jsonStr = csvToJson(csvString)
+            ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
+          } catch {
+            ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
-        })
+          // ★ CSV でも inline_data を付ける
+          ephemeralMsg.parts.push({
+            inline_data: {
+              mime_type: tempFileMimeType,
+              data: tempFileData
+            }
+          })
+        } else {
+          // 従来通り
+          ephemeralMsg.parts.push({
+            inline_data: {
+              mime_type: tempFileMimeType,
+              data: tempFileData
+            }
+          })
+        }
       }
 
-      // ★ オートアシストのときも他と同様に、実行直後にフォームをクリア
+      // 実行直後にフォームをクリア
       setInputMessage('')
       setTempFileName(null)
       setTempFileData(null)
       setTempFileMimeType(null)
 
-      // タスク分割プロンプト
       const parseSystemPrompt = `
 ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
 ユーザーの依頼で、処理内容が異なるところで分割する程度にとどめていください。
@@ -624,7 +614,7 @@ ${cleanTask}
       try {
         splitted = JSON.parse(splittedRaw)
       } catch (err) {
-        splitted = [ephemeralMsg.parts[0].text] // fallback
+        splitted = [ephemeralMsg.parts[0].text]
       }
 
       setPendingEphemeralMsg(ephemeralMsg)
@@ -632,7 +622,7 @@ ${cleanTask}
       const subtaskInfos = await findAssistantsForEachTask(splitted)
       setPendingSubtasks(subtaskInfos)
 
-      // 表示
+      // 分割結果表示
       const lines = subtaskInfos.map(
         (si, idx) =>
           `タスク${idx + 1} : ${si.task}\n→ 推奨アシスタント : ${si.recommendedAssistant}`
@@ -640,7 +630,6 @@ ${cleanTask}
       const summaryMsg = `以下のタスクに分割し、推奨アシスタントを割り当てました:\n\n${lines.join('\n\n')}`
       setAutoAssistMessages((prev) => [...prev, { type: 'ai', content: summaryMsg }])
 
-      // storeにも "AIメッセージ" を追加
       const updatedStore = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
           return {
@@ -664,7 +653,6 @@ ${cleanTask}
           ...prev,
           { type: 'ai', content: '実行しますか？ (Yesで実行 / Noでキャンセル)' }
         ])
-
         const updated2 = updatedStore.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
             return {
@@ -727,11 +715,8 @@ ${cleanTask}
       return
     }
 
-    // autoAssist Yes/No
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
       const ans = inputMessage.trim().toLowerCase()
-
-      // 先にユーザー発言をautoAssistMessagesに追加 + store反映
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
       let updated = chats.map((c) => {
@@ -799,19 +784,15 @@ ${cleanTask}
         })
         setChats(updated)
         await window.electronAPI.saveAgents(updated)
-
         setInputMessage('')
 
         return
       }
     }
 
-    // autoAssist start
     if (selectedChatId === 'autoAssist') {
-      // ユーザーメッセージを追加 (handleAutoAssistSendでは追加しない)
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
-
       const updated = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
           return { ...c, messages: [...c.messages, userMsg] }
@@ -823,7 +804,6 @@ ${cleanTask}
       await window.electronAPI.saveAgents(updated)
 
       setIsLoading(true)
-      // ★ 実行開始と同時にフォームを初期化
       setInputMessage('')
       setTempFileName(null)
       setTempFileData(null)
@@ -847,6 +827,7 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
 
+      // ▼ CSVでも inline_data を push
       if (tempFileData && tempFileMimeType) {
         if (tempFileMimeType === 'text/csv') {
           try {
@@ -856,18 +837,31 @@ ${cleanTask}
           } catch (err) {
             ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
+          ephemeralMsg.parts.push({
+            inline_data: {
+              mime_type: tempFileMimeType,
+              data: tempFileData
+            }
+          })
         } else {
           ephemeralMsg.parts.push({
-            inline_data: { mime_type: tempFileMimeType, data: tempFileData }
+            inline_data: {
+              mime_type: tempFileMimeType,
+              data: tempFileData
+            }
           })
         }
       }
 
+      // useAgentFile
       if (useAgentFile && selectedChat.agentFilePath) {
+        console.log('attached start')
         try {
           const fileBase64 = await window.electronAPI.readFileByPath(selectedChat.agentFilePath)
           if (fileBase64) {
+            console.log('base64 success')
             const pathLower = selectedChat.agentFilePath.toLowerCase()
+            console.log('path', pathLower)
             let derivedMime = 'application/octet-stream'
             if (pathLower.endsWith('.pdf')) derivedMime = 'application/pdf'
             else if (pathLower.endsWith('.txt')) derivedMime = 'text/plain'
@@ -884,17 +878,28 @@ ${cleanTask}
               } catch (err) {
                 ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
               }
-            } else {
+
+              // ★ CSV でも inline_data を付ける
               ephemeralMsg.parts.push({
-                inline_data: { mime_type: derivedMime, data: fileBase64 }
+                inline_data: {
+                  mime_type: 'text/csv',
+                  data: fileBase64
+                }
               })
+            } else {
+              console.error('Attached file not support')
             }
+            ephemeralMsg.parts.push({
+              inline_data: { mime_type: derivedMime, data: fileBase64 }
+            })
+            console.log('msg', ephemeralMsg)
           }
         } catch (err) {
           console.error('readFileByPath error:', err)
         }
       }
 
+      // 更新
       const updatedChats = chats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
@@ -909,12 +914,14 @@ ${cleanTask}
       })
       // @ts-ignore
       setChats(updatedChats)
-      // ★ ここでフォームをクリア
+
+      // フォームクリア
       setInputMessage('')
       setTempFileName(null)
       setTempFileData(null)
       setTempFileMimeType(null)
 
+      // 実行
       const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
       const resp = await window.electronAPI.postChatAI(
         ephemeralAll,
@@ -1139,7 +1146,6 @@ ${cleanTask}
   async function handleResetConversation() {
     closeResetConfirm()
     if (selectedChatId === 'autoAssist') {
-      // オートアシストリセット
       setAutoAssistMessages([])
       const updated = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
@@ -1157,7 +1163,6 @@ ${cleanTask}
         isClosable: true
       })
     } else if (typeof selectedChatId === 'number') {
-      // 通常アシスタント
       const updated = chats.map((c) => {
         if (c.id === selectedChatId) {
           return {
@@ -1221,13 +1226,13 @@ ${cleanTask}
     })
   }
 
-  // ★ 「オートアシスト設定モーダル」から呼ばれる => 確認モーダルで最終決定
+  // オートアシスト設定モーダル:リセット確認
   const handleConfirmResetAutoAssist = () => {
     setIsResetAutoAssistConfirm(true)
   }
-  // ★ 実際にリセットを行う処理
+  // 実際にリセット
   async function handleResetAutoAssistFromModal() {
-    setIsResetAutoAssistConfirm(false) // 確認モーダル閉じ
+    setIsResetAutoAssistConfirm(false)
     setAutoAssistMessages([])
     const updated = chats.map((c) => {
       if (c.id === AUTO_ASSIST_ID) {
@@ -1263,10 +1268,23 @@ ${cleanTask}
       >
         <HStack spacing={8}>
           <Heading as="h1" size="lg" fontWeight="extrabold" color="gray.800">
-            DesAIn Assistant
+            {/* D をオレンジ系に */}
+            <Text as="span" color="orange.500">
+              D
+            </Text>
+            <Text as="span">es</Text>
+            {/* AI をサーモンピンク系に */}
+            <Text as="span" color="pink.400">
+              AI
+            </Text>
+            <Text as="span">n </Text>
+            {/* A をゴールド系に */}
+            <Text as="span" color="yellow.400">
+              A
+            </Text>
+            <Text as="span">ssistant</Text>
           </Heading>
 
-          {/* ★ エージェントモード: オートアシストのときだけ表示 */}
           {selectedChatId === 'autoAssist' && (
             <HStack align="center">
               <Text fontSize="sm">エージェントモード</Text>
@@ -1313,7 +1331,7 @@ ${cleanTask}
           minW="280px"
           mr={4}
         >
-          {/* ここで「オートアシスト」を上部に固定 */}
+          {/* オートアシストを固定 */}
           <Box p={4} borderBottom="1px solid #eee">
             <List spacing={3}>
               <ListItem
@@ -1338,11 +1356,9 @@ ${cleanTask}
             </List>
           </Box>
 
-          {/* 通常アシスタントをスクロール表示 */}
           <Box overflowY="auto" flex="1">
             <List spacing={3} p={4}>
               {chats.map((chat) => {
-                // オートアシスト用は除外（上部に固定したため）
                 if (chat.id === AUTO_ASSIST_ID) {
                   return null
                 }
@@ -1377,7 +1393,6 @@ ${cleanTask}
                         </Text>
                       </Box>
 
-                      {/* アシスタント削除 */}
                       {chat.id === selectedChatId && (
                         <IconButton
                           icon={<AiOutlineDelete />}
@@ -1498,7 +1513,7 @@ ${cleanTask}
               ))
             ) : (
               <Text fontWeight="bold" color="gray.500">
-                アシスタントを作成 or 選択して開始してください
+                アシスタントを作成して開始してください
               </Text>
             )}
           </Box>
@@ -1602,7 +1617,13 @@ ${cleanTask}
       </Modal>
 
       {/* 新アシスタント作成モーダル */}
-      <Modal isOpen={isModalOpen} onClose={closeCustomChatModal} isCentered>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeCustomChatModal}
+        isCentered
+        closeOnOverlayClick={false}
+        closeOnEsc={false}
+      >
         <ModalOverlay />
         <ModalContent maxW="3xl">
           <ModalHeader>新しいアシスタントの作成</ModalHeader>
@@ -1651,7 +1672,13 @@ ${cleanTask}
       </Modal>
 
       {/* システムプロンプト編集モーダル */}
-      <Modal isOpen={isPromptModalOpen} onClose={closeSystemPromptModal} isCentered>
+      <Modal
+        isOpen={isPromptModalOpen}
+        onClose={closeSystemPromptModal}
+        isCentered
+        closeOnOverlayClick={false}
+        closeOnEsc={false}
+      >
         <ModalOverlay />
         <ModalContent maxW="3xl">
           <ModalHeader>アシスタント指示の編集</ModalHeader>
@@ -1690,7 +1717,6 @@ ${cleanTask}
               </FormControl>
             )}
 
-            {/* 会話履歴リセットボタン */}
             {selectedChatId && (
               <FormControl mt={5}>
                 <FormLabel>会話履歴のリセット</FormLabel>
@@ -1715,7 +1741,7 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* リセット確認モーダル(通常/オートアシスト共通) */}
+      {/* リセット確認モーダル */}
       <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -1734,7 +1760,7 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* ★ オートアシスト設定モーダル → 会話リセット確認モーダル */}
+      {/* オートアシスト設定モーダル -> リセット確認 */}
       <Modal
         isOpen={isResetAutoAssistConfirm}
         onClose={() => setIsResetAutoAssistConfirm(false)}
