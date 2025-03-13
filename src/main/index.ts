@@ -212,11 +212,14 @@ ipcMain.handle('delete-file-in-userdata', (_event, filePath: string) => {
 ipcMain.handle(
   'postChatAI',
   async (_event, message: Messages[], apiKey: string, systemPrompt: string) => {
-    console.log('\n=== postChatAI Request ===')
-    console.log('messages:', JSON.stringify(message, null, 2))
-    console.log('apiKey:', apiKey ? '********' : '(none)')
-    console.log('systemPrompt:', systemPrompt)
+    const debugFlag = `${import.meta.env.MAIN_VITE_DEBUG}`
 
+    if (debugFlag) {
+      console.log('\n=== postChatAI Request ===')
+      console.log('messages:', JSON.stringify(message, null, 2))
+      console.log('apiKey:', apiKey ? '********' : '(none)')
+      console.log('systemPrompt:', systemPrompt)
+    }
     const API_ENDPOINT =
       'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
@@ -249,9 +252,11 @@ ipcMain.handle(
       }
       const resData: string = response.data.candidates[0].content.parts[0].text
 
-      console.log('\n=== postChatAI Response ===')
-      console.log(resData)
-      console.log('============================\n')
+      if (debugFlag) {
+        console.log('\n=== postChatAI Response ===')
+        console.log(resData)
+        console.log('============================\n')
+      }
 
       return resData
     } catch (error) {

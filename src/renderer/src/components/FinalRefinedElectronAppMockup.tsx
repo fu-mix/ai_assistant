@@ -35,6 +35,7 @@ import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 import { MdOutlineContentCopy } from 'react-icons/md'
+import { FiEdit } from 'react-icons/fi' // ★ 編集用アイコンのみ残す
 
 /**
  * Electron API interface
@@ -269,6 +270,9 @@ export const FinalRefinedElectronAppMockup = () => {
   const chatHistoryRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ★ 編集時のIndexのみ保存。実際の編集反映は sendMessageで行う
+  const [editIndex, setEditIndex] = useState<number | null>(null)
 
   // 初期ロード
   useEffect(() => {
@@ -554,7 +558,6 @@ ${cleanTask}
 
   // -----------------------------
   // handleAutoAssistSend
-  //   修正: メッセージを即座にクリア
   // -----------------------------
   async function handleAutoAssistSend() {
     setIsLoading(true)
@@ -564,7 +567,6 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
       if (tempFileData && tempFileMimeType) {
-        // ▼ CSVでも inline_data を push
         if (tempFileMimeType === 'text/csv') {
           try {
             const csvString = window.atob(tempFileData)
@@ -573,7 +575,6 @@ ${cleanTask}
           } catch {
             ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
-          // ★ CSV でも inline_data を付ける
           ephemeralMsg.parts.push({
             inline_data: {
               mime_type: tempFileMimeType,
@@ -581,7 +582,6 @@ ${cleanTask}
             }
           })
         } else {
-          // 従来通り
           ephemeralMsg.parts.push({
             inline_data: {
               mime_type: tempFileMimeType,
@@ -591,7 +591,6 @@ ${cleanTask}
         }
       }
 
-      // 実行直後にフォームをクリア
       setInputMessage('')
       setTempFileName(null)
       setTempFileData(null)
@@ -622,7 +621,6 @@ ${cleanTask}
       const subtaskInfos = await findAssistantsForEachTask(splitted)
       setPendingSubtasks(subtaskInfos)
 
-      // 分割結果表示
       const lines = subtaskInfos.map(
         (si, idx) =>
           `タスク${idx + 1} : ${si.task}\n→ 推奨アシスタント : ${si.recommendedAssistant}`
@@ -640,9 +638,7 @@ ${cleanTask}
 
         return c
       })
-      // @ts-ignore
-      setChats(updatedStore)
-      // @ts-ignore
+      setChats(updatedStore as ChatInfo[])
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -666,9 +662,7 @@ ${cleanTask}
 
           return c
         })
-        // @ts-ignore
-        setChats(updated2)
-        // @ts-ignore
+        setChats(updated2 as ChatInfo[])
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -690,9 +684,7 @@ ${cleanTask}
 
         return c
       })
-      // @ts-ignore
-      setChats(updatedErr)
-      // @ts-ignore
+      setChats(updatedErr as ChatInfo[])
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
@@ -701,6 +693,7 @@ ${cleanTask}
 
   // -----------------------------
   // sendMessage
+  //   (ここに「編集→履歴削除→再実行」のロジックを組み込む)
   // -----------------------------
   async function sendMessage() {
     if (!inputMessage.trim() && !tempFileData) return
@@ -715,6 +708,9 @@ ${cleanTask}
       return
     }
 
+    // --------------------------------------------------
+    // オートアシスト: Yes/No
+    // --------------------------------------------------
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -775,7 +771,7 @@ ${cleanTask}
               ...c,
               messages: [
                 ...c.messages,
-                { type: 'ai', content: 'Yes で実行 / No でキャンセル です。' }
+                { type: 'ai', content: 'Yes で実行 / No でキャンセル です.' }
               ]
             }
           }
@@ -790,6 +786,9 @@ ${cleanTask}
       }
     }
 
+    // --------------------------------------------------
+    // オートアシスト: 通常メッセージ送信
+    // --------------------------------------------------
     if (selectedChatId === 'autoAssist') {
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
@@ -815,10 +814,174 @@ ${cleanTask}
       return
     }
 
+    // --------------------------------------------------
     // 通常アシスタント
+    //    - もし editIndex があれば、
+    //      そのメッセージを差し替えて以降の履歴を削除し、AIに再実行
+    //    - なければ新規メッセージ扱い
+    // --------------------------------------------------
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (!selectedChat) return
 
+    // ★ もし editIndex != null なら、該当メッセージを更新 + 以降削除
+    if (editIndex != null) {
+      setIsLoading(true)
+      try {
+        // 1) messages / postMessages を更新
+        const updatedChats = chats.map((chat) => {
+          if (chat.id === selectedChatId) {
+            const cloned = [...chat.messages]
+            cloned.splice(editIndex, cloned.length - editIndex, {
+              type: 'user',
+              content: inputMessage
+            })
+            const clonedPost = [...chat.postMessages]
+            clonedPost.splice(editIndex, clonedPost.length - editIndex)
+
+            return {
+              ...chat,
+              messages: cloned,
+              postMessages: clonedPost
+            }
+          }
+
+          return chat
+        })
+        setChats(updatedChats)
+        await window.electronAPI.saveAgents(updatedChats)
+
+        // "削除後"の chat
+        const newSelectedChat = updatedChats.find((cc) => cc.id === selectedChatId)
+        if (!newSelectedChat) {
+          setEditIndex(null)
+          setInputMessage('')
+          setTempFileName(null)
+          setTempFileData(null)
+          setTempFileMimeType(null)
+          setIsLoading(false)
+
+          return
+        }
+
+        // 2) AIに問い合わせ
+        const ephemeralMsg: Messages = {
+          role: 'user',
+          parts: [{ text: inputMessage }]
+        }
+
+        // ★ ファイル添付チェックを編集時にも反映
+        if (tempFileData && tempFileMimeType) {
+          if (tempFileMimeType === 'text/csv') {
+            try {
+              const csvString = window.atob(tempFileData)
+              const jsonStr = csvToJson(csvString)
+              ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
+            } catch {
+              ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+            }
+            ephemeralMsg.parts.push({
+              inline_data: { mime_type: tempFileMimeType, data: tempFileData }
+            })
+          } else {
+            ephemeralMsg.parts.push({
+              inline_data: { mime_type: tempFileMimeType, data: tempFileData }
+            })
+          }
+        }
+        if (useAgentFile && newSelectedChat.agentFilePath) {
+          try {
+            const fileBase64 = await window.electronAPI.readFileByPath(
+              newSelectedChat.agentFilePath
+            )
+            if (fileBase64) {
+              const pathLower = newSelectedChat.agentFilePath.toLowerCase()
+              let derivedMime = 'application/octet-stream'
+              if (pathLower.endsWith('.pdf')) derivedMime = 'application/pdf'
+              else if (pathLower.endsWith('.txt')) derivedMime = 'text/plain'
+              else if (pathLower.endsWith('.png')) derivedMime = 'image/png'
+              else if (pathLower.endsWith('.jpg') || pathLower.endsWith('.jpeg')) {
+                derivedMime = 'image/jpeg'
+              } else if (pathLower.endsWith('.gif')) {
+                derivedMime = 'image/gif'
+              } else if (pathLower.endsWith('.csv')) {
+                try {
+                  const csvString = window.atob(fileBase64)
+                  const jsonStr = csvToJson(csvString)
+                  ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
+                } catch {
+                  ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+                }
+                ephemeralMsg.parts.push({
+                  inline_data: {
+                    mime_type: 'text/csv',
+                    data: fileBase64
+                  }
+                })
+              }
+              ephemeralMsg.parts.push({
+                inline_data: { mime_type: derivedMime, data: fileBase64 }
+              })
+            }
+          } catch (err) {
+            console.error('readFileByPath error:', err)
+          }
+        }
+
+        const ephemeralAll = [...newSelectedChat.postMessages, ephemeralMsg]
+        const resp = await window.electronAPI.postChatAI(
+          ephemeralAll,
+          apiKey,
+          newSelectedChat.systemPrompt
+        )
+        const aiMsg: Message = { type: 'ai', content: resp }
+
+        // 3) AIレスポンスを末尾に追加
+        const finalUpdated = updatedChats.map((chat) => {
+          if (chat.id === selectedChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, aiMsg],
+              postMessages: [...chat.postMessages, { role: 'model', parts: [{ text: resp }] }]
+            }
+          }
+
+          return chat
+        })
+        setChats(finalUpdated)
+        await window.electronAPI.saveAgents(finalUpdated)
+
+        toast({
+          title: '編集内容を反映しました',
+          description: '以降の履歴を削除し、新しい内容で実行しました。',
+          status: 'info',
+          duration: 2500,
+          isClosable: true
+        })
+      } catch (err) {
+        console.error('edit & re-run error:', err)
+        toast({
+          title: 'エラー',
+          description: '編集内容の実行中にエラーが発生しました。',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+      } finally {
+        // 後始末
+        setEditIndex(null)
+        setInputMessage('')
+        setTempFileName(null)
+        setTempFileData(null)
+        setTempFileMimeType(null)
+        setIsLoading(false)
+      }
+
+      return
+    }
+
+    // --------------------------------------------------
+    // 新規メッセージ(通常の sendMessage)
+    // --------------------------------------------------
     setIsLoading(true)
     try {
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -827,7 +990,7 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
 
-      // ▼ CSVでも inline_data を push
+      // CSV等の添付 (省略なし: 現行ロジックそのまま)
       if (tempFileData && tempFileMimeType) {
         if (tempFileMimeType === 'text/csv') {
           try {
@@ -838,30 +1001,21 @@ ${cleanTask}
             ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
           ephemeralMsg.parts.push({
-            inline_data: {
-              mime_type: tempFileMimeType,
-              data: tempFileData
-            }
+            inline_data: { mime_type: tempFileMimeType, data: tempFileData }
           })
         } else {
           ephemeralMsg.parts.push({
-            inline_data: {
-              mime_type: tempFileMimeType,
-              data: tempFileData
-            }
+            inline_data: { mime_type: tempFileMimeType, data: tempFileData }
           })
         }
       }
 
-      // useAgentFile
-      if (useAgentFile && selectedChat.agentFilePath) {
-        console.log('attached start')
+      const selectedChat = chats.find((c) => c.id === selectedChatId)
+      if (selectedChat && useAgentFile && selectedChat.agentFilePath) {
         try {
           const fileBase64 = await window.electronAPI.readFileByPath(selectedChat.agentFilePath)
           if (fileBase64) {
-            console.log('base64 success')
             const pathLower = selectedChat.agentFilePath.toLowerCase()
-            console.log('path', pathLower)
             let derivedMime = 'application/octet-stream'
             if (pathLower.endsWith('.pdf')) derivedMime = 'application/pdf'
             else if (pathLower.endsWith('.txt')) derivedMime = 'text/plain'
@@ -878,28 +1032,22 @@ ${cleanTask}
               } catch (err) {
                 ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
               }
-
-              // ★ CSV でも inline_data を付ける
               ephemeralMsg.parts.push({
                 inline_data: {
                   mime_type: 'text/csv',
                   data: fileBase64
                 }
               })
-            } else {
-              console.error('Attached file not support')
             }
             ephemeralMsg.parts.push({
               inline_data: { mime_type: derivedMime, data: fileBase64 }
             })
-            console.log('msg', ephemeralMsg)
           }
         } catch (err) {
           console.error('readFileByPath error:', err)
         }
       }
 
-      // 更新
       const updatedChats = chats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
@@ -912,16 +1060,19 @@ ${cleanTask}
 
         return chat
       })
-      // @ts-ignore
       setChats(updatedChats)
 
-      // フォームクリア
       setInputMessage('')
       setTempFileName(null)
       setTempFileData(null)
       setTempFileMimeType(null)
 
-      // 実行
+      if (!selectedChat) {
+        setIsLoading(false)
+
+        return
+      }
+
       const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
       const resp = await window.electronAPI.postChatAI(
         ephemeralAll,
@@ -941,9 +1092,7 @@ ${cleanTask}
 
         return chat
       })
-      // @ts-ignore
       setChats(finalUpdated)
-      // @ts-ignore
       await window.electronAPI.saveAgents(finalUpdated)
     } catch (err) {
       console.error('sendMessageエラー:', err)
@@ -1251,6 +1400,12 @@ ${cleanTask}
     })
   }
 
+  // ★ user発言を編集ボタン -> inputフォームへコピー
+  const handleEditMessage = (msgIndex: number, oldContent: string) => {
+    setEditIndex(msgIndex)
+    setInputMessage(oldContent) // ★ フォームにコピー
+  }
+
   const selectedChat =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
@@ -1435,34 +1590,45 @@ ${cleanTask}
                     onMouseLeave={() => setHoveredMessageIndex(null)}
                     style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   >
-                    {msg.type === 'user' ? (
-                      <div>{msg.content}</div>
-                    ) : (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
-                        {msg.content}
-                      </ReactMarkdown>
-                    )}
-                    {hoveredMessageIndex === idx && (
-                      <IconButton
-                        icon={<MdOutlineContentCopy />}
-                        aria-label="コピー"
-                        size="sm"
-                        position="absolute"
-                        top="4px"
-                        right="6px"
-                        variant="ghost"
-                        colorScheme="blue"
-                        onClick={() => {
-                          navigator.clipboard.writeText(msg.content).then(() => {
-                            toast({
-                              title: 'メッセージをコピーしました',
-                              status: 'info',
-                              duration: 1000,
-                              isClosable: true
-                            })
-                          })
-                        }}
-                      />
+                    <div>
+                      {msg.type === 'user' ? (
+                        msg.content
+                      ) : (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
+                          {msg.content}
+                        </ReactMarkdown>
+                      )}
+                    </div>
+                    {hoveredMessageIndex === idx && msg.type === 'user' && (
+                      <Box position="absolute" top="4px" right="6px">
+                        <HStack spacing={1}>
+                          <IconButton
+                            icon={<MdOutlineContentCopy />}
+                            aria-label="コピー"
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="blue"
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content).then(() => {
+                                toast({
+                                  title: 'メッセージをコピーしました',
+                                  status: 'info',
+                                  duration: 1000,
+                                  isClosable: true
+                                })
+                              })
+                            }}
+                          />
+                          <IconButton
+                            icon={<FiEdit />}
+                            aria-label="編集"
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="blue"
+                            onClick={() => handleEditMessage(idx, msg.content)}
+                          />
+                        </HStack>
+                      </Box>
                     )}
                   </Box>
                 ))}
@@ -1480,34 +1646,46 @@ ${cleanTask}
                   onMouseLeave={() => setHoveredMessageIndex(null)}
                   style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                 >
-                  {msg.type === 'user' ? (
-                    <div>{msg.content}</div>
-                  ) : (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
-                      {msg.content}
-                    </ReactMarkdown>
-                  )}
-                  {hoveredMessageIndex === idx && (
-                    <IconButton
-                      icon={<MdOutlineContentCopy />}
-                      aria-label="コピー"
-                      size="sm"
-                      position="absolute"
-                      top="4px"
-                      right="6px"
-                      variant="ghost"
-                      colorScheme="blue"
-                      onClick={() => {
-                        navigator.clipboard.writeText(msg.content).then(() => {
-                          toast({
-                            title: 'メッセージをコピーしました',
-                            status: 'info',
-                            duration: 1000,
-                            isClosable: true
-                          })
-                        })
-                      }}
-                    />
+                  <div>
+                    {msg.type === 'user' ? (
+                      msg.content
+                    ) : (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
+                  </div>
+
+                  {hoveredMessageIndex === idx && msg.type === 'user' && (
+                    <Box position="absolute" top="4px" right="6px">
+                      <HStack spacing={1}>
+                        <IconButton
+                          icon={<MdOutlineContentCopy />}
+                          aria-label="コピー"
+                          size="sm"
+                          variant="ghost"
+                          colorScheme="blue"
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content).then(() => {
+                              toast({
+                                title: 'メッセージをコピーしました',
+                                status: 'info',
+                                duration: 1000,
+                                isClosable: true
+                              })
+                            })
+                          }}
+                        />
+                        <IconButton
+                          icon={<FiEdit />}
+                          aria-label="編集"
+                          size="sm"
+                          variant="ghost"
+                          colorScheme="blue"
+                          onClick={() => handleEditMessage(idx, msg.content)}
+                        />
+                      </HStack>
+                    </Box>
                   )}
                 </Box>
               ))
