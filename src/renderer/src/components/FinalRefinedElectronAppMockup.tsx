@@ -307,6 +307,7 @@ export const FinalRefinedElectronAppMockup = () => {
             inputMessage: '',
             agentFilePaths: []
           }
+          // @ts-ignore
           reformed.push(newAutoAssist)
         }
         setChats(reformed)
@@ -671,6 +672,7 @@ ${cleanTask}
         return c
       })
       setChats(updatedStore as ChatInfo[])
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -695,6 +697,7 @@ ${cleanTask}
           return c
         })
         setChats(updated2 as ChatInfo[])
+        // @ts-ignore
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -717,6 +720,7 @@ ${cleanTask}
         return c
       })
       setChats(updatedErr as ChatInfo[])
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
@@ -1628,9 +1632,10 @@ ${cleanTask}
                         </ReactMarkdown>
                       )}
                     </div>
-                    {hoveredMessageIndex === idx && msg.type === 'user' && (
+                    {hoveredMessageIndex === idx && (
                       <Box position="absolute" top="4px" right="6px">
                         <HStack spacing={1}>
+                          {/* コピーアイコン: user/ai 両方に表示 */}
                           <IconButton
                             icon={<MdOutlineContentCopy />}
                             aria-label="コピー"
@@ -1648,14 +1653,17 @@ ${cleanTask}
                               })
                             }}
                           />
-                          <IconButton
-                            icon={<FiEdit />}
-                            aria-label="編集"
-                            size="sm"
-                            variant="ghost"
-                            colorScheme="blue"
-                            onClick={() => handleEditMessage(idx, msg.content)}
-                          />
+                          {/* 編集アイコン: userメッセージのみ表示 */}
+                          {msg.type === 'user' && (
+                            <IconButton
+                              icon={<FiEdit />}
+                              aria-label="編集"
+                              size="sm"
+                              variant="ghost"
+                              colorScheme="blue"
+                              onClick={() => handleEditMessage(idx, msg.content)}
+                            />
+                          )}
                         </HStack>
                       </Box>
                     )}
@@ -1685,9 +1693,10 @@ ${cleanTask}
                     )}
                   </div>
 
-                  {hoveredMessageIndex === idx && msg.type === 'user' && (
+                  {hoveredMessageIndex === idx && (
                     <Box position="absolute" top="4px" right="6px">
                       <HStack spacing={1}>
+                        {/* コピーアイコン: user/ai 両方に表示 */}
                         <IconButton
                           icon={<MdOutlineContentCopy />}
                           aria-label="コピー"
@@ -1705,14 +1714,17 @@ ${cleanTask}
                             })
                           }}
                         />
-                        <IconButton
-                          icon={<FiEdit />}
-                          aria-label="編集"
-                          size="sm"
-                          variant="ghost"
-                          colorScheme="blue"
-                          onClick={() => handleEditMessage(idx, msg.content)}
-                        />
+                        {/* 編集アイコン: userのみ */}
+                        {msg.type === 'user' && (
+                          <IconButton
+                            icon={<FiEdit />}
+                            aria-label="編集"
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="blue"
+                            onClick={() => handleEditMessage(idx, msg.content)}
+                          />
+                        )}
                       </HStack>
                     </Box>
                   )}
