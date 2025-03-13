@@ -35,7 +35,7 @@ import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 import { MdOutlineContentCopy } from 'react-icons/md'
-import { FiEdit } from 'react-icons/fi' // ★ 編集用アイコンのみ残す
+import { FiEdit } from 'react-icons/fi' // 編集用アイコン
 
 /**
  * Electron API interface
@@ -56,15 +56,17 @@ declare global {
 
 /**
  * LLM用 Messages
+ *  inlineData に修正
  */
 export type Messages = {
   role: string
-  parts: [
-    {
-      text: string
-    },
-    { inline_data?: { mime_type: string; data: string } }?
-  ]
+  parts: {
+    text?: string
+    inlineData?: {
+      mimeType: string
+      data: string
+    }
+  }[]
 }
 
 /**
@@ -77,6 +79,7 @@ type Message = {
 
 /**
  * アシスタント情報
+ *  複数ファイル対応: agentFilePaths
  */
 type ChatInfo = {
   id: number
@@ -86,7 +89,7 @@ type ChatInfo = {
   postMessages: Messages[]
   createdAt: string
   inputMessage: string
-  agentFilePath?: string
+  agentFilePaths?: string[]
   assistantSummary?: string
 }
 
@@ -241,19 +244,23 @@ export const FinalRefinedElectronAppMockup = () => {
   const [inputMessage, setInputMessage] = useState('')
   const [apiKey, setApiKey] = useState('')
 
-  // ファイル添付
-  const [tempFileName, setTempFileName] = useState<string | null>(null)
-  const [tempFileData, setTempFileData] = useState<string | null>(null)
-  const [tempFileMimeType, setTempFileMimeType] = useState<string | null>(null)
+  // ★複数ファイル添付(チャット送信用)ステート
+  const [tempFiles, setTempFiles] = useState<{ name: string; data: string; mimeType: string }[]>([])
 
-  // モーダル
+  // モーダル制御
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
-  const [modalAgentFilePath, setModalAgentFilePath] = useState<string | null>(null)
 
+  // ★複数ファイル添付(新規作成用)
+  const [modalAgentFiles, setModalAgentFiles] = useState<{ name: string; path: string }[]>([])
+
+  // システムプロンプト編集モーダル
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
+  // ★複数ファイル添付(編集用)
+  const [editingAgentFiles, setEditingAgentFiles] = useState<{ name: string; path: string }[]>([])
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
@@ -271,14 +278,24 @@ export const FinalRefinedElectronAppMockup = () => {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ★ 編集時のIndexのみ保存。実際の編集反映は sendMessageで行う
+  // 編集用Index
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
+  // -----------------------------
   // 初期ロード
+  // -----------------------------
   useEffect(() => {
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
-        const foundAuto = stored.find((c) => c.id === AUTO_ASSIST_ID)
+        // agentFilePaths が無い場合は初期化
+        const reformed = stored.map((c) => {
+          return {
+            ...c,
+            agentFilePaths: c.agentFilePaths || []
+          }
+        })
+
+        const foundAuto = reformed.find((c) => c.id === AUTO_ASSIST_ID)
         if (!foundAuto) {
           const newAutoAssist: ChatInfo = {
             id: AUTO_ASSIST_ID,
@@ -287,12 +304,13 @@ export const FinalRefinedElectronAppMockup = () => {
             messages: [],
             postMessages: [],
             createdAt: new Date().toLocaleString(),
-            inputMessage: ''
+            inputMessage: '',
+            agentFilePaths: []
           }
-          stored.push(newAutoAssist)
+          reformed.push(newAutoAssist)
         }
-        setChats(stored)
-        const auto = stored.find((c) => c.id === AUTO_ASSIST_ID)
+        setChats(reformed)
+        const auto = reformed.find((c) => c.id === AUTO_ASSIST_ID)
         if (auto) {
           setAutoAssistMessages(auto.messages)
         }
@@ -300,7 +318,7 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }, [])
 
-  // ライセンス期限チェック
+  // ライセンス期限チェック (疑似)
   useEffect(() => {
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
@@ -336,73 +354,92 @@ export const FinalRefinedElectronAppMockup = () => {
   }
 
   // -----------------------------
-  // ファイル添付ハンドラ (一時)
+  // チャット送信用ファイル選択
   // -----------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (reader.result) {
-        const base64Data = reader.result.toString().split(',')[1]
-        setTempFileData(base64Data)
-        setTempFileName(file.name)
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
-        const lower = file.name.toLowerCase()
-        if (lower.endsWith('.pdf')) setTempFileMimeType('application/pdf')
-        else if (lower.endsWith('.txt')) setTempFileMimeType('text/plain')
-        else if (lower.endsWith('.png')) setTempFileMimeType('image/png')
-        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-          setTempFileMimeType('image/jpeg')
-        } else if (lower.endsWith('.gif')) {
-          setTempFileMimeType('image/gif')
-        } else if (lower.endsWith('.csv')) {
-          setTempFileMimeType('text/csv')
-        } else {
-          setTempFileMimeType('application/octet-stream')
+    const newFiles: { name: string; data: string; mimeType: string }[] = []
+    let processed = 0
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (reader.result) {
+          const base64Data = reader.result.toString().split(',')[1]
+          const lower = file.name.toLowerCase()
+
+          let mime = 'application/octet-stream'
+          if (lower.endsWith('.pdf')) mime = 'application/pdf'
+          else if (lower.endsWith('.txt')) mime = 'text/plain'
+          else if (lower.endsWith('.png')) mime = 'image/png'
+          else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
+          else if (lower.endsWith('.gif')) mime = 'image/gif'
+          else if (lower.endsWith('.csv')) mime = 'text/csv'
+
+          newFiles.push({
+            name: file.name,
+            data: base64Data,
+            mimeType: mime
+          })
         }
-        e.target.value = ''
+        processed++
+        if (processed === files.length) {
+          setTempFiles((prev) => [...prev, ...newFiles])
+        }
       }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
+    e.target.value = ''
   }
+
   const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    const file = e.dataTransfer.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (reader.result) {
-        const base64Data = reader.result.toString().split(',')[1]
-        setTempFileData(base64Data)
-        setTempFileName(file.name)
+    const files = e.dataTransfer.files
+    if (!files || files.length === 0) return
 
-        const lower = file.name.toLowerCase()
-        if (lower.endsWith('.pdf')) setTempFileMimeType('application/pdf')
-        else if (lower.endsWith('.txt')) setTempFileMimeType('text/plain')
-        else if (lower.endsWith('.png')) setTempFileMimeType('image/png')
-        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-          setTempFileMimeType('image/jpeg')
-        } else if (lower.endsWith('.gif')) {
-          setTempFileMimeType('image/gif')
-        } else if (lower.endsWith('.csv')) {
-          setTempFileMimeType('text/csv')
-        } else {
-          setTempFileMimeType('application/octet-stream')
+    const newFiles: { name: string; data: string; mimeType: string }[] = []
+    let processed = 0
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (reader.result) {
+          const base64Data = reader.result.toString().split(',')[1]
+          const lower = file.name.toLowerCase()
+
+          let mime = 'application/octet-stream'
+          if (lower.endsWith('.pdf')) mime = 'application/pdf'
+          else if (lower.endsWith('.txt')) mime = 'text/plain'
+          else if (lower.endsWith('.png')) mime = 'image/png'
+          else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
+          else if (lower.endsWith('.gif')) mime = 'image/gif'
+          else if (lower.endsWith('.csv')) mime = 'text/csv'
+
+          newFiles.push({
+            name: file.name,
+            data: base64Data,
+            mimeType: mime
+          })
+        }
+        processed++
+        if (processed === files.length) {
+          setTempFiles((prev) => [...prev, ...newFiles])
         }
       }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
   }
+
   const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
   }
-  const handleTempFileDelete = () => {
-    setTempFileName(null)
-    setTempFileData(null)
-    setTempFileMimeType(null)
+
+  const handleTempFileDelete = (targetName: string) => {
+    setTempFiles((prev) => prev.filter((f) => f.name !== targetName))
   }
 
   // -----------------------------
@@ -417,6 +454,7 @@ export const FinalRefinedElectronAppMockup = () => {
       )
     }
   }
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -562,39 +600,33 @@ ${cleanTask}
   async function handleAutoAssistSend() {
     setIsLoading(true)
     try {
+      // partsの最初は { text: inputMessage } だけ
       const ephemeralMsg: Messages = {
         role: 'user',
         parts: [{ text: inputMessage }]
       }
-      if (tempFileData && tempFileMimeType) {
-        if (tempFileMimeType === 'text/csv') {
+
+      // CSV変換等
+      for (const f of tempFiles) {
+        if (f.mimeType === 'text/csv') {
           try {
-            const csvString = window.atob(tempFileData)
+            const csvString = window.atob(f.data)
             const jsonStr = csvToJson(csvString)
             ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
           } catch {
             ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
-          ephemeralMsg.parts.push({
-            inline_data: {
-              mime_type: tempFileMimeType,
-              data: tempFileData
-            }
-          })
-        } else {
-          ephemeralMsg.parts.push({
-            inline_data: {
-              mime_type: tempFileMimeType,
-              data: tempFileData
-            }
-          })
         }
+        ephemeralMsg.parts.push({
+          inlineData: {
+            mimeType: f.mimeType,
+            data: f.data
+          }
+        })
       }
 
       setInputMessage('')
-      setTempFileName(null)
-      setTempFileData(null)
-      setTempFileMimeType(null)
+      setTempFiles([])
 
       const parseSystemPrompt = `
 ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
@@ -613,7 +645,7 @@ ${cleanTask}
       try {
         splitted = JSON.parse(splittedRaw)
       } catch (err) {
-        splitted = [ephemeralMsg.parts[0].text]
+        splitted = [ephemeralMsg.parts[0].text || '']
       }
 
       setPendingEphemeralMsg(ephemeralMsg)
@@ -693,10 +725,9 @@ ${cleanTask}
 
   // -----------------------------
   // sendMessage
-  //   (ここに「編集→履歴削除→再実行」のロジックを組み込む)
   // -----------------------------
   async function sendMessage() {
-    if (!inputMessage.trim() && !tempFileData) return
+    if (!inputMessage.trim() && tempFiles.length === 0) return
     if (!apiKey) {
       toast({
         title: 'API Keyが未入力です',
@@ -715,12 +746,10 @@ ${cleanTask}
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
+
       let updated = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
-          return {
-            ...c,
-            messages: [...c.messages, userMsg]
-          }
+          return { ...c, messages: [...c.messages, userMsg] }
         }
 
         return c
@@ -804,9 +833,7 @@ ${cleanTask}
 
       setIsLoading(true)
       setInputMessage('')
-      setTempFileName(null)
-      setTempFileData(null)
-      setTempFileMimeType(null)
+      setTempFiles([])
 
       await handleAutoAssistSend()
       setIsLoading(false)
@@ -816,18 +843,15 @@ ${cleanTask}
 
     // --------------------------------------------------
     // 通常アシスタント
-    //    - もし editIndex があれば、
-    //      そのメッセージを差し替えて以降の履歴を削除し、AIに再実行
-    //    - なければ新規メッセージ扱い
     // --------------------------------------------------
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (!selectedChat) return
 
-    // ★ もし editIndex != null なら、該当メッセージを更新 + 以降削除
+    // ★編集モード
     if (editIndex != null) {
       setIsLoading(true)
       try {
-        // 1) messages / postMessages を更新
+        // 1) messages / postMessages を更新(差し替え)
         const updatedChats = chats.map((chat) => {
           if (chat.id === selectedChatId) {
             const cloned = [...chat.messages]
@@ -850,80 +874,80 @@ ${cleanTask}
         setChats(updatedChats)
         await window.electronAPI.saveAgents(updatedChats)
 
-        // "削除後"の chat
         const newSelectedChat = updatedChats.find((cc) => cc.id === selectedChatId)
         if (!newSelectedChat) {
           setEditIndex(null)
           setInputMessage('')
-          setTempFileName(null)
-          setTempFileData(null)
-          setTempFileMimeType(null)
+          setTempFiles([])
           setIsLoading(false)
 
           return
         }
 
-        // 2) AIに問い合わせ
+        // 2) AI再実行
         const ephemeralMsg: Messages = {
           role: 'user',
           parts: [{ text: inputMessage }]
         }
 
-        // ★ ファイル添付チェックを編集時にも反映
-        if (tempFileData && tempFileMimeType) {
-          if (tempFileMimeType === 'text/csv') {
+        for (const f of tempFiles) {
+          if (f.mimeType === 'text/csv') {
             try {
-              const csvString = window.atob(tempFileData)
+              const csvString = window.atob(f.data)
               const jsonStr = csvToJson(csvString)
               ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
             } catch {
               ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
             }
-            ephemeralMsg.parts.push({
-              inline_data: { mime_type: tempFileMimeType, data: tempFileData }
-            })
-          } else {
-            ephemeralMsg.parts.push({
-              inline_data: { mime_type: tempFileMimeType, data: tempFileData }
-            })
           }
+          ephemeralMsg.parts.push({
+            inlineData: {
+              mimeType: f.mimeType,
+              data: f.data
+            }
+          })
         }
-        if (useAgentFile && newSelectedChat.agentFilePath) {
-          try {
-            const fileBase64 = await window.electronAPI.readFileByPath(
-              newSelectedChat.agentFilePath
-            )
-            if (fileBase64) {
-              const pathLower = newSelectedChat.agentFilePath.toLowerCase()
-              let derivedMime = 'application/octet-stream'
-              if (pathLower.endsWith('.pdf')) derivedMime = 'application/pdf'
-              else if (pathLower.endsWith('.txt')) derivedMime = 'text/plain'
-              else if (pathLower.endsWith('.png')) derivedMime = 'image/png'
-              else if (pathLower.endsWith('.jpg') || pathLower.endsWith('.jpeg')) {
-                derivedMime = 'image/jpeg'
-              } else if (pathLower.endsWith('.gif')) {
-                derivedMime = 'image/gif'
-              } else if (pathLower.endsWith('.csv')) {
-                try {
-                  const csvString = window.atob(fileBase64)
-                  const jsonStr = csvToJson(csvString)
-                  ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
-                } catch {
-                  ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+
+        // 関連ファイル(複数)
+        if (useAgentFile && newSelectedChat.agentFilePaths) {
+          for (const p of newSelectedChat.agentFilePaths) {
+            try {
+              const fileBase64 = await window.electronAPI.readFileByPath(p)
+              if (fileBase64) {
+                const lower = p.toLowerCase()
+                let derivedMime = 'application/octet-stream'
+                if (lower.endsWith('.pdf')) derivedMime = 'application/pdf'
+                else if (lower.endsWith('.txt')) derivedMime = 'text/plain'
+                else if (lower.endsWith('.png')) derivedMime = 'image/png'
+                else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg'))
+                  derivedMime = 'image/jpeg'
+                else if (lower.endsWith('.gif')) derivedMime = 'image/gif'
+                else if (lower.endsWith('.csv')) {
+                  try {
+                    const csvString = window.atob(fileBase64)
+                    const jsonStr = csvToJson(csvString)
+                    ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
+                  } catch {
+                    ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+                  }
+                  ephemeralMsg.parts.push({
+                    inlineData: {
+                      mimeType: 'text/csv',
+                      data: fileBase64
+                    }
+                  })
+                  continue
                 }
                 ephemeralMsg.parts.push({
-                  inline_data: {
-                    mime_type: 'text/csv',
+                  inlineData: {
+                    mimeType: derivedMime,
                     data: fileBase64
                   }
                 })
               }
-              ephemeralMsg.parts.push({
-                inline_data: { mime_type: derivedMime, data: fileBase64 }
-              })
+            } catch (err) {
+              console.error('readFileByPath error:', err)
             }
-          } catch (err) {
-            console.error('readFileByPath error:', err)
           }
         }
 
@@ -967,21 +991,18 @@ ${cleanTask}
           isClosable: true
         })
       } finally {
-        // 後始末
         setEditIndex(null)
         setInputMessage('')
-        setTempFileName(null)
-        setTempFileData(null)
-        setTempFileMimeType(null)
+        setTempFiles([])
         setIsLoading(false)
       }
 
       return
     }
 
-    // --------------------------------------------------
-    // 新規メッセージ(通常の sendMessage)
-    // --------------------------------------------------
+    // ---------------------------
+    // 新規メッセージ (通常送信)
+    // ---------------------------
     setIsLoading(true)
     try {
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -990,61 +1011,63 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
 
-      // CSV等の添付 (省略なし: 現行ロジックそのまま)
-      if (tempFileData && tempFileMimeType) {
-        if (tempFileMimeType === 'text/csv') {
+      for (const f of tempFiles) {
+        if (f.mimeType === 'text/csv') {
           try {
-            const csvString = window.atob(tempFileData)
+            const csvString = window.atob(f.data)
             const jsonStr = csvToJson(csvString)
             ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
-          } catch (err) {
+          } catch {
             ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
-          ephemeralMsg.parts.push({
-            inline_data: { mime_type: tempFileMimeType, data: tempFileData }
-          })
-        } else {
-          ephemeralMsg.parts.push({
-            inline_data: { mime_type: tempFileMimeType, data: tempFileData }
-          })
         }
+        ephemeralMsg.parts.push({
+          inlineData: {
+            mimeType: f.mimeType,
+            data: f.data
+          }
+        })
       }
 
-      const selectedChat = chats.find((c) => c.id === selectedChatId)
-      if (selectedChat && useAgentFile && selectedChat.agentFilePath) {
-        try {
-          const fileBase64 = await window.electronAPI.readFileByPath(selectedChat.agentFilePath)
-          if (fileBase64) {
-            const pathLower = selectedChat.agentFilePath.toLowerCase()
-            let derivedMime = 'application/octet-stream'
-            if (pathLower.endsWith('.pdf')) derivedMime = 'application/pdf'
-            else if (pathLower.endsWith('.txt')) derivedMime = 'text/plain'
-            else if (pathLower.endsWith('.png')) derivedMime = 'image/png'
-            else if (pathLower.endsWith('.jpg') || pathLower.endsWith('.jpeg')) {
-              derivedMime = 'image/jpeg'
-            } else if (pathLower.endsWith('.gif')) {
-              derivedMime = 'image/gif'
-            } else if (pathLower.endsWith('.csv')) {
-              try {
-                const csvString = window.atob(fileBase64)
-                const jsonStr = csvToJson(csvString)
-                ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
-              } catch (err) {
-                ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+      // 関連ファイル(複数)
+      if (useAgentFile && selectedChat.agentFilePaths) {
+        for (const p of selectedChat.agentFilePaths) {
+          try {
+            const fileBase64 = await window.electronAPI.readFileByPath(p)
+            if (fileBase64) {
+              const lower = p.toLowerCase()
+              let derivedMime = 'application/octet-stream'
+              if (lower.endsWith('.pdf')) derivedMime = 'application/pdf'
+              else if (lower.endsWith('.txt')) derivedMime = 'text/plain'
+              else if (lower.endsWith('.png')) derivedMime = 'image/png'
+              else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) derivedMime = 'image/jpeg'
+              else if (lower.endsWith('.gif')) derivedMime = 'image/gif'
+              else if (lower.endsWith('.csv')) {
+                try {
+                  const csvString = window.atob(fileBase64)
+                  const jsonStr = csvToJson(csvString)
+                  ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
+                } catch {
+                  ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+                }
+                ephemeralMsg.parts.push({
+                  inlineData: {
+                    mimeType: 'text/csv',
+                    data: fileBase64
+                  }
+                })
+                continue
               }
               ephemeralMsg.parts.push({
-                inline_data: {
-                  mime_type: 'text/csv',
+                inlineData: {
+                  mimeType: derivedMime,
                   data: fileBase64
                 }
               })
             }
-            ephemeralMsg.parts.push({
-              inline_data: { mime_type: derivedMime, data: fileBase64 }
-            })
+          } catch (err) {
+            console.error('readFileByPath error:', err)
           }
-        } catch (err) {
-          console.error('readFileByPath error:', err)
         }
       }
 
@@ -1063,15 +1086,7 @@ ${cleanTask}
       setChats(updatedChats)
 
       setInputMessage('')
-      setTempFileName(null)
-      setTempFileData(null)
-      setTempFileMimeType(null)
-
-      if (!selectedChat) {
-        setIsLoading(false)
-
-        return
-      }
+      setTempFiles([])
 
       const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
       const resp = await window.electronAPI.postChatAI(
@@ -1108,31 +1123,43 @@ ${cleanTask}
     }
   }
 
-  // --------------------------
+  // -----------------------------
   // 新アシスタント作成モーダル
-  // --------------------------
-  function openCustomChatModal() {
+  // -----------------------------
+  const openCustomChatModal = () => {
     setModalChatTitle('')
     setModalSystemPrompt('')
-    setModalAgentFilePath(null)
+    setModalAgentFiles([])
     setIsModalOpen(true)
   }
-  function closeCustomChatModal() {
+
+  const closeCustomChatModal = () => {
     setIsModalOpen(false)
   }
-  async function handleSelectAgentFile() {
+
+  // ★新規: 複数ファイル選択 -> modalAgentFiles へ
+  const handleSelectAgentFiles = async () => {
     const copiedPath = await window.electronAPI.copyFileToUserData()
-    if (copiedPath) {
-      setModalAgentFilePath(copiedPath)
-    } else {
+    if (!copiedPath) {
       toast({
         title: 'ファイルが選択されませんでした',
         status: 'info',
         duration: 2000,
         isClosable: true
       })
+
+      return
     }
+    // filename 抽出
+    const splitted = copiedPath.split(/[/\\]/)
+    const filename = splitted[splitted.length - 1] || ''
+    setModalAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
+
+  const handleRemoveAgentFile = (targetPath: string) => {
+    setModalAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
+  }
+
   async function handleCreateCustomChat() {
     if (!modalChatTitle.trim()) {
       toast({
@@ -1150,11 +1177,7 @@ ${cleanTask}
       try {
         const summaryRequest: Messages = {
           role: 'user',
-          parts: [
-            {
-              text: `${modalSystemPrompt}`
-            }
-          ]
+          parts: [{ text: modalSystemPrompt }]
         }
         const summarizerPrompt = `
         #命令書
@@ -1185,9 +1208,10 @@ ${cleanTask}
       postMessages: [],
       createdAt: new Date().toLocaleString(),
       inputMessage: '',
-      agentFilePath: modalAgentFilePath || undefined,
+      agentFilePaths: modalAgentFiles.map((f) => f.path),
       assistantSummary: summaryText
     }
+
     const updated = [...chats, newChat]
     setChats(updated)
     setSelectedChatId(newChat.id)
@@ -1201,13 +1225,14 @@ ${cleanTask}
     }
   }
 
-  // --------------------------
+  // -----------------------------
   // アシスタント削除
-  // --------------------------
+  // -----------------------------
   function closeDeleteModal() {
     setIsDeleteModalOpen(false)
     setDeleteTargetId(null)
   }
+
   async function confirmDeleteChat() {
     if (deleteTargetId == null) {
       closeDeleteModal()
@@ -1217,17 +1242,22 @@ ${cleanTask}
     await handleDeleteChat(deleteTargetId)
     closeDeleteModal()
   }
+
   async function handleDeleteChat(chatId: number) {
     const target = chats.find((c) => c.id === chatId)
     if (!target) return
 
-    if (target.agentFilePath) {
-      try {
-        await window.electronAPI.deleteFileInUserData(target.agentFilePath)
-      } catch (err) {
-        console.error('Failed to delete userData file:', err)
+    // 複数ファイル削除
+    if (target.agentFilePaths) {
+      for (const p of target.agentFilePaths) {
+        try {
+          await window.electronAPI.deleteFileInUserData(p)
+        } catch (err) {
+          console.error('Failed to delete userData file:', err)
+        }
       }
     }
+
     const updated = chats.filter((c) => c.id !== chatId)
     setChats(updated)
     window.electronAPI.saveAgents(updated).catch(console.error)
@@ -1244,26 +1274,68 @@ ${cleanTask}
     })
   }
 
-  // --------------------------
+  // -----------------------------
   // システムプロンプト編集
-  // --------------------------
+  // -----------------------------
   function openSystemPromptModal() {
     if (typeof selectedChatId !== 'number') return
     const sc = chats.find((c) => c.id === selectedChatId)
     if (!sc) return
+
     setEditingSystemPrompt(sc.systemPrompt)
+
+    // 複数ファイル
+    const arr = sc.agentFilePaths || []
+    const mapped = arr.map((p) => {
+      const splitted = p.split(/[/\\]/)
+      const filename = splitted[splitted.length - 1] || ''
+
+      return { name: filename, path: p }
+    })
+    setEditingAgentFiles(mapped)
+
     setIsPromptModalOpen(true)
   }
+
   function closeSystemPromptModal() {
     setIsPromptModalOpen(false)
   }
+
+  // ★編集: 複数ファイル追加
+  const handleAddAgentFileInPrompt = async () => {
+    const copiedPath = await window.electronAPI.copyFileToUserData()
+    if (!copiedPath) {
+      toast({
+        title: 'ファイルが選択されませんでした',
+        status: 'info',
+        duration: 2000,
+        isClosable: true
+      })
+
+      return
+    }
+    const splitted = copiedPath.split(/[/\\]/)
+    const filename = splitted[splitted.length - 1] || ''
+    setEditingAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
+  }
+
+  // ★編集: 複数ファイル削除
+  const handleRemoveAgentFileInPrompt = (targetPath: string) => {
+    setEditingAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
+  }
+
   function handleSaveSystemPrompt() {
     if (typeof selectedChatId !== 'number') return
     const sc = chats.find((c) => c.id === selectedChatId)
     if (!sc) return
+
     const updated = chats.map((chat) => {
       if (chat.id === selectedChatId) {
-        return { ...chat, systemPrompt: editingSystemPrompt }
+        return {
+          ...chat,
+          systemPrompt: editingSystemPrompt,
+          agentFilePaths: editingAgentFiles.map((f) => f.path)
+        }
       }
 
       return chat
@@ -1278,6 +1350,7 @@ ${cleanTask}
     })
     setIsPromptModalOpen(false)
   }
+
   function handleCopySystemPrompt() {
     navigator.clipboard.writeText(editingSystemPrompt).then(() => {
       toast({
@@ -1292,6 +1365,7 @@ ${cleanTask}
   function closeResetConfirm() {
     setIsResetConfirmOpen(false)
   }
+
   async function handleResetConversation() {
     closeResetConfirm()
     if (selectedChatId === 'autoAssist') {
@@ -1335,51 +1409,10 @@ ${cleanTask}
     }
   }
 
-  async function handleChangeFileInPromptModal() {
-    if (typeof selectedChatId !== 'number') return
-    const sc = chats.find((c) => c.id === selectedChatId)
-    if (!sc) return
-
-    if (sc.agentFilePath) {
-      try {
-        await window.electronAPI.deleteFileInUserData(sc.agentFilePath)
-      } catch (err) {
-        console.error('Failed to delete old file:', err)
-      }
-    }
-    const newPath = await window.electronAPI.copyFileToUserData()
-    if (!newPath) {
-      toast({
-        title: 'ファイルが選択されませんでした',
-        status: 'info',
-        duration: 2000,
-        isClosable: true
-      })
-
-      return
-    }
-    const updated = chats.map((chat) => {
-      if (chat.id === selectedChatId) {
-        return { ...chat, agentFilePath: newPath }
-      }
-
-      return chat
-    })
-    setChats(updated)
-    window.electronAPI.saveAgents(updated).catch(console.error)
-    toast({
-      title: '関連ファイルを変更しました',
-      status: 'success',
-      duration: 2000,
-      isClosable: true
-    })
-  }
-
-  // オートアシスト設定モーダル:リセット確認
   const handleConfirmResetAutoAssist = () => {
     setIsResetAutoAssistConfirm(true)
   }
-  // 実際にリセット
+
   async function handleResetAutoAssistFromModal() {
     setIsResetAutoAssistConfirm(false)
     setAutoAssistMessages([])
@@ -1400,13 +1433,13 @@ ${cleanTask}
     })
   }
 
-  // ★ user発言を編集ボタン -> inputフォームへコピー
+  // ユーザー発言を編集
   const handleEditMessage = (msgIndex: number, oldContent: string) => {
     setEditIndex(msgIndex)
-    setInputMessage(oldContent) // ★ フォームにコピー
+    setInputMessage(oldContent)
   }
 
-  const selectedChat =
+  const selectedChatObj =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
   return (
@@ -1423,17 +1456,14 @@ ${cleanTask}
       >
         <HStack spacing={8}>
           <Heading as="h1" size="lg" fontWeight="extrabold" color="gray.800">
-            {/* D をオレンジ系に */}
             <Text as="span" color="orange.500">
               D
             </Text>
             <Text as="span">es</Text>
-            {/* AI をサーモンピンク系に */}
             <Text as="span" color="pink.400">
               AI
             </Text>
             <Text as="span">n </Text>
-            {/* A をゴールド系に */}
             <Text as="span" color="yellow.400">
               A
             </Text>
@@ -1486,7 +1516,7 @@ ${cleanTask}
           minW="280px"
           mr={4}
         >
-          {/* オートアシストを固定 */}
+          {/* オートアシスト */}
           <Box p={4} borderBottom="1px solid #eee">
             <List spacing={3}>
               <ListItem
@@ -1547,7 +1577,6 @@ ${cleanTask}
                           {chat.customTitle || '無題のアシスタント'}
                         </Text>
                       </Box>
-
                       {chat.id === selectedChatId && (
                         <IconButton
                           icon={<AiOutlineDelete />}
@@ -1633,8 +1662,8 @@ ${cleanTask}
                   </Box>
                 ))}
               </>
-            ) : selectedChat ? (
-              selectedChat.messages.map((msg, idx) => (
+            ) : selectedChatObj ? (
+              selectedChatObj.messages.map((msg, idx) => (
                 <Box
                   key={idx}
                   mb={4}
@@ -1716,6 +1745,7 @@ ${cleanTask}
                 isDisabled={apiKey.length === 0 || isExpired}
               />
 
+              {/* 関連ファイル有効/無効 */}
               {typeof selectedChatId === 'number' && (
                 <Checkbox
                   isChecked={useAgentFile}
@@ -1736,6 +1766,7 @@ ${cleanTask}
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
+                multiple
                 onChange={handleTempFileChange}
                 display="none"
               />
@@ -1757,28 +1788,49 @@ ${cleanTask}
                 aria-label="送信"
                 onClick={sendMessage}
                 isLoading={isLoading}
-                isDisabled={apiKey.length === 0 || inputMessage.length === 0 || isExpired}
+                isDisabled={
+                  apiKey.length === 0 ||
+                  (inputMessage.length === 0 && tempFiles.length === 0) ||
+                  isExpired
+                }
               />
             </HStack>
           </Flex>
 
-          {tempFileName && (
-            <Box p={4} borderTop="1px" borderColor="gray.200" display="flex" alignItems="center">
-              <Text flex="1" fontSize="sm" color="gray.500">
-                選択ファイル: {tempFileName}
+          {/* 選択中の複数ファイルを表示 */}
+          {tempFiles.length > 0 && (
+            <Box p={4} borderTop="1px" borderColor="gray.200">
+              <Text fontSize="sm" color="gray.600" mb={2}>
+                選択ファイル:
               </Text>
-              <IconButton
-                icon={<AiOutlineDelete />}
-                aria-label="ファイル削除"
-                colorScheme="red"
-                onClick={handleTempFileDelete}
-              />
+              {tempFiles.map((file) => (
+                <Flex
+                  key={file.name}
+                  align="center"
+                  justify="space-between"
+                  mb={2}
+                  p={2}
+                  bg="gray.50"
+                  borderRadius="md"
+                >
+                  <Text fontSize="sm" color="gray.800" mr={4}>
+                    {file.name}
+                  </Text>
+                  <IconButton
+                    icon={<AiOutlineDelete />}
+                    aria-label="ファイル削除"
+                    colorScheme="red"
+                    size="sm"
+                    onClick={() => handleTempFileDelete(file.name)}
+                  />
+                </Flex>
+              ))}
             </Box>
           )}
         </Box>
       </Flex>
 
-      {/* 期限切れモーダル */}
+      {/* 期限切れ */}
       <Modal isOpen={isExpired} onClose={() => {}} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -1826,15 +1878,37 @@ ${cleanTask}
               />
             </FormControl>
 
+            {/* 複数ファイル */}
             <FormControl>
-              <FormLabel>関連ファイル (任意)</FormLabel>
-              <Button colorScheme="blue" variant="outline" onClick={handleSelectAgentFile}>
+              <FormLabel>関連ファイル(複数可)</FormLabel>
+              <Button colorScheme="blue" variant="outline" onClick={handleSelectAgentFiles}>
                 ファイルを選択
               </Button>
-              {modalAgentFilePath && (
-                <Text fontSize="sm" color="gray.600" mt={2}>
-                  コピー先: {modalAgentFilePath}
-                </Text>
+              {modalAgentFiles.length > 0 && (
+                <Box mt={2}>
+                  {modalAgentFiles.map((f) => (
+                    <Flex
+                      key={f.path}
+                      align="center"
+                      justify="space-between"
+                      p={2}
+                      bg="gray.50"
+                      mt={2}
+                      borderRadius="md"
+                    >
+                      <Text fontSize="sm" mr={4}>
+                        {f.name}
+                      </Text>
+                      <IconButton
+                        icon={<AiOutlineDelete />}
+                        aria-label="削除"
+                        colorScheme="red"
+                        size="sm"
+                        onClick={() => handleRemoveAgentFile(f.path)}
+                      />
+                    </Flex>
+                  ))}
+                </Box>
               )}
             </FormControl>
           </ModalBody>
@@ -1877,36 +1951,51 @@ ${cleanTask}
               </Button>
             </HStack>
 
-            {selectedChat && (
-              <FormControl mt={5}>
-                <FormLabel>関連ファイルの変更</FormLabel>
-                <Button
-                  colorScheme="blue"
-                  variant="outline"
-                  onClick={handleChangeFileInPromptModal}
-                >
-                  新しいファイルを選択
-                </Button>
-                {selectedChat.agentFilePath && (
-                  <Text fontSize="xs" color="gray.600" mt={1}>
-                    現在のファイル: {selectedChat.agentFilePath}
-                  </Text>
-                )}
-              </FormControl>
-            )}
+            {/* 複数ファイル */}
+            <FormControl mt={5}>
+              <FormLabel>関連ファイル(複数可)</FormLabel>
+              <Button colorScheme="blue" variant="outline" onClick={handleAddAgentFileInPrompt}>
+                ファイルを選択
+              </Button>
+              {editingAgentFiles.length > 0 && (
+                <Box mt={2}>
+                  {editingAgentFiles.map((f) => (
+                    <Flex
+                      key={f.path}
+                      align="center"
+                      justify="space-between"
+                      p={2}
+                      bg="gray.50"
+                      mt={2}
+                      borderRadius="md"
+                    >
+                      <Text fontSize="sm" mr={4}>
+                        {f.name}
+                      </Text>
+                      <IconButton
+                        icon={<AiOutlineDelete />}
+                        aria-label="削除"
+                        colorScheme="red"
+                        size="sm"
+                        onClick={() => handleRemoveAgentFileInPrompt(f.path)}
+                      />
+                    </Flex>
+                  ))}
+                </Box>
+              )}
+            </FormControl>
 
-            {selectedChatId && (
-              <FormControl mt={5}>
-                <FormLabel>会話履歴のリセット</FormLabel>
-                <Button
-                  colorScheme="red"
-                  variant="outline"
-                  onClick={() => setIsResetConfirmOpen(true)}
-                >
-                  会話履歴リセット
-                </Button>
-              </FormControl>
-            )}
+            {/* 会話リセット */}
+            <FormControl mt={5}>
+              <FormLabel>会話履歴のリセット</FormLabel>
+              <Button
+                colorScheme="red"
+                variant="outline"
+                onClick={() => setIsResetConfirmOpen(true)}
+              >
+                会話履歴リセット
+              </Button>
+            </FormControl>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
