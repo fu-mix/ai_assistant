@@ -47,6 +47,7 @@ interface ElectronAPI {
   copyFileToUserData: () => Promise<string | null>
   readFileByPath: (filePath: string) => Promise<string | null>
   deleteFileInUserData: (filePath: string) => Promise<boolean>
+  getAppVersion: () => Promise<string>
 }
 declare global {
   interface Window {
@@ -226,7 +227,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
   // -----------------------------
-  // オートアシスト関連
+  // オートアシストナレッジ
   // -----------------------------
   const [autoAssistMessages, setAutoAssistMessages] = useState<Message[]>([])
   const [autoAssistState, setAutoAssistState] = useState<AutoAssistState>('idle')
@@ -237,7 +238,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const [agentMode, setAgentMode] = useState<boolean>(false)
 
   // -----------------------------
-  // 全チャット関連
+  // 全チャットナレッジ
   // -----------------------------
   const [chats, setChats] = useState<ChatInfo[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null | 'autoAssist'>(null)
@@ -280,6 +281,9 @@ export const FinalRefinedElectronAppMockup = () => {
 
   // 編集用Index
   const [editIndex, setEditIndex] = useState<number | null>(null)
+
+  // Version
+  const [appVersion, setAppVersion] = useState<string>('')
 
   // -----------------------------
   // 初期ロード
@@ -353,6 +357,13 @@ export const FinalRefinedElectronAppMockup = () => {
 
     return JSON.stringify(result, null, 2)
   }
+
+  //Vesrsion取得
+  useEffect(() => {
+    window.electronAPI.getAppVersion().then((ver) => {
+      setAppVersion(ver)
+    })
+  }, [])
 
   // -----------------------------
   // チャット送信用ファイル選択
@@ -912,7 +923,7 @@ ${cleanTask}
           })
         }
 
-        // 関連ファイル(複数)
+        // ナレッジファイル(複数)
         if (useAgentFile && newSelectedChat.agentFilePaths) {
           for (const p of newSelectedChat.agentFilePaths) {
             try {
@@ -930,7 +941,7 @@ ${cleanTask}
                   try {
                     const csvString = window.atob(fileBase64)
                     const jsonStr = csvToJson(csvString)
-                    ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
+                    ephemeralMsg.parts[0].text += `\nナレッジCSV→JSON:\n${jsonStr}`
                   } catch {
                     ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
                   }
@@ -1033,7 +1044,7 @@ ${cleanTask}
         })
       }
 
-      // 関連ファイル(複数)
+      // ナレッジファイル(複数)
       if (useAgentFile && selectedChat.agentFilePaths) {
         for (const p of selectedChat.agentFilePaths) {
           try {
@@ -1050,7 +1061,7 @@ ${cleanTask}
                 try {
                   const csvString = window.atob(fileBase64)
                   const jsonStr = csvToJson(csvString)
-                  ephemeralMsg.parts[0].text += `\n関連CSV→JSON:\n${jsonStr}`
+                  ephemeralMsg.parts[0].text += `\nナレッジCSV→JSON:\n${jsonStr}`
                 } catch {
                   ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
                 }
@@ -1473,7 +1484,11 @@ ${cleanTask}
             </Text>
             <Text as="span">ssistant</Text>
           </Heading>
-
+          <Box>
+            <Text fontSize="sm" color="gray.600">
+              Ver. {appVersion}
+            </Text>
+          </Box>
           {selectedChatId === 'autoAssist' && (
             <HStack align="center">
               <Text fontSize="sm">エージェントモード</Text>
@@ -1757,14 +1772,14 @@ ${cleanTask}
                 isDisabled={apiKey.length === 0 || isExpired}
               />
 
-              {/* 関連ファイル有効/無効 */}
+              {/* ナレッジファイル有効/無効 */}
               {typeof selectedChatId === 'number' && (
                 <Checkbox
                   isChecked={useAgentFile}
                   onChange={(e) => setUseAgentFile(e.target.checked)}
                   isDisabled={isExpired}
                 >
-                  関連ファイル
+                  ナレッジを使用する
                 </Checkbox>
               )}
 
@@ -1892,7 +1907,7 @@ ${cleanTask}
 
             {/* 複数ファイル */}
             <FormControl>
-              <FormLabel>関連ファイル(複数可)</FormLabel>
+              <FormLabel>ナレッジファイル(複数可)</FormLabel>
               <Button colorScheme="blue" variant="outline" onClick={handleSelectAgentFiles}>
                 ファイルを選択
               </Button>
@@ -1965,7 +1980,7 @@ ${cleanTask}
 
             {/* 複数ファイル */}
             <FormControl mt={5}>
-              <FormLabel>関連ファイル(複数可)</FormLabel>
+              <FormLabel>ナレッジファイル(複数可)</FormLabel>
               <Button colorScheme="blue" variant="outline" onClick={handleAddAgentFileInPrompt}>
                 ファイルを選択
               </Button>

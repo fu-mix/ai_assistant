@@ -35,6 +35,9 @@ if (process.contextIsolated) {
       // ★ userDataファイル削除
       deleteFileInUserData: async (filePath: string) => {
         return await ipcRenderer.invoke('delete-file-in-userdata', filePath)
+      },
+      getAppVersion: async () => {
+        return await ipcRenderer.invoke('get-app-version')
       }
     })
   } catch (error) {

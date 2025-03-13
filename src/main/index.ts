@@ -265,3 +265,7 @@ ipcMain.handle(
     }
   }
 )
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
