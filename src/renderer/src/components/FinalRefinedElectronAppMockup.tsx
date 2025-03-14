@@ -41,6 +41,9 @@ import { FiEdit } from 'react-icons/fi' // タイトル編集アイコンなど
 
 /**
  * Electron API interface
+ *
+ * ▼ タイトル設定を保存/読み込みするために、新たに
+ *   loadTitleSettings / saveTitleSettings を追加
  */
 interface ElectronAPI {
   postChatAI: (message: Messages[], apiKey: string, systemPrompt: string) => Promise<any>
@@ -50,7 +53,12 @@ interface ElectronAPI {
   readFileByPath: (filePath: string) => Promise<string | null>
   deleteFileInUserData: (filePath: string) => Promise<boolean>
   getAppVersion: () => Promise<string>
+
+  // ★ ここから追記: タイトル設定の保存/読み込み
+  loadTitleSettings?: () => Promise<TitleSettings | null>
+  saveTitleSettings?: (settings: TitleSettings) => Promise<void>
 }
+
 declare global {
   interface Window {
     electronAPI: ElectronAPI
@@ -197,12 +205,23 @@ function TitleEditModal({
     })
   }
 
-  // 保存
-  const handleSaveTitle = () => {
-    setTitleSettings({
+  // 保存 (タイトル設定を適用し、かつ electronAPI.saveTitleSettings も呼ぶ)
+  const handleSaveTitle = async () => {
+    const newSettings: TitleSettings = {
       segments: tempSegments,
       fontFamily: tempFont
-    })
+    }
+    setTitleSettings(newSettings)
+
+    // ▼ ここでタイトルを永続化
+    try {
+      if (window.electronAPI.saveTitleSettings) {
+        await window.electronAPI.saveTitleSettings(newSettings)
+      }
+    } catch (err) {
+      console.error('Failed to save title settings:', err)
+    }
+
     toast({
       title: 'タイトル設定を保存しました',
       status: 'success',
@@ -406,6 +425,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
   // --------------------------------
   // タイトル設定 (部分文字+色 + フォント)
+  //    -> ここで起動時に loadTitleSettings
   // --------------------------------
 
   // 初期は DesAIn Assistant を色分けした状態
@@ -516,6 +536,18 @@ export const FinalRefinedElectronAppMockup = () => {
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
       setIsExpired(true)
+    }
+
+    // ★ タイトル設定のロード (あれば)
+    if (window.electronAPI.loadTitleSettings) {
+      window.electronAPI
+        .loadTitleSettings()
+        .then((loaded) => {
+          if (loaded) {
+            setTitleSettings(loaded)
+          }
+        })
+        .catch((err) => console.error('Failed to load TitleSettings:', err))
     }
   }, [])
 
@@ -1612,7 +1644,7 @@ ${cleanTask}
             fontFamily={titleSettings.fontFamily}
           >
             {titleSettings.segments.map((seg, idx) => (
-              // ★ ここで whiteSpace="pre" を追加して空白をそのまま表示
+              // ★ 空白をそのまま表示するため whiteSpace="pre"
               <Text as="span" key={idx} color={seg.color} whiteSpace="pre">
                 {seg.text}
               </Text>

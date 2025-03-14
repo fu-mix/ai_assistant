@@ -40,10 +40,15 @@ type AgentData = {
   agentFileMimeType?: string
 }
 
-// ※ StoreSchema は使わないので削除/コメントアウト
-// interface StoreSchema {
-//   agents: AgentData[]
-// }
+// タイトル設定の型を定義 (複数セグメント+フォント)
+type TitleSegment = {
+  text: string
+  color: string
+}
+type TitleSettings = {
+  segments: TitleSegment[]
+  fontFamily: string
+}
 
 import { createRequire } from 'module'
 let store: any = null
@@ -73,6 +78,7 @@ function createWindow(): void {
     height: 1000,
     show: false,
     autoHideMenuBar: true,
+    title: '',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -221,7 +227,7 @@ ipcMain.handle(
       console.log('systemPrompt:', systemPrompt)
     }
     const API_ENDPOINT =
-      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
+      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent' // (省略)
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
 
     try {
@@ -269,3 +275,19 @@ ipcMain.handle(
 ipcMain.handle('get-app-version', () => {
   return app.getVersion()
 })
+
+// ---------------------------
+// ★ ここから追加: タイトル設定のLoad/Save
+// ---------------------------
+ipcMain.handle('load-title-settings', () => {
+  return store?.get('titleSettings') || null
+})
+
+ipcMain.handle('save-title-settings', (_event, newSettings: TitleSettings) => {
+  store?.set('titleSettings', newSettings)
+
+  return true
+})
+// ---------------------------
+// ★ ここまで
+// ---------------------------

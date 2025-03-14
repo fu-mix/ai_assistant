@@ -38,7 +38,16 @@ if (process.contextIsolated) {
       },
       getAppVersion: async () => {
         return await ipcRenderer.invoke('get-app-version')
+      },
+
+      // ★ ここから追加: タイトル設定を読み込み/保存
+      loadTitleSettings: async () => {
+        return await ipcRenderer.invoke('load-title-settings')
+      },
+      saveTitleSettings: async (settings: any) => {
+        return await ipcRenderer.invoke('save-title-settings', settings)
       }
+      // ★ ここまで
     })
   } catch (error) {
     console.error(error)
