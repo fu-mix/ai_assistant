@@ -417,18 +417,12 @@ function AutoAssistSettingsModal({
   )
 }
 
-/* ------------------------------------
- * メインコンポーネント
- * ------------------------------------ */
 export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
   // --------------------------------
   // タイトル設定 (部分文字+色 + フォント)
-  //    -> ここで起動時に loadTitleSettings
   // --------------------------------
-
-  // 初期は DesAIn Assistant を色分けした状態
   const [titleSettings, setTitleSettings] = useState<TitleSettings>({
     segments: [
       { text: 'D', color: '#ff6600' },
@@ -441,8 +435,6 @@ export const FinalRefinedElectronAppMockup = () => {
     fontFamily: 'Arial'
   })
   const [isTitleEditOpen, setIsTitleEditOpen] = useState(false)
-
-  // タイトルホバー中かどうか (編集アイコンの表示制御用)
   const [titleHovered, setTitleHovered] = useState(false)
 
   // --------------------------------
@@ -468,15 +460,11 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
-  // ▼ ここにある modalAgentFiles は「新しいアシスタントの作成モーダル」で使うナレッジファイル
   const [modalAgentFiles, setModalAgentFiles] = useState<{ name: string; path: string }[]>([])
-
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
-  // ▼ editingAgentFiles は「アシスタント指示の編集モーダル」で使うナレッジファイル
   const [editingAgentFiles, setEditingAgentFiles] = useState<{ name: string; path: string }[]>([])
   const [editingCustomTitle, setEditingCustomTitle] = useState('')
-
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
@@ -493,7 +481,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 編集用Index
+  // メッセージ編集用Index
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
   // バージョン
@@ -503,7 +491,6 @@ export const FinalRefinedElectronAppMockup = () => {
   // 初期ロード
   // --------------------------------
   useEffect(() => {
-    // agentsのロード
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
         const reformed = stored.map((c) => ({
@@ -533,10 +520,8 @@ export const FinalRefinedElectronAppMockup = () => {
       }
     })
 
-    // バージョン取得
     window.electronAPI.getAppVersion().then((ver) => setAppVersion(ver))
 
-    // ライセンス期限チェック
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
       setIsExpired(true)
@@ -555,7 +540,7 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [])
 
-  // チャット欄常にスクロール下端
+  // チャット欄常にスクロール最下部
   useEffect(() => {
     if (chatHistoryRef.current) {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
@@ -587,11 +572,8 @@ export const FinalRefinedElectronAppMockup = () => {
   // -----------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    // for分中で、files.lengthが使えないため一旦変数に書き出している。
-    // これは消さずに、このhandleTempFileChange内では、以降はfiles.lengthではなく、このfileNumを使うこと
     // @ts-ignore
     const fileNum = files?.length
-
     if (!files || files.length === 0) return
 
     const newFiles: { name: string; data: string; mimeType: string }[] = []
@@ -643,7 +625,6 @@ export const FinalRefinedElectronAppMockup = () => {
         if (reader.result) {
           const base64Data = reader.result.toString().split(',')[1]
           const lower = file.name.toLowerCase()
-
           let mime = 'application/octet-stream'
           if (lower.endsWith('.pdf')) mime = 'application/pdf'
           else if (lower.endsWith('.txt')) mime = 'text/plain'
@@ -651,7 +632,6 @@ export const FinalRefinedElectronAppMockup = () => {
           else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
           else if (lower.endsWith('.gif')) mime = 'image/gif'
           else if (lower.endsWith('.csv')) mime = 'text/csv'
-
           newFiles.push({
             name: file.name,
             data: base64Data,
@@ -708,7 +688,7 @@ export const FinalRefinedElectronAppMockup = () => {
   }
 
   // --------------------------------
-  // オートアシスト: タスク実行
+  // オートアシスト系ロジック
   // --------------------------------
   async function executeSubtasksAndShowOnce(subtasks: SubtaskInfo[]) {
     setAutoAssistState('executing')
@@ -823,7 +803,6 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
 
-      // CSV変換など
       for (const f of tempFiles) {
         if (f.mimeType === 'text/csv') {
           try {
@@ -835,10 +814,7 @@ ${cleanTask}
           }
         }
         ephemeralMsg.parts.push({
-          inlineData: {
-            mimeType: f.mimeType,
-            data: f.data
-          }
+          inlineData: { mimeType: f.mimeType, data: f.data }
         })
       }
 
@@ -888,7 +864,6 @@ ${cleanTask}
         return c
       })
       setChats(updatedStore as ChatInfo[])
-      // @ts-ignore
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -913,7 +888,6 @@ ${cleanTask}
           return c
         })
         setChats(updated2 as ChatInfo[])
-        // @ts-ignore
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -936,7 +910,6 @@ ${cleanTask}
         return c
       })
       setChats(updatedErr as ChatInfo[])
-      // @ts-ignore
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
@@ -944,20 +917,79 @@ ${cleanTask}
   }
 
   async function sendMessage() {
-    if (!inputMessage.trim() && tempFiles.length === 0) return
-    if (!apiKey) {
-      toast({
-        title: 'API Keyが未入力です',
-        status: 'warning',
-        duration: 2000,
-        isClosable: true
-      })
+    // -------------------------------------------------------
+    // 1) もしオートアシストでメッセージ編集モードなら
+    // -------------------------------------------------------
+    if (selectedChatId === 'autoAssist' && editIndex != null) {
+      setIsLoading(true)
+      try {
+        // 1. autoAssistMessages (画面表示用) の該当index以降を削除し、新しい内容を挿入
+        const clonedAuto = [...autoAssistMessages]
+        clonedAuto.splice(editIndex, clonedAuto.length - editIndex, {
+          type: 'user',
+          content: inputMessage
+        })
+        setAutoAssistMessages(clonedAuto)
+
+        // 2. chats[] のAUTO_ASSIST_IDに対応するものも同様に削除し挿入
+        const updatedChats = chats.map((chat) => {
+          if (chat.id === AUTO_ASSIST_ID) {
+            const cloned = [...chat.messages]
+            cloned.splice(editIndex, cloned.length - editIndex, {
+              type: 'user',
+              content: inputMessage
+            })
+
+            const clonedPost = [...chat.postMessages]
+            clonedPost.splice(editIndex, clonedPost.length - editIndex)
+
+            return {
+              ...chat,
+              messages: cloned,
+              postMessages: clonedPost
+            }
+          }
+
+          return chat
+        })
+        setChats(updatedChats)
+        await window.electronAPI.saveAgents(updatedChats)
+
+        // 3. 入力フォーム/添付ファイルをクリア
+        setEditIndex(null)
+        setInputMessage('')
+        setTempFiles([])
+
+        // 4. いったん再度 handleAutoAssistSend() を呼び、再実行する(=タスク分割～AI応答)
+        await handleAutoAssistSend()
+
+        toast({
+          title: 'オートアシストの編集結果を再実行しました',
+          description: '指定index以降の履歴を削除し、新しい内容でオートアシストを再実行しました。',
+          status: 'info',
+          duration: 2500,
+          isClosable: true
+        })
+      } catch (err) {
+        console.error('edit & re-run (autoAssist) error:', err)
+        toast({
+          title: 'エラー',
+          description: 'オートアシスト編集内容の実行中にエラーが発生しました。',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+      } finally {
+        setIsLoading(false)
+      }
 
       return
     }
 
+    // -------------------------------------------------------
+    // 2) オートアシストがYes/No待ちの場合
+    // -------------------------------------------------------
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
-      // Yes/No
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
@@ -1030,8 +1062,10 @@ ${cleanTask}
       }
     }
 
+    // -------------------------------------------------------
+    // 3) オートアシスト(通常)
+    // -------------------------------------------------------
     if (selectedChatId === 'autoAssist') {
-      // 通常オートアシスト
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
       const updated = chats.map((c) => {
@@ -1053,11 +1087,13 @@ ${cleanTask}
       return
     }
 
-    // 通常アシスタント
+    // -------------------------------------------------------
+    // 4) 通常アシスタント
+    // -------------------------------------------------------
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (!selectedChat) return
 
-    // 編集モード
+    // (通常)編集モード
     if (editIndex != null) {
       setIsLoading(true)
       try {
@@ -1323,7 +1359,6 @@ ${cleanTask}
     setIsModalOpen(false)
   }
 
-  // ▼ oldFilePath は新規のため常に undefined でOK
   const handleSelectAgentFiles = async () => {
     const copiedPath = await window.electronAPI.copyFileToUserData(undefined)
     if (!copiedPath) {
@@ -1341,10 +1376,8 @@ ${cleanTask}
     setModalAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
 
-  // ▼ ファイル削除時に copy されたファイルも削除
   const handleRemoveAgentFile = async (targetPath: string) => {
     try {
-      // メインプロセス側でファイル削除
       await window.electronAPI.deleteFileInUserData(targetPath)
     } catch (err) {
       console.error('Failed to delete old file in userData:', err)
@@ -1492,10 +1525,7 @@ ${cleanTask}
     setIsPromptModalOpen(false)
   }
 
-  // ▼ oldFilePath は既存ファイルを削除するかもしれないので、現在選択されているものを渡す (編集箇所)
   const handleAddAgentFileInPrompt = async () => {
-    // 新しいファイルを選択する => 古いファイルを削除するわけではないので
-    // ここでは oldFilePath 未指定 (undefined) でOK  (※複数ファイル追加想定)
     const copiedPath = await window.electronAPI.copyFileToUserData(undefined)
     if (!copiedPath) {
       toast({
@@ -1512,7 +1542,6 @@ ${cleanTask}
     setEditingAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
 
-  // ▼ ファイル削除時に copy されたファイルも削除
   const handleRemoveAgentFileInPrompt = async (targetPath: string) => {
     try {
       await window.electronAPI.deleteFileInUserData(targetPath)
@@ -1638,7 +1667,6 @@ ${cleanTask}
     setInputMessage(oldContent)
   }
 
-  // 選択中のアシスタント
   const selectedChatObj =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
@@ -1654,7 +1682,7 @@ ${cleanTask}
         justify="space-between"
         align="center"
       >
-        {/* タイトル部分: マウスホバーで編集アイコン表示 */}
+        {/* タイトル (部分文字 + 色)、hoverで編集アイコン */}
         <HStack
           spacing={2}
           onMouseEnter={() => setTitleHovered(true)}
@@ -1668,14 +1696,11 @@ ${cleanTask}
             fontFamily={titleSettings.fontFamily}
           >
             {titleSettings.segments.map((seg, idx) => (
-              // ★ 空白をそのまま表示するため whiteSpace="pre"
               <Text as="span" key={idx} color={seg.color} whiteSpace="pre">
                 {seg.text}
               </Text>
             ))}
           </Heading>
-
-          {/* タイトル編集ボタン: hover時のみ表示 */}
           {titleHovered && (
             <IconButton
               aria-label="タイトル編集"
@@ -1688,7 +1713,6 @@ ${cleanTask}
           )}
         </HStack>
 
-        {/* 右側 (バージョン / オートアシストモード / APIキー / 新アシスタントボタン) */}
         <HStack spacing={8}>
           <Box>
             <Text fontSize="sm" color="gray.600">
@@ -1950,7 +1974,6 @@ ${cleanTask}
                       </ReactMarkdown>
                     )}
                   </div>
-
                   {hoveredMessageIndex === idx && (
                     <Box position="absolute" top="4px" right="6px">
                       <HStack spacing={1}>
