@@ -27,7 +27,8 @@ import {
   Tr,
   Th,
   Td,
-  Switch
+  Switch,
+  Tooltip
 } from '@chakra-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -252,15 +253,16 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
-
-  // ★複数ファイル添付(新規作成用)
   const [modalAgentFiles, setModalAgentFiles] = useState<{ name: string; path: string }[]>([])
 
   // システムプロンプト編集モーダル
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
-  // ★複数ファイル添付(編集用)
+  // ★ 複数ファイル編集用
   const [editingAgentFiles, setEditingAgentFiles] = useState<{ name: string; path: string }[]>([])
+
+  // ★ アシスタント名も編集できるよう state 追加
+  const [editingCustomTitle, setEditingCustomTitle] = useState('')
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
@@ -291,7 +293,6 @@ export const FinalRefinedElectronAppMockup = () => {
   useEffect(() => {
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
-        // agentFilePaths が無い場合は初期化
         const reformed = stored.map((c) => {
           return {
             ...c,
@@ -323,7 +324,7 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }, [])
 
-  // ライセンス期限チェック (疑似)
+  // ライセンス期限チェック
   useEffect(() => {
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
@@ -358,7 +359,7 @@ export const FinalRefinedElectronAppMockup = () => {
     return JSON.stringify(result, null, 2)
   }
 
-  //Vesrsion取得
+  // バージョン取得
   useEffect(() => {
     window.electronAPI.getAppVersion().then((ver) => {
       setAppVersion(ver)
@@ -370,16 +371,22 @@ export const FinalRefinedElectronAppMockup = () => {
   // -----------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
+
+    // @ts-ignore
+    const fileNum = files?.length
+
     if (!files || files.length === 0) return
 
     const newFiles: { name: string; data: string; mimeType: string }[] = []
     let processed = 0
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
+
       const reader = new FileReader()
       reader.onload = () => {
         if (reader.result) {
           const base64Data = reader.result.toString().split(',')[1]
+
           const lower = file.name.toLowerCase()
 
           let mime = 'application/octet-stream'
@@ -397,7 +404,8 @@ export const FinalRefinedElectronAppMockup = () => {
           })
         }
         processed++
-        if (processed === files.length) {
+
+        if (processed === fileNum) {
           setTempFiles((prev) => [...prev, ...newFiles])
         }
       }
@@ -612,13 +620,11 @@ ${cleanTask}
   async function handleAutoAssistSend() {
     setIsLoading(true)
     try {
-      // partsの最初は { text: inputMessage } だけ
       const ephemeralMsg: Messages = {
         role: 'user',
         parts: [{ text: inputMessage }]
       }
 
-      // CSV変換等
       for (const f of tempFiles) {
         if (f.mimeType === 'text/csv') {
           try {
@@ -783,13 +789,13 @@ ${cleanTask}
       } else if (ans === 'no') {
         setAutoAssistMessages((prev) => [
           ...prev,
-          { type: 'ai', content: 'タスク実行をキャンセルしました。' }
+          { type: 'ai', content: 'タスク実行をキャンセルしました.' }
         ])
         updated = updated.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
             return {
               ...c,
-              messages: [...c.messages, { type: 'ai', content: 'タスク実行をキャンセルしました。' }]
+              messages: [...c.messages, { type: 'ai', content: 'タスク実行をキャンセルしました.' }]
             }
           }
 
@@ -807,7 +813,7 @@ ${cleanTask}
       } else {
         setAutoAssistMessages((prev) => [
           ...prev,
-          { type: 'ai', content: 'Yes で実行 / No でキャンセル です。' }
+          { type: 'ai', content: 'Yes で実行 / No でキャンセル です.' }
         ])
         updated = updated.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
@@ -831,7 +837,7 @@ ${cleanTask}
     }
 
     // --------------------------------------------------
-    // オートアシスト: 通常メッセージ送信
+    // オートアシスト: 通常送信
     // --------------------------------------------------
     if (selectedChatId === 'autoAssist') {
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -866,7 +872,6 @@ ${cleanTask}
     if (editIndex != null) {
       setIsLoading(true)
       try {
-        // 1) messages / postMessages を更新(差し替え)
         const updatedChats = chats.map((chat) => {
           if (chat.id === selectedChatId) {
             const cloned = [...chat.messages]
@@ -899,7 +904,7 @@ ${cleanTask}
           return
         }
 
-        // 2) AI再実行
+        // 再実行
         const ephemeralMsg: Messages = {
           role: 'user',
           parts: [{ text: inputMessage }]
@@ -923,7 +928,6 @@ ${cleanTask}
           })
         }
 
-        // ナレッジファイル(複数)
         if (useAgentFile && newSelectedChat.agentFilePaths) {
           for (const p of newSelectedChat.agentFilePaths) {
             try {
@@ -974,7 +978,6 @@ ${cleanTask}
         )
         const aiMsg: Message = { type: 'ai', content: resp }
 
-        // 3) AIレスポンスを末尾に追加
         const finalUpdated = updatedChats.map((chat) => {
           if (chat.id === selectedChatId) {
             return {
@@ -1044,7 +1047,6 @@ ${cleanTask}
         })
       }
 
-      // ナレッジファイル(複数)
       if (useAgentFile && selectedChat.agentFilePaths) {
         for (const p of selectedChat.agentFilePaths) {
           try {
@@ -1152,7 +1154,6 @@ ${cleanTask}
     setIsModalOpen(false)
   }
 
-  // ★新規: 複数ファイル選択 -> modalAgentFiles へ
   const handleSelectAgentFiles = async () => {
     const copiedPath = await window.electronAPI.copyFileToUserData()
     if (!copiedPath) {
@@ -1165,7 +1166,6 @@ ${cleanTask}
 
       return
     }
-    // filename 抽出
     const splitted = copiedPath.split(/[/\\]/)
     const filename = splitted[splitted.length - 1] || ''
     setModalAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
@@ -1262,7 +1262,6 @@ ${cleanTask}
     const target = chats.find((c) => c.id === chatId)
     if (!target) return
 
-    // 複数ファイル削除
     if (target.agentFilePaths) {
       for (const p of target.agentFilePaths) {
         try {
@@ -1299,7 +1298,9 @@ ${cleanTask}
 
     setEditingSystemPrompt(sc.systemPrompt)
 
-    // 複数ファイル
+    // ★ 既存アシスタント名を state に格納
+    setEditingCustomTitle(sc.customTitle)
+
     const arr = sc.agentFilePaths || []
     const mapped = arr.map((p) => {
       const splitted = p.split(/[/\\]/)
@@ -1316,7 +1317,7 @@ ${cleanTask}
     setIsPromptModalOpen(false)
   }
 
-  // ★編集: 複数ファイル追加
+  // 複数ファイル追加
   const handleAddAgentFileInPrompt = async () => {
     const copiedPath = await window.electronAPI.copyFileToUserData()
     if (!copiedPath) {
@@ -1334,7 +1335,7 @@ ${cleanTask}
     setEditingAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
 
-  // ★編集: 複数ファイル削除
+  // 複数ファイル削除
   const handleRemoveAgentFileInPrompt = (targetPath: string) => {
     setEditingAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
   }
@@ -1348,6 +1349,8 @@ ${cleanTask}
       if (chat.id === selectedChatId) {
         return {
           ...chat,
+          // ★ カスタムタイトルも更新
+          customTitle: editingCustomTitle,
           systemPrompt: editingSystemPrompt,
           agentFilePaths: editingAgentFiles.map((f) => f.path)
         }
@@ -1358,7 +1361,7 @@ ${cleanTask}
     setChats(updated)
     window.electronAPI.saveAgents(updated).catch(console.error)
     toast({
-      title: 'アシスタント指示を更新しました',
+      title: 'アシスタント情報を更新しました',
       status: 'success',
       duration: 2000,
       isClosable: true
@@ -1448,7 +1451,6 @@ ${cleanTask}
     })
   }
 
-  // ユーザー発言を編集
   const handleEditMessage = (msgIndex: number, oldContent: string) => {
     setEditIndex(msgIndex)
     setInputMessage(oldContent)
@@ -1486,7 +1488,7 @@ ${cleanTask}
           </Heading>
           <Box>
             <Text fontSize="sm" color="gray.600">
-              Ver. {appVersion}
+              Version: {appVersion}
             </Text>
           </Box>
           {selectedChatId === 'autoAssist' && (
@@ -1550,12 +1552,35 @@ ${cleanTask}
                 }}
                 _hover={{ bg: selectedChatId === 'autoAssist' ? 'blue.100' : 'blue.50' }}
               >
-                <Text fontSize="md" fontWeight="bold">
-                  オートアシスト
-                </Text>
-                <Text fontSize="xs" color="gray.500">
-                  自動で最適アシスタントを提案
-                </Text>
+                <Flex justify="space-between" align="center">
+                  <Box>
+                    <Text fontSize="md" fontWeight="bold">
+                      オートアシスト
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      自動で最適アシスタントを提案
+                    </Text>
+                  </Box>
+                  {selectedChatId === 'autoAssist' && (
+                    <HStack spacing={1}>
+                      <IconButton
+                        icon={<LuSettings />}
+                        aria-label="設定"
+                        isDisabled={isExpired}
+                        variant="ghost"
+                        colorScheme="blue"
+                        size="xs"
+                        onClick={() => {
+                          if (selectedChatId === 'autoAssist') {
+                            setIsAutoAssistSettingsOpen(true)
+                          } else if (typeof selectedChatId === 'number') {
+                            openSystemPromptModal()
+                          }
+                        }}
+                      />
+                    </HStack>
+                  )}
+                </Flex>
               </ListItem>
             </List>
           </Box>
@@ -1582,33 +1607,52 @@ ${cleanTask}
                   >
                     <Flex justify="space-between" align="center">
                       <Box>
-                        <Text fontSize="xs" color="gray.500">
+                        {/* <Text fontSize="xs" color="gray.500">
                           {chat.createdAt}
-                        </Text>
-                        <Text
-                          fontSize="md"
-                          fontWeight="bold"
-                          overflow="hidden"
-                          textOverflow="ellipsis"
-                          whiteSpace="nowrap"
-                          maxW="220px"
+                        </Text> */}
+                        <Tooltip
+                          label={chat.customTitle}
+                          isDisabled={chat.customTitle.length <= 11}
                         >
-                          {chat.customTitle || '無題のアシスタント'}
-                        </Text>
+                          <Text
+                            fontSize="md"
+                            fontWeight="bold"
+                            overflow="hidden"
+                            textOverflow="ellipsis"
+                            whiteSpace="nowrap"
+                            maxW="200px"
+                          >
+                            {chat.customTitle || '無題のアシスタント'}
+                          </Text>
+                        </Tooltip>
                       </Box>
+
                       {chat.id === selectedChatId && (
-                        <IconButton
-                          icon={<AiOutlineDelete />}
-                          aria-label="アシスタント削除"
-                          variant="ghost"
-                          colorScheme="red"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDeleteTargetId(chat.id)
-                            setIsDeleteModalOpen(true)
-                          }}
-                        />
+                        <HStack spacing={1}>
+                          <IconButton
+                            icon={<LuSettings />}
+                            aria-label="アシスタント設定"
+                            variant="ghost"
+                            colorScheme="blue"
+                            size="xs"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openSystemPromptModal()
+                            }}
+                          />
+                          <IconButton
+                            icon={<AiOutlineDelete />}
+                            aria-label="アシスタント削除"
+                            variant="ghost"
+                            colorScheme="red"
+                            size="xs"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteTargetId(chat.id)
+                              setIsDeleteModalOpen(true)
+                            }}
+                          />
+                        </HStack>
                       )}
                     </Flex>
                   </ListItem>
@@ -1650,7 +1694,6 @@ ${cleanTask}
                     {hoveredMessageIndex === idx && (
                       <Box position="absolute" top="4px" right="6px">
                         <HStack spacing={1}>
-                          {/* コピーアイコン: user/ai 両方に表示 */}
                           <IconButton
                             icon={<MdOutlineContentCopy />}
                             aria-label="コピー"
@@ -1668,7 +1711,6 @@ ${cleanTask}
                               })
                             }}
                           />
-                          {/* 編集アイコン: userメッセージのみ表示 */}
                           {msg.type === 'user' && (
                             <IconButton
                               icon={<FiEdit />}
@@ -1711,7 +1753,6 @@ ${cleanTask}
                   {hoveredMessageIndex === idx && (
                     <Box position="absolute" top="4px" right="6px">
                       <HStack spacing={1}>
-                        {/* コピーアイコン: user/ai 両方に表示 */}
                         <IconButton
                           icon={<MdOutlineContentCopy />}
                           aria-label="コピー"
@@ -1729,7 +1770,6 @@ ${cleanTask}
                             })
                           }}
                         />
-                        {/* 編集アイコン: userのみ */}
                         {msg.type === 'user' && (
                           <IconButton
                             icon={<FiEdit />}
@@ -1772,7 +1812,6 @@ ${cleanTask}
                 isDisabled={apiKey.length === 0 || isExpired}
               />
 
-              {/* ナレッジファイル有効/無効 */}
               {typeof selectedChatId === 'number' && (
                 <Checkbox
                   isChecked={useAgentFile}
@@ -1798,7 +1837,7 @@ ${cleanTask}
                 display="none"
               />
 
-              <IconButton
+              {/* <IconButton
                 icon={<LuSettings />}
                 aria-label="設定"
                 isDisabled={isExpired}
@@ -1809,7 +1848,7 @@ ${cleanTask}
                     openSystemPromptModal()
                   }
                 }}
-              />
+              /> */}
               <IconButton
                 icon={<IoSend />}
                 aria-label="送信"
@@ -1824,7 +1863,7 @@ ${cleanTask}
             </HStack>
           </Flex>
 
-          {/* 選択中の複数ファイルを表示 */}
+          {/* 選択ファイル一覧 */}
           {tempFiles.length > 0 && (
             <Box p={4} borderTop="1px" borderColor="gray.200">
               <Text fontSize="sm" color="gray.600" mb={2}>
@@ -1895,7 +1934,7 @@ ${cleanTask}
             </FormControl>
 
             <FormControl mb={4}>
-              <FormLabel>指示(System Prompt)</FormLabel>
+              <FormLabel>指示</FormLabel>
               <Textarea
                 rows={5}
                 w="full"
@@ -1905,7 +1944,6 @@ ${cleanTask}
               />
             </FormControl>
 
-            {/* 複数ファイル */}
             <FormControl>
               <FormLabel>ナレッジファイル(複数可)</FormLabel>
               <Button colorScheme="blue" variant="outline" onClick={handleSelectAgentFiles}>
@@ -1962,14 +2000,24 @@ ${cleanTask}
         <ModalContent maxW="3xl">
           <ModalHeader>アシスタント指示の編集</ModalHeader>
           <ModalBody>
+            {/* ★ アシスタント名フィールドを追加 */}
+            <FormControl mb={4}>
+              <FormLabel>アシスタント名</FormLabel>
+              <Input
+                value={editingCustomTitle}
+                onChange={(e) => setEditingCustomTitle(e.target.value)}
+                placeholder="アシスタント名を変更"
+              />
+            </FormControl>
+
             <FormControl>
-              <FormLabel>指示(System Prompt)</FormLabel>
+              <FormLabel>指示</FormLabel>
               <Textarea
                 rows={6}
                 value={editingSystemPrompt}
                 onChange={(e) => setEditingSystemPrompt(e.target.value)}
                 placeholder="アシスタントへの指示を入力/編集"
-                height="500px"
+                height="250px"
               />
             </FormControl>
             <HStack spacing={2} mt={3}>
@@ -1978,7 +2026,6 @@ ${cleanTask}
               </Button>
             </HStack>
 
-            {/* 複数ファイル */}
             <FormControl mt={5}>
               <FormLabel>ナレッジファイル(複数可)</FormLabel>
               <Button colorScheme="blue" variant="outline" onClick={handleAddAgentFileInPrompt}>
