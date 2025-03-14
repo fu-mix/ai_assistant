@@ -28,7 +28,8 @@ import {
   Th,
   Td,
   Switch,
-  Tooltip
+  Tooltip,
+  Select
 } from '@chakra-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -36,7 +37,7 @@ import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 import { MdOutlineContentCopy } from 'react-icons/md'
-import { FiEdit } from 'react-icons/fi' // 編集用アイコン
+import { FiEdit } from 'react-icons/fi' // タイトル編集アイコンなど
 
 /**
  * Electron API interface
@@ -57,8 +58,23 @@ declare global {
 }
 
 /**
- * LLM用 Messages
- *  inlineData に修正
+ * TitleSegment: タイトルの一部文字列＋色
+ */
+type TitleSegment = {
+  text: string
+  color: string
+}
+
+/**
+ * タイトル全体の設定 (文字の部分配列 + 書体)
+ */
+type TitleSettings = {
+  segments: TitleSegment[]
+  fontFamily: string
+}
+
+/**
+ * LLM用 Messages (inlineData対応)
  */
 export type Messages = {
   role: string
@@ -81,7 +97,6 @@ type Message = {
 
 /**
  * アシスタント情報
- *  複数ファイル対応: agentFilePaths
  */
 type ChatInfo = {
   id: number
@@ -108,9 +123,168 @@ type SubtaskInfo = {
   recommendedAssistant: string | null
 }
 
-/**
- * デバッグ用: 要約編集モーダル
- */
+/* ------------------------------------
+ * タイトル編集モーダル
+ *   - アイコン設定を削除
+ *   - デフォルトに戻すボタンを追加
+ * ------------------------------------ */
+function TitleEditModal({
+  isOpen,
+  onClose,
+  titleSettings,
+  setTitleSettings
+}: {
+  isOpen: boolean
+  onClose: () => void
+  titleSettings: TitleSettings
+  setTitleSettings: (val: TitleSettings) => void
+}) {
+  const toast = useToast()
+  const [tempSegments, setTempSegments] = useState<TitleSegment[]>([])
+  const [tempFont, setTempFont] = useState<string>('Arial')
+
+  // 選択肢として用意するフォント例
+  const fontOptions = ['Arial', 'Verdana', 'Times New Roman', 'Georgia', 'Courier New']
+
+  // デフォルトタイトル設定 (DesAIn Assistant の色分け)
+  const defaultSegments: TitleSegment[] = [
+    { text: 'D', color: '#ff6600' },
+    { text: 'es', color: '#333333' },
+    { text: 'AI', color: '#dd5588' },
+    { text: 'n ', color: '#333333' },
+    { text: 'A', color: '#ffd700' },
+    { text: 'ssistant', color: '#333333' }
+  ]
+  const defaultFont = 'Arial'
+
+  // モーダルが開くたびに現在のタイトル設定をコピー
+  useEffect(() => {
+    if (isOpen) {
+      setTempSegments(JSON.parse(JSON.stringify(titleSettings.segments)))
+      setTempFont(titleSettings.fontFamily)
+    }
+  }, [isOpen, titleSettings])
+
+  // セグメントを追加
+  const addSegment = () => {
+    setTempSegments((prev) => [...prev, { text: '', color: '#000000' }])
+  }
+
+  // セグメント削除
+  const removeSegment = (idx: number) => {
+    setTempSegments((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  // テキスト更新
+  const updateSegmentText = (idx: number, newVal: string) => {
+    setTempSegments((prev) => prev.map((seg, i) => (i === idx ? { ...seg, text: newVal } : seg)))
+  }
+
+  // カラー更新
+  const updateSegmentColor = (idx: number, newColor: string) => {
+    setTempSegments((prev) => prev.map((seg, i) => (i === idx ? { ...seg, color: newColor } : seg)))
+  }
+
+  // デフォルトに戻す
+  const handleRevertDefault = () => {
+    setTempSegments(JSON.parse(JSON.stringify(defaultSegments)))
+    setTempFont(defaultFont)
+    toast({
+      title: 'タイトルをデフォルトに戻しました',
+      status: 'info',
+      duration: 1500,
+      isClosable: true
+    })
+  }
+
+  // 保存
+  const handleSaveTitle = () => {
+    setTitleSettings({
+      segments: tempSegments,
+      fontFamily: tempFont
+    })
+    toast({
+      title: 'タイトル設定を保存しました',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+    onClose()
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} closeOnOverlayClick={false} isCentered>
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>タイトルの編集</ModalHeader>
+        <ModalBody>
+          {/* 書体 */}
+          <FormControl mb={4}>
+            <FormLabel>書体</FormLabel>
+            <Select value={tempFont} onChange={(e) => setTempFont(e.target.value)}>
+              {fontOptions.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* セグメント編集 (文字 + 色) */}
+          <FormControl mb={4}>
+            <FormLabel>タイトル文字＋色 (複数行可)</FormLabel>
+            {tempSegments.map((seg, idx) => (
+              <HStack key={idx} spacing={2} mb={1}>
+                <Input
+                  value={seg.text}
+                  onChange={(e) => updateSegmentText(idx, e.target.value)}
+                  placeholder="文字"
+                  width="100px"
+                />
+                <Input
+                  type="color"
+                  value={seg.color}
+                  onChange={(e) => updateSegmentColor(idx, e.target.value)}
+                  width="60px"
+                  p={0}
+                />
+                <IconButton
+                  icon={<AiOutlineDelete />}
+                  aria-label="削除"
+                  colorScheme="red"
+                  size="sm"
+                  onClick={() => removeSegment(idx)}
+                />
+              </HStack>
+            ))}
+            <Button mt={2} onClick={addSegment}>
+              + 行を追加
+            </Button>
+          </FormControl>
+
+          <FormControl mt={4}>
+            <Button colorScheme="orange" variant="outline" onClick={handleRevertDefault}>
+              デフォルトに戻す
+            </Button>
+          </FormControl>
+        </ModalBody>
+
+        <ModalFooter>
+          <Button onClick={onClose} mr={3}>
+            キャンセル
+          </Button>
+          <Button colorScheme="blue" onClick={handleSaveTitle}>
+            保存
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  )
+}
+
+/* ------------------------------------
+ * オートアシスト設定モーダル (既存)
+ * ------------------------------------ */
 function AutoAssistSettingsModal({
   isOpen,
   onClose,
@@ -224,52 +398,66 @@ function AutoAssistSettingsModal({
   )
 }
 
+/* ------------------------------------
+ * メインコンポーネント
+ * ------------------------------------ */
 export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
-  // -----------------------------
-  // オートアシストナレッジ
-  // -----------------------------
+  // --------------------------------
+  // タイトル設定 (部分文字+色 + フォント)
+  // --------------------------------
+
+  // 初期は DesAIn Assistant を色分けした状態
+  const [titleSettings, setTitleSettings] = useState<TitleSettings>({
+    segments: [
+      { text: 'D', color: '#ff6600' },
+      { text: 'es', color: '#333333' },
+      { text: 'AI', color: '#dd5588' },
+      { text: 'n ', color: '#333333' },
+      { text: 'A', color: '#ffd700' },
+      { text: 'ssistant', color: '#333333' }
+    ],
+    fontFamily: 'Arial'
+  })
+  const [isTitleEditOpen, setIsTitleEditOpen] = useState(false)
+
+  // タイトルホバー中かどうか (編集アイコンの表示制御用)
+  const [titleHovered, setTitleHovered] = useState(false)
+
+  // --------------------------------
+  // オートアシスト関連
+  // --------------------------------
   const [autoAssistMessages, setAutoAssistMessages] = useState<Message[]>([])
   const [autoAssistState, setAutoAssistState] = useState<AutoAssistState>('idle')
   const [pendingSubtasks, setPendingSubtasks] = useState<SubtaskInfo[]>([])
   const [pendingEphemeralMsg, setPendingEphemeralMsg] = useState<Messages | null>(null)
-
   const AUTO_ASSIST_ID = 999999
   const [agentMode, setAgentMode] = useState<boolean>(false)
 
-  // -----------------------------
-  // 全チャットナレッジ
-  // -----------------------------
+  // --------------------------------
+  // 全チャット関連
+  // --------------------------------
   const [chats, setChats] = useState<ChatInfo[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null | 'autoAssist'>(null)
   const [inputMessage, setInputMessage] = useState('')
   const [apiKey, setApiKey] = useState('')
-
-  // ★複数ファイル添付(チャット送信用)ステート
   const [tempFiles, setTempFiles] = useState<{ name: string; data: string; mimeType: string }[]>([])
 
-  // モーダル制御
+  // モーダル類
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
   const [modalAgentFiles, setModalAgentFiles] = useState<{ name: string; path: string }[]>([])
-
-  // システムプロンプト編集モーダル
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
-  // ★ 複数ファイル編集用
   const [editingAgentFiles, setEditingAgentFiles] = useState<{ name: string; path: string }[]>([])
-
-  // ★ アシスタント名も編集できるよう state 追加
   const [editingCustomTitle, setEditingCustomTitle] = useState('')
-
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
   const [isResetAutoAssistConfirm, setIsResetAutoAssistConfirm] = useState(false)
 
-  // 通常
   const [useAgentFile, setUseAgentFile] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
@@ -284,22 +472,20 @@ export const FinalRefinedElectronAppMockup = () => {
   // 編集用Index
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
-  // Version
+  // バージョン
   const [appVersion, setAppVersion] = useState<string>('')
 
-  // -----------------------------
+  // --------------------------------
   // 初期ロード
-  // -----------------------------
+  // --------------------------------
   useEffect(() => {
+    // agentsのロード
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
-        const reformed = stored.map((c) => {
-          return {
-            ...c,
-            agentFilePaths: c.agentFilePaths || []
-          }
-        })
-
+        const reformed = stored.map((c) => ({
+          ...c,
+          agentFilePaths: c.agentFilePaths || []
+        }))
         const foundAuto = reformed.find((c) => c.id === AUTO_ASSIST_ID)
         if (!foundAuto) {
           const newAutoAssist: ChatInfo = {
@@ -316,23 +502,24 @@ export const FinalRefinedElectronAppMockup = () => {
           reformed.push(newAutoAssist)
         }
         setChats(reformed)
-        const auto = reformed.find((c) => c.id === AUTO_ASSIST_ID)
+        const auto = reformed.find((cc) => cc.id === AUTO_ASSIST_ID)
         if (auto) {
           setAutoAssistMessages(auto.messages)
         }
       }
     })
-  }, [])
 
-  // ライセンス期限チェック
-  useEffect(() => {
+    // バージョン取得
+    window.electronAPI.getAppVersion().then((ver) => setAppVersion(ver))
+
+    // ライセンス期限チェック
     const expiryDate = new Date(import.meta.env.VITE_EXPIRY_DATE)
     if (new Date().getTime() > expiryDate.getTime()) {
       setIsExpired(true)
     }
   }, [])
 
-  // チャット欄を常にスクロール最下部
+  // チャット欄常にスクロール下端
   useEffect(() => {
     if (chatHistoryRef.current) {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
@@ -359,19 +546,13 @@ export const FinalRefinedElectronAppMockup = () => {
     return JSON.stringify(result, null, 2)
   }
 
-  // バージョン取得
-  useEffect(() => {
-    window.electronAPI.getAppVersion().then((ver) => {
-      setAppVersion(ver)
-    })
-  }, [])
-
   // -----------------------------
-  // チャット送信用ファイル選択
+  // ファイル添付 (チャット用)
   // -----------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-
+    // for分中で、files.lengthが使えないため一旦変数に書き出している。
+    // これは消さずに、このhandleTempFileChange内では、以降はfiles.lengthではなく、このfileNumを使うこと
     // @ts-ignore
     const fileNum = files?.length
 
@@ -381,12 +562,10 @@ export const FinalRefinedElectronAppMockup = () => {
     let processed = 0
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-
       const reader = new FileReader()
       reader.onload = () => {
         if (reader.result) {
           const base64Data = reader.result.toString().split(',')[1]
-
           const lower = file.name.toLowerCase()
 
           let mime = 'application/octet-stream'
@@ -404,7 +583,6 @@ export const FinalRefinedElectronAppMockup = () => {
           })
         }
         processed++
-
         if (processed === fileNum) {
           setTempFiles((prev) => [...prev, ...newFiles])
         }
@@ -462,9 +640,9 @@ export const FinalRefinedElectronAppMockup = () => {
     setTempFiles((prev) => prev.filter((f) => f.name !== targetName))
   }
 
-  // -----------------------------
+  // --------------------------------
   // 入力フォーム
-  // -----------------------------
+  // --------------------------------
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInputMessage(val)
@@ -482,9 +660,9 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // -----------------------------
+  // --------------------------------
   // handleSelectChat
-  // -----------------------------
+  // --------------------------------
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
     const target = chats.find((c) => c.id === id)
@@ -493,9 +671,9 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
-  // -----------------------------
-  // executeSubtasksAndShowOnce
-  // -----------------------------
+  // --------------------------------
+  // オートアシスト: タスク実行
+  // --------------------------------
   async function executeSubtasksAndShowOnce(subtasks: SubtaskInfo[]) {
     setAutoAssistState('executing')
     try {
@@ -505,7 +683,6 @@ export const FinalRefinedElectronAppMockup = () => {
         let out = ''
 
         if (!st.recommendedAssistant) {
-          // fallback -> AutoAssist
           const fallbackSystemPrompt = `
 あなたはAutoAssistです。
 以下のタスクをあなたが実行してください:
@@ -521,7 +698,6 @@ ${st.task}
             out = '(実行中にエラー)'
           }
         } else {
-          // recommended assistant
           const asstObj = chats.find(
             (c) =>
               c.customTitle.trim().toLowerCase() === st.recommendedAssistant!.trim().toLowerCase()
@@ -541,12 +717,11 @@ ${st.task}
           }
         }
 
-        subtaskOutputs.push(`
-タスク${i + 1} : ${st.task}
-(アシスタント: ${st.recommendedAssistant || 'AutoAssist/fallback'})
-結果:
-${out}
-`)
+        subtaskOutputs.push(
+          `タスク${i + 1} : ${st.task}\n(アシスタント: ${
+            st.recommendedAssistant || 'AutoAssist/fallback'
+          })\n結果:\n${out}\n`
+        )
       }
 
       const finalMerged = `以下が最終的な実行結果です:\n${subtaskOutputs.join('\n')}`
@@ -558,16 +733,6 @@ ${out}
     }
   }
 
-  // -----------------------------
-  // removeCodeFence
-  // -----------------------------
-  function removeCodeFence(str: string): string {
-    return str.replaceAll('```json', '').replaceAll('```', '').trim()
-  }
-
-  // -----------------------------
-  // findAssistantsForEachTask
-  // -----------------------------
   async function findAssistantsForEachTask(tasks: string[]): Promise<SubtaskInfo[]> {
     const output: SubtaskInfo[] = []
     const summaries = chats
@@ -601,7 +766,7 @@ ${cleanTask}
       let recommended: string | null = null
       try {
         const resp = await window.electronAPI.postChatAI(msgs, apiKey, systemPrompt)
-        const cleanResp = removeCodeFence(resp)
+        const cleanResp = resp.replaceAll('```json', '').replaceAll('```', '').trim()
         const parsed = JSON.parse(cleanResp)
         recommended = parsed.assistantTitle ?? null
       } catch (err) {
@@ -614,9 +779,6 @@ ${cleanTask}
     return output
   }
 
-  // -----------------------------
-  // handleAutoAssistSend
-  // -----------------------------
   async function handleAutoAssistSend() {
     setIsLoading(true)
     try {
@@ -625,6 +787,7 @@ ${cleanTask}
         parts: [{ text: inputMessage }]
       }
 
+      // CSV変換など
       for (const f of tempFiles) {
         if (f.mimeType === 'text/csv') {
           try {
@@ -658,11 +821,11 @@ ${cleanTask}
         apiKey,
         parseSystemPrompt
       )
-      const splittedRaw = removeCodeFence(parseResp)
+      const splittedRaw = parseResp.replaceAll('```json', '').replaceAll('```', '').trim()
       let splitted: string[] = []
       try {
         splitted = JSON.parse(splittedRaw)
-      } catch (err) {
+      } catch {
         splitted = [ephemeralMsg.parts[0].text || '']
       }
 
@@ -689,7 +852,6 @@ ${cleanTask}
         return c
       })
       setChats(updatedStore as ChatInfo[])
-      // @ts-ignore
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -714,7 +876,6 @@ ${cleanTask}
           return c
         })
         setChats(updated2 as ChatInfo[])
-        // @ts-ignore
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -737,16 +898,12 @@ ${cleanTask}
         return c
       })
       setChats(updatedErr as ChatInfo[])
-      // @ts-ignore
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // -----------------------------
-  // sendMessage
-  // -----------------------------
   async function sendMessage() {
     if (!inputMessage.trim() && tempFiles.length === 0) return
     if (!apiKey) {
@@ -760,10 +917,8 @@ ${cleanTask}
       return
     }
 
-    // --------------------------------------------------
-    // オートアシスト: Yes/No
-    // --------------------------------------------------
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
+      // Yes/No
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
@@ -836,10 +991,8 @@ ${cleanTask}
       }
     }
 
-    // --------------------------------------------------
-    // オートアシスト: 通常送信
-    // --------------------------------------------------
     if (selectedChatId === 'autoAssist') {
+      // 通常オートアシスト
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
       const updated = chats.map((c) => {
@@ -855,20 +1008,17 @@ ${cleanTask}
       setIsLoading(true)
       setInputMessage('')
       setTempFiles([])
-
       await handleAutoAssistSend()
       setIsLoading(false)
 
       return
     }
 
-    // --------------------------------------------------
     // 通常アシスタント
-    // --------------------------------------------------
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (!selectedChat) return
 
-    // ★編集モード
+    // 編集モード
     if (editIndex != null) {
       setIsLoading(true)
       try {
@@ -921,10 +1071,7 @@ ${cleanTask}
             }
           }
           ephemeralMsg.parts.push({
-            inlineData: {
-              mimeType: f.mimeType,
-              data: f.data
-            }
+            inlineData: { mimeType: f.mimeType, data: f.data }
           })
         }
 
@@ -950,18 +1097,12 @@ ${cleanTask}
                     ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
                   }
                   ephemeralMsg.parts.push({
-                    inlineData: {
-                      mimeType: 'text/csv',
-                      data: fileBase64
-                    }
+                    inlineData: { mimeType: 'text/csv', data: fileBase64 }
                   })
                   continue
                 }
                 ephemeralMsg.parts.push({
-                  inlineData: {
-                    mimeType: derivedMime,
-                    data: fileBase64
-                  }
+                  inlineData: { mimeType: derivedMime, data: fileBase64 }
                 })
               }
             } catch (err) {
@@ -1018,9 +1159,7 @@ ${cleanTask}
       return
     }
 
-    // ---------------------------
     // 新規メッセージ (通常送信)
-    // ---------------------------
     setIsLoading(true)
     try {
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -1040,10 +1179,7 @@ ${cleanTask}
           }
         }
         ephemeralMsg.parts.push({
-          inlineData: {
-            mimeType: f.mimeType,
-            data: f.data
-          }
+          inlineData: { mimeType: f.mimeType, data: f.data }
         })
       }
 
@@ -1068,18 +1204,12 @@ ${cleanTask}
                   ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
                 }
                 ephemeralMsg.parts.push({
-                  inlineData: {
-                    mimeType: 'text/csv',
-                    data: fileBase64
-                  }
+                  inlineData: { mimeType: 'text/csv', data: fileBase64 }
                 })
                 continue
               }
               ephemeralMsg.parts.push({
-                inlineData: {
-                  mimeType: derivedMime,
-                  data: fileBase64
-                }
+                inlineData: { mimeType: derivedMime, data: fileBase64 }
               })
             }
           } catch (err) {
@@ -1175,7 +1305,7 @@ ${cleanTask}
     setModalAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
   }
 
-  async function handleCreateCustomChat() {
+  const handleCreateCustomChat = async () => {
     if (!modalChatTitle.trim()) {
       toast({
         title: 'アシスタント名が入力されていません',
@@ -1297,8 +1427,6 @@ ${cleanTask}
     if (!sc) return
 
     setEditingSystemPrompt(sc.systemPrompt)
-
-    // ★ 既存アシスタント名を state に格納
     setEditingCustomTitle(sc.customTitle)
 
     const arr = sc.agentFilePaths || []
@@ -1317,7 +1445,6 @@ ${cleanTask}
     setIsPromptModalOpen(false)
   }
 
-  // 複数ファイル追加
   const handleAddAgentFileInPrompt = async () => {
     const copiedPath = await window.electronAPI.copyFileToUserData()
     if (!copiedPath) {
@@ -1335,7 +1462,6 @@ ${cleanTask}
     setEditingAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
 
-  // 複数ファイル削除
   const handleRemoveAgentFileInPrompt = (targetPath: string) => {
     setEditingAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
   }
@@ -1349,7 +1475,6 @@ ${cleanTask}
       if (chat.id === selectedChatId) {
         return {
           ...chat,
-          // ★ カスタムタイトルも更新
           customTitle: editingCustomTitle,
           systemPrompt: editingSystemPrompt,
           agentFilePaths: editingAgentFiles.map((f) => f.path)
@@ -1380,6 +1505,9 @@ ${cleanTask}
     })
   }
 
+  // -----------------------------
+  // 会話リセット
+  // -----------------------------
   function closeResetConfirm() {
     setIsResetConfirmOpen(false)
   }
@@ -1406,12 +1534,7 @@ ${cleanTask}
     } else if (typeof selectedChatId === 'number') {
       const updated = chats.map((c) => {
         if (c.id === selectedChatId) {
-          return {
-            ...c,
-            messages: [],
-            postMessages: [],
-            inputMessage: ''
-          }
+          return { ...c, messages: [], postMessages: [], inputMessage: '' }
         }
 
         return c
@@ -1451,11 +1574,15 @@ ${cleanTask}
     })
   }
 
+  // -----------------------------
+  // ユーザーメッセージ編集
+  // -----------------------------
   const handleEditMessage = (msgIndex: number, oldContent: string) => {
     setEditIndex(msgIndex)
     setInputMessage(oldContent)
   }
 
+  // 選択中のアシスタント
   const selectedChatObj =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
@@ -1471,26 +1598,47 @@ ${cleanTask}
         justify="space-between"
         align="center"
       >
-        <HStack spacing={8}>
-          <Heading as="h1" size="lg" fontWeight="extrabold" color="gray.800">
-            <Text as="span" color="orange.500">
-              D
-            </Text>
-            <Text as="span">es</Text>
-            <Text as="span" color="pink.400">
-              AI
-            </Text>
-            <Text as="span">n </Text>
-            <Text as="span" color="yellow.400">
-              A
-            </Text>
-            <Text as="span">ssistant</Text>
+        {/* タイトル部分: マウスホバーで編集アイコン表示 */}
+        <HStack
+          spacing={2}
+          onMouseEnter={() => setTitleHovered(true)}
+          onMouseLeave={() => setTitleHovered(false)}
+        >
+          <Heading
+            as="h1"
+            size="lg"
+            display="flex"
+            alignItems="center"
+            fontFamily={titleSettings.fontFamily}
+          >
+            {titleSettings.segments.map((seg, idx) => (
+              <Text as="span" key={idx} color={seg.color}>
+                {seg.text}
+              </Text>
+            ))}
           </Heading>
+
+          {/* タイトル編集ボタン: hover時のみ表示 */}
+          {titleHovered && (
+            <IconButton
+              aria-label="タイトル編集"
+              icon={<FiEdit />}
+              size="sm"
+              variant="ghost"
+              colorScheme="blue"
+              onClick={() => setIsTitleEditOpen(true)}
+            />
+          )}
+        </HStack>
+
+        {/* 右側 (バージョン / オートアシストモード / APIキー / 新アシスタントボタン) */}
+        <HStack spacing={8}>
           <Box>
             <Text fontSize="sm" color="gray.600">
               Version: {appVersion}
             </Text>
           </Box>
+
           {selectedChatId === 'autoAssist' && (
             <HStack align="center">
               <Text fontSize="sm">エージェントモード</Text>
@@ -1501,30 +1649,30 @@ ${cleanTask}
               />
             </HStack>
           )}
-        </HStack>
 
-        <HStack spacing={4}>
-          <Input
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="ChatAIのAPI Key"
-            type="password"
-            size="md"
-            isDisabled={isExpired}
-            w="300px"
-          />
-          <Button
-            onClick={openCustomChatModal}
-            colorScheme="teal"
-            isDisabled={isExpired}
-            minW="250px"
-          >
-            新しいアシスタントの作成
-          </Button>
+          <HStack spacing={4}>
+            <Input
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="ChatAIのAPI Key"
+              type="password"
+              size="md"
+              isDisabled={isExpired}
+              w="300px"
+            />
+            <Button
+              onClick={openCustomChatModal}
+              colorScheme="teal"
+              isDisabled={isExpired}
+              minW="250px"
+            >
+              新しいアシスタントの作成
+            </Button>
+          </HStack>
         </HStack>
       </Flex>
 
-      {/* メイン */}
+      {/* メイン (左=アシスタント一覧, 右=チャット表示) */}
       <Flex as="main" flex="1" overflow="hidden" p={4}>
         {/* 左カラム */}
         <Box
@@ -1585,12 +1733,11 @@ ${cleanTask}
             </List>
           </Box>
 
+          {/* アシスタント一覧 */}
           <Box overflowY="auto" flex="1">
             <List spacing={3} p={4}>
               {chats.map((chat) => {
-                if (chat.id === AUTO_ASSIST_ID) {
-                  return null
-                }
+                if (chat.id === AUTO_ASSIST_ID) return null
 
                 return (
                   <ListItem
@@ -1607,9 +1754,6 @@ ${cleanTask}
                   >
                     <Flex justify="space-between" align="center">
                       <Box>
-                        {/* <Text fontSize="xs" color="gray.500">
-                          {chat.createdAt}
-                        </Text> */}
                         <Tooltip
                           label={chat.customTitle}
                           isDisabled={chat.customTitle.length <= 11}
@@ -1662,7 +1806,7 @@ ${cleanTask}
           </Box>
         </Box>
 
-        {/* 右カラム(チャット表示) */}
+        {/* 右カラム (チャット表示) */}
         <Box w="80%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
           <Box ref={chatHistoryRef} flex="1" overflowY="auto" p={4}>
             {selectedChatId === 'autoAssist' ? (
@@ -1837,18 +1981,6 @@ ${cleanTask}
                 display="none"
               />
 
-              {/* <IconButton
-                icon={<LuSettings />}
-                aria-label="設定"
-                isDisabled={isExpired}
-                onClick={() => {
-                  if (selectedChatId === 'autoAssist') {
-                    setIsAutoAssistSettingsOpen(true)
-                  } else if (typeof selectedChatId === 'number') {
-                    openSystemPromptModal()
-                  }
-                }}
-              /> */}
               <IconButton
                 icon={<IoSend />}
                 aria-label="送信"
@@ -1896,7 +2028,7 @@ ${cleanTask}
         </Box>
       </Flex>
 
-      {/* 期限切れ */}
+      {/* 期限切れモーダル */}
       <Modal isOpen={isExpired} onClose={() => {}} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -2000,7 +2132,6 @@ ${cleanTask}
         <ModalContent maxW="3xl">
           <ModalHeader>アシスタント指示の編集</ModalHeader>
           <ModalBody>
-            {/* ★ アシスタント名フィールドを追加 */}
             <FormControl mb={4}>
               <FormLabel>アシスタント名</FormLabel>
               <Input
@@ -2150,6 +2281,14 @@ ${cleanTask}
         chats={chats}
         setChats={setChats}
         onConfirmResetAutoAssist={handleConfirmResetAutoAssist}
+      />
+
+      {/* タイトル編集モーダル */}
+      <TitleEditModal
+        isOpen={isTitleEditOpen}
+        onClose={() => setIsTitleEditOpen(false)}
+        titleSettings={titleSettings}
+        setTitleSettings={(val) => setTitleSettings(val)}
       />
     </Flex>
   )
