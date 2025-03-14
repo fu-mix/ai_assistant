@@ -890,7 +890,7 @@ ${cleanTask}
             ...c,
             messages: [
               ...c.messages,
-              { type: 'ai', content: 'タスク分割処理中にエラーが発生しました。' }
+              { type: 'ai', content: 'タスク分割処理中にエラーが発生しました.' }
             ]
           }
         }
@@ -1612,7 +1612,8 @@ ${cleanTask}
             fontFamily={titleSettings.fontFamily}
           >
             {titleSettings.segments.map((seg, idx) => (
-              <Text as="span" key={idx} color={seg.color}>
+              // ★ ここで whiteSpace="pre" を追加して空白をそのまま表示
+              <Text as="span" key={idx} color={seg.color} whiteSpace="pre">
                 {seg.text}
               </Text>
             ))}
