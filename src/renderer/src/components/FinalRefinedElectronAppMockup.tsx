@@ -49,7 +49,7 @@ interface ElectronAPI {
   postChatAI: (message: Messages[], apiKey: string, systemPrompt: string) => Promise<any>
   loadAgents: () => Promise<ChatInfo[]>
   saveAgents: (agentsData: ChatInfo[]) => Promise<any>
-  copyFileToUserData: () => Promise<string | null>
+  copyFileToUserData: (oldFilePath?: string) => Promise<string | null>
   readFileByPath: (filePath: string) => Promise<string | null>
   deleteFileInUserData: (filePath: string) => Promise<boolean>
   getAppVersion: () => Promise<string>
@@ -468,11 +468,15 @@ export const FinalRefinedElectronAppMockup = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalChatTitle, setModalChatTitle] = useState('')
   const [modalSystemPrompt, setModalSystemPrompt] = useState('')
+  // ▼ ここにある modalAgentFiles は「新しいアシスタントの作成モーダル」で使うナレッジファイル
   const [modalAgentFiles, setModalAgentFiles] = useState<{ name: string; path: string }[]>([])
+
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState('')
+  // ▼ editingAgentFiles は「アシスタント指示の編集モーダル」で使うナレッジファイル
   const [editingAgentFiles, setEditingAgentFiles] = useState<{ name: string; path: string }[]>([])
   const [editingCustomTitle, setEditingCustomTitle] = useState('')
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
@@ -538,7 +542,7 @@ export const FinalRefinedElectronAppMockup = () => {
       setIsExpired(true)
     }
 
-    // ★ タイトル設定のロード (あれば)
+    // タイトル設定のロード (あれば)
     if (window.electronAPI.loadTitleSettings) {
       window.electronAPI
         .loadTitleSettings()
@@ -1316,8 +1320,9 @@ ${cleanTask}
     setIsModalOpen(false)
   }
 
+  // ▼ oldFilePath は新規のため常に undefined でOK
   const handleSelectAgentFiles = async () => {
-    const copiedPath = await window.electronAPI.copyFileToUserData()
+    const copiedPath = await window.electronAPI.copyFileToUserData(undefined)
     if (!copiedPath) {
       toast({
         title: 'ファイルが選択されませんでした',
@@ -1333,7 +1338,14 @@ ${cleanTask}
     setModalAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
 
-  const handleRemoveAgentFile = (targetPath: string) => {
+  // ▼ ファイル削除時に copy されたファイルも削除
+  const handleRemoveAgentFile = async (targetPath: string) => {
+    try {
+      // メインプロセス側でファイル削除
+      await window.electronAPI.deleteFileInUserData(targetPath)
+    } catch (err) {
+      console.error('Failed to delete old file in userData:', err)
+    }
     setModalAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
   }
 
@@ -1477,8 +1489,11 @@ ${cleanTask}
     setIsPromptModalOpen(false)
   }
 
+  // ▼ oldFilePath は既存ファイルを削除するかもしれないので、現在選択されているものを渡す (編集箇所)
   const handleAddAgentFileInPrompt = async () => {
-    const copiedPath = await window.electronAPI.copyFileToUserData()
+    // 新しいファイルを選択する => 古いファイルを削除するわけではないので
+    // ここでは oldFilePath 未指定 (undefined) でOK  (※複数ファイル追加想定)
+    const copiedPath = await window.electronAPI.copyFileToUserData(undefined)
     if (!copiedPath) {
       toast({
         title: 'ファイルが選択されませんでした',
@@ -1494,7 +1509,13 @@ ${cleanTask}
     setEditingAgentFiles((prev) => [...prev, { name: filename, path: copiedPath }])
   }
 
-  const handleRemoveAgentFileInPrompt = (targetPath: string) => {
+  // ▼ ファイル削除時に copy されたファイルも削除
+  const handleRemoveAgentFileInPrompt = async (targetPath: string) => {
+    try {
+      await window.electronAPI.deleteFileInUserData(targetPath)
+    } catch (err) {
+      console.error('Failed to delete old file in userData:', err)
+    }
     setEditingAgentFiles((prev) => prev.filter((f) => f.path !== targetPath))
   }
 
@@ -2163,7 +2184,7 @@ ${cleanTask}
       >
         <ModalOverlay />
         <ModalContent maxW="3xl">
-          <ModalHeader>アシスタント指示の編集</ModalHeader>
+          <ModalHeader>アシスタントの設定</ModalHeader>
           <ModalBody>
             <FormControl mb={4}>
               <FormLabel>アシスタント名</FormLabel>
@@ -2221,18 +2242,6 @@ ${cleanTask}
                   ))}
                 </Box>
               )}
-            </FormControl>
-
-            {/* 会話リセット */}
-            <FormControl mt={5}>
-              <FormLabel>会話履歴のリセット</FormLabel>
-              <Button
-                colorScheme="red"
-                variant="outline"
-                onClick={() => setIsResetConfirmOpen(true)}
-              >
-                会話履歴リセット
-              </Button>
             </FormControl>
           </ModalBody>
           <ModalFooter>

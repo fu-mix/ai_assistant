@@ -146,9 +146,23 @@ ipcMain.handle('save-agents', (_event, agents: AgentData[]) => {
 })
 
 // ----------------------
-// copy-file-to-userdata
+// copy-file-to-userdata (修正)
+//    - oldFilePathが渡された場合は先に削除してからコピー
 // ----------------------
-ipcMain.handle('copy-file-to-userdata', async () => {
+ipcMain.handle('copy-file-to-userdata', async (_event, oldFilePath?: string) => {
+  // 1) もし oldFilePath が指定されていれば削除を試みる
+  if (oldFilePath) {
+    try {
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath)
+        console.log('[copy-file-to-userdata] Deleted old file:', oldFilePath)
+      }
+    } catch (deleteErr) {
+      console.error('[copy-file-to-userdata] Failed to delete old file:', deleteErr)
+    }
+  }
+
+  // 2) ファイル選択ダイアログ
   const { canceled, filePaths } = await dialog.showOpenDialog({
     properties: ['openFile']
   })
@@ -167,6 +181,7 @@ ipcMain.handle('copy-file-to-userdata', async () => {
     const destPath = path.join(filesDir, fileName)
 
     fs.copyFileSync(originalPath, destPath)
+    console.log('[copy-file-to-userdata] Copied new file:', destPath)
 
     return destPath
   } catch (err) {
@@ -213,7 +228,7 @@ ipcMain.handle('delete-file-in-userdata', (_event, filePath: string) => {
 
 // ----------------------
 // postChatAI
-//    - ★ APIリクエスト・レスポンスを console.log で出力
+//    - APIリクエスト・レスポンスを console.log で出力
 // ----------------------
 ipcMain.handle(
   'postChatAI',
@@ -227,7 +242,7 @@ ipcMain.handle(
       console.log('systemPrompt:', systemPrompt)
     }
     const API_ENDPOINT =
-      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent' // (省略)
+      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
 
     try {
@@ -276,9 +291,6 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion()
 })
 
-// ---------------------------
-// ★ ここから追加: タイトル設定のLoad/Save
-// ---------------------------
 ipcMain.handle('load-title-settings', () => {
   return store?.get('titleSettings') || null
 })
@@ -288,6 +300,3 @@ ipcMain.handle('save-title-settings', (_event, newSettings: TitleSettings) => {
 
   return true
 })
-// ---------------------------
-// ★ ここまで
-// ---------------------------

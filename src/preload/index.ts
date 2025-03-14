@@ -24,10 +24,13 @@ if (process.contextIsolated) {
       saveAgents: async (agentsData: any) => {
         return await ipcRenderer.invoke('save-agents', agentsData)
       },
-      // ファイルを userDataにコピー
-      copyFileToUserData: async () => {
-        return await ipcRenderer.invoke('copy-file-to-userdata')
+
+      // ▼ oldFilePath も渡せるように修正
+      // ファイルを userDataにコピー (変更前ファイルパスを指定できる)
+      copyFileToUserData: async (oldFilePath?: string) => {
+        return await ipcRenderer.invoke('copy-file-to-userdata', oldFilePath)
       },
+
       // userData配下のファイルをbase64化
       readFileByPath: async (filePath: string) => {
         return await ipcRenderer.invoke('readFileByPath', filePath)
@@ -40,14 +43,13 @@ if (process.contextIsolated) {
         return await ipcRenderer.invoke('get-app-version')
       },
 
-      // ★ ここから追加: タイトル設定を読み込み/保存
+      // タイトル設定を読み込み/保存
       loadTitleSettings: async () => {
         return await ipcRenderer.invoke('load-title-settings')
       },
       saveTitleSettings: async (settings: any) => {
         return await ipcRenderer.invoke('save-title-settings', settings)
       }
-      // ★ ここまで
     })
   } catch (error) {
     console.error(error)
