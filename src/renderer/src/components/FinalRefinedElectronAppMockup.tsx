@@ -75,10 +75,14 @@ type TitleSegment = {
 
 /**
  * タイトル全体の設定 (文字の部分配列 + 書体)
+ *
+ * ここに backgroundImagePath を追加して
+ * ヘッダー背景画像を永続化できるようにする
  */
 type TitleSettings = {
   segments: TitleSegment[]
   fontFamily: string
+  backgroundImagePath?: string // ★ ヘッダー背景画像のパス(ユーザーデータ内)
 }
 
 /**
@@ -133,8 +137,9 @@ type SubtaskInfo = {
 
 /* ------------------------------------
  * タイトル編集モーダル
- *   - アイコン設定を削除
+ *   - 背景画像アップロード機能を追加
  *   - デフォルトに戻すボタンを追加
+ *   - 画像削除ボタンを追加
  * ------------------------------------ */
 function TitleEditModal({
   isOpen,
@@ -148,8 +153,13 @@ function TitleEditModal({
   setTitleSettings: (val: TitleSettings) => void
 }) {
   const toast = useToast()
+
+  // 既存の文字・色など
   const [tempSegments, setTempSegments] = useState<TitleSegment[]>([])
   const [tempFont, setTempFont] = useState<string>('Arial')
+
+  // ★ 追加: 背景画像のパス(ローカルステート)
+  const [tempBackgroundPath, setTempBackgroundPath] = useState<string | undefined>(undefined)
 
   // 選択肢として用意するフォント例
   const fontOptions = ['Arial', 'Verdana', 'Times New Roman', 'Georgia', 'Courier New']
@@ -170,6 +180,7 @@ function TitleEditModal({
     if (isOpen) {
       setTempSegments(JSON.parse(JSON.stringify(titleSettings.segments)))
       setTempFont(titleSettings.fontFamily)
+      setTempBackgroundPath(titleSettings.backgroundImagePath)
     }
   }, [isOpen, titleSettings])
 
@@ -205,15 +216,67 @@ function TitleEditModal({
     })
   }
 
+  // ★ 背景画像を選択
+  const handleSelectBackgroundImage = async () => {
+    try {
+      // もし既に画像があれば先に削除する
+      if (tempBackgroundPath) {
+        await window.electronAPI.deleteFileInUserData(tempBackgroundPath)
+      }
+      // 新しいファイルを選択し、userDataにコピー
+      const newPath = await window.electronAPI.copyFileToUserData()
+      if (newPath) {
+        setTempBackgroundPath(newPath)
+      } else {
+        toast({
+          title: '画像の選択がキャンセルされました',
+          status: 'info',
+          duration: 1500,
+          isClosable: true
+        })
+      }
+    } catch (err) {
+      console.error('Failed to set background image:', err)
+      toast({
+        title: '背景画像の設定でエラー',
+        status: 'error',
+        duration: 2000,
+        isClosable: true
+      })
+    }
+  }
+
+  // ★ 背景画像削除
+  const handleRemoveBackgroundImage = async () => {
+    if (!tempBackgroundPath) {
+      return
+    }
+    try {
+      const ok = await window.electronAPI.deleteFileInUserData(tempBackgroundPath)
+      if (ok) {
+        setTempBackgroundPath(undefined)
+        toast({
+          title: '背景画像を削除しました',
+          status: 'info',
+          duration: 1500,
+          isClosable: true
+        })
+      }
+    } catch (err) {
+      console.error('Failed to remove background image:', err)
+    }
+  }
+
   // 保存 (タイトル設定を適用し、かつ electronAPI.saveTitleSettings も呼ぶ)
   const handleSaveTitle = async () => {
     const newSettings: TitleSettings = {
       segments: tempSegments,
-      fontFamily: tempFont
+      fontFamily: tempFont,
+      backgroundImagePath: tempBackgroundPath // ★ 追加
     }
     setTitleSettings(newSettings)
 
-    // ▼ ここでタイトルを永続化
+    // ▼ タイトルを永続化
     try {
       if (window.electronAPI.saveTitleSettings) {
         await window.electronAPI.saveTitleSettings(newSettings)
@@ -281,10 +344,34 @@ function TitleEditModal({
             </Button>
           </FormControl>
 
-          <FormControl mt={4}>
+          {/* デフォルトに戻す */}
+          <FormControl mt={4} mb={6}>
             <Button colorScheme="orange" variant="outline" onClick={handleRevertDefault}>
               デフォルトに戻す
             </Button>
+          </FormControl>
+
+          {/* ★ 背景画像の設定・削除 */}
+          <FormControl mt={2}>
+            <FormLabel>ヘッダー背景画像</FormLabel>
+            <HStack spacing={3}>
+              <Button colorScheme="blue" onClick={handleSelectBackgroundImage}>
+                背景画像を選択
+              </Button>
+              <Button
+                colorScheme="red"
+                variant="outline"
+                onClick={handleRemoveBackgroundImage}
+                isDisabled={!tempBackgroundPath}
+              >
+                背景画像を削除
+              </Button>
+            </HStack>
+            {tempBackgroundPath && (
+              <Text fontSize="sm" color="gray.600" mt={2}>
+                現在設定中: {tempBackgroundPath}
+              </Text>
+            )}
           </FormControl>
         </ModalBody>
 
@@ -421,7 +508,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
   // --------------------------------
-  // タイトル設定 (部分文字+色 + フォント)
+  // タイトル設定 (部分文字+色 + フォント + 背景画像パス)
   // --------------------------------
   const [titleSettings, setTitleSettings] = useState<TitleSettings>({
     segments: [
@@ -432,10 +519,14 @@ export const FinalRefinedElectronAppMockup = () => {
       { text: 'A', color: '#ffd700' },
       { text: 'ssistant', color: '#333333' }
     ],
-    fontFamily: 'Arial'
+    fontFamily: 'Arial',
+    backgroundImagePath: undefined // 追加: 初期は無し
   })
   const [isTitleEditOpen, setIsTitleEditOpen] = useState(false)
   const [titleHovered, setTitleHovered] = useState(false)
+
+  // ★ 追加: ヘッダー背景を base64 で保持して data URI 化
+  const [headerBgDataUri, setHeaderBgDataUri] = useState<string | undefined>(undefined)
 
   // --------------------------------
   // オートアシスト関連
@@ -546,6 +637,38 @@ export const FinalRefinedElectronAppMockup = () => {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
     }
   }, [chats, selectedChatId, autoAssistMessages])
+
+  // ★ ヘッダー画像を base64 で読み込み、data URI を生成
+  useEffect(() => {
+    async function loadHeaderBgIfNeeded() {
+      const bgPath = titleSettings.backgroundImagePath
+      if (!bgPath) {
+        setHeaderBgDataUri(undefined)
+
+        return
+      }
+      try {
+        const fileBase64 = await window.electronAPI.readFileByPath(bgPath)
+        if (!fileBase64) {
+          setHeaderBgDataUri(undefined)
+
+          return
+        }
+        // 拡張子から MIME を推定
+        const lower = bgPath.toLowerCase()
+        let mime = 'image/png'
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
+        else if (lower.endsWith('.gif')) mime = 'image/gif'
+        else if (lower.endsWith('.webp')) mime = 'image/webp'
+
+        setHeaderBgDataUri(`data:${mime};base64,${fileBase64}`)
+      } catch (err) {
+        console.error('Failed to load header background as base64:', err)
+        setHeaderBgDataUri(undefined)
+      }
+    }
+    loadHeaderBgIfNeeded()
+  }, [titleSettings.backgroundImagePath])
 
   // CSV->JSON
   function csvToJson(csv: string): string {
@@ -688,7 +811,7 @@ export const FinalRefinedElectronAppMockup = () => {
   }
 
   // --------------------------------
-  // オートアシスト系ロジック
+  // オートアシスト系ロジック (省略: 既存コードをそのまま)
   // --------------------------------
   async function executeSubtasksAndShowOnce(subtasks: SubtaskInfo[]) {
     setAutoAssistState('executing')
@@ -926,7 +1049,6 @@ ${cleanTask}
     if (selectedChatId === 'autoAssist' && editIndex != null) {
       setIsLoading(true)
       try {
-        // 1. autoAssistMessages (画面表示用) の該当index以降を削除し、新しい内容を挿入
         const clonedAuto = [...autoAssistMessages]
         clonedAuto.splice(editIndex, clonedAuto.length - editIndex, {
           type: 'user',
@@ -934,7 +1056,6 @@ ${cleanTask}
         })
         setAutoAssistMessages(clonedAuto)
 
-        // 2. chats[] のAUTO_ASSIST_IDに対応するものも同様に削除し挿入
         const updatedChats = chats.map((chat) => {
           if (chat.id === AUTO_ASSIST_ID) {
             const cloned = [...chat.messages]
@@ -942,7 +1063,6 @@ ${cleanTask}
               type: 'user',
               content: inputMessage
             })
-
             const clonedPost = [...chat.postMessages]
             clonedPost.splice(editIndex, clonedPost.length - editIndex)
 
@@ -958,12 +1078,9 @@ ${cleanTask}
         setChats(updatedChats)
         await window.electronAPI.saveAgents(updatedChats)
 
-        // 3. 入力フォーム/添付ファイルをクリア
         setEditIndex(null)
         setInputMessage('')
         setTempFiles([])
-
-        // 4. いったん再度 handleAutoAssistSend() を呼び、再実行する(=タスク分割～AI応答)
         await handleAutoAssistSend()
 
         toast({
@@ -1132,7 +1249,6 @@ ${cleanTask}
           return
         }
 
-        // 再実行
         const ephemeralMsg: Messages = {
           role: 'user',
           parts: [{ text: inputMessage }]
@@ -1675,12 +1791,16 @@ ${cleanTask}
 
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
-      {/* ヘッダー */}
+      {/* ヘッダー (背景画像 + タイトル) */}
       <Flex
         as="header"
-        bg="white"
+        backgroundImage={headerBgDataUri ? headerBgDataUri : undefined}
+        backgroundSize="cover"
+        backgroundPosition="center"
+        backgroundRepeat="no-repeat"
         borderBottom="1px"
         borderColor="gray.200"
+        bg={headerBgDataUri ? undefined : 'white'}
         p={4}
         justify="space-between"
         align="center"
@@ -1742,6 +1862,7 @@ ${cleanTask}
               type="password"
               size="md"
               isDisabled={isExpired}
+              bgColor="white"
               w="300px"
             />
             <Button
@@ -2354,7 +2475,7 @@ ${cleanTask}
         onConfirmResetAutoAssist={handleConfirmResetAutoAssist}
       />
 
-      {/* タイトル編集モーダル */}
+      {/* タイトル編集モーダル (背景画像対応済み) */}
       <TitleEditModal
         isOpen={isTitleEditOpen}
         onClose={() => setIsTitleEditOpen(false)}
