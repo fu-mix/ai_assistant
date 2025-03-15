@@ -40,14 +40,16 @@ type AgentData = {
   agentFileMimeType?: string
 }
 
-// ※ StoreSchema は使わないので削除/コメントアウト
-// interface StoreSchema {
-//   agents: AgentData[]
-// }
+// タイトル設定の型を定義 (複数セグメント+フォント)
+type TitleSegment = {
+  text: string
+  color: string
+}
+type TitleSettings = {
+  segments: TitleSegment[]
+  fontFamily: string
+}
 
-/**
- * electron-storeなどを動的importで初期化
- */
 import { createRequire } from 'module'
 let store: any = null
 
@@ -70,15 +72,13 @@ async function initStore() {
   return storeInstance
 }
 
-/**
- * createWindow
- */
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1566,
     height: 1000,
     show: false,
     autoHideMenuBar: true,
+    title: '',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -146,10 +146,23 @@ ipcMain.handle('save-agents', (_event, agents: AgentData[]) => {
 })
 
 // ----------------------
-// copy-file-to-userdata
-//  -> userData配下にコピーしてパスを返す
+// copy-file-to-userdata (修正)
+//    - oldFilePathが渡された場合は先に削除してからコピー
 // ----------------------
-ipcMain.handle('copy-file-to-userdata', async () => {
+ipcMain.handle('copy-file-to-userdata', async (_event, oldFilePath?: string) => {
+  // 1) もし oldFilePath が指定されていれば削除を試みる
+  if (oldFilePath) {
+    try {
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath)
+        console.log('[copy-file-to-userdata] Deleted old file:', oldFilePath)
+      }
+    } catch (deleteErr) {
+      console.error('[copy-file-to-userdata] Failed to delete old file:', deleteErr)
+    }
+  }
+
+  // 2) ファイル選択ダイアログ
   const { canceled, filePaths } = await dialog.showOpenDialog({
     properties: ['openFile']
   })
@@ -168,6 +181,7 @@ ipcMain.handle('copy-file-to-userdata', async () => {
     const destPath = path.join(filesDir, fileName)
 
     fs.copyFileSync(originalPath, destPath)
+    console.log('[copy-file-to-userdata] Copied new file:', destPath)
 
     return destPath
   } catch (err) {
@@ -214,13 +228,23 @@ ipcMain.handle('delete-file-in-userdata', (_event, filePath: string) => {
 
 // ----------------------
 // postChatAI
+//    - APIリクエスト・レスポンスを console.log で出力
 // ----------------------
 ipcMain.handle(
   'postChatAI',
   async (_event, message: Messages[], apiKey: string, systemPrompt: string) => {
+    const debugFlag = `${import.meta.env.MAIN_VITE_DEBUG}`
+
+    if (debugFlag) {
+      console.log('\n=== postChatAI Request ===')
+      console.log('messages:', JSON.stringify(message, null, 2))
+      console.log('apiKey:', apiKey ? '********' : '(none)')
+      console.log('systemPrompt:', systemPrompt)
+    }
     const API_ENDPOINT =
-      'https://ai-foundation-api.app/ai-foundation/chat-ai/gemini/pro:generateContent'
+      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
     const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
+
     try {
       const response = await axios.post(
         API_ENDPOINT,
@@ -249,6 +273,12 @@ ipcMain.handle(
       }
       const resData: string = response.data.candidates[0].content.parts[0].text
 
+      if (debugFlag) {
+        console.log('\n=== postChatAI Response ===')
+        console.log(resData)
+        console.log('============================\n')
+      }
+
       return resData
     } catch (error) {
       console.error('Error sending message:', error)
@@ -256,3 +286,17 @@ ipcMain.handle(
     }
   }
 )
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
+
+ipcMain.handle('load-title-settings', () => {
+  return store?.get('titleSettings') || null
+})
+
+ipcMain.handle('save-title-settings', (_event, newSettings: TitleSettings) => {
+  store?.set('titleSettings', newSettings)
+
+  return true
+})
