@@ -1802,6 +1802,7 @@ ${cleanTask}
         borderColor="gray.200"
         bg={headerBgDataUri ? undefined : 'white'}
         p={4}
+        height={headerBgDataUri ? '130px' : undefined}
         justify="space-between"
         align="center"
       >
@@ -1836,9 +1837,9 @@ ${cleanTask}
           )}
         </HStack>
 
-        <HStack spacing={8}>
+        <HStack spacing={5}>
           <Box>
-            <Text fontSize="sm" color="gray.600">
+            <Text fontSize="sm" color={headerBgDataUri ? 'white' : 'gray.600'}>
               Version: {appVersion}
             </Text>
           </Box>
