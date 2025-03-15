@@ -864,6 +864,7 @@ ${cleanTask}
         return c
       })
       setChats(updatedStore as ChatInfo[])
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -888,6 +889,7 @@ ${cleanTask}
           return c
         })
         setChats(updated2 as ChatInfo[])
+        // @ts-ignore
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -910,6 +912,7 @@ ${cleanTask}
         return c
       })
       setChats(updatedErr as ChatInfo[])
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
