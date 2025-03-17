@@ -1844,16 +1844,18 @@ ${cleanTask}
             </Text>
           </Box>
 
-          {selectedChatId === 'autoAssist' && (
+          {/* {selectedChatId === 'autoAssist' && (
             <HStack align="center">
-              <Text fontSize="sm">エージェントモード</Text>
+              <Text fontSize="sm" color={headerBgDataUri ? 'white' : 'gray.600'}>
+                エージェントモード
+              </Text>
               <Switch
                 isChecked={agentMode}
                 onChange={(e) => setAgentMode(e.target.checked)}
                 colorScheme="teal"
               />
             </HStack>
-          )}
+          )} */}
 
           <HStack spacing={4}>
             <Input
@@ -2169,6 +2171,16 @@ ${cleanTask}
                 >
                   ナレッジを使用する
                 </Checkbox>
+              )}
+              {selectedChatId === 'autoAssist' && (
+                <HStack align="center">
+                  <Text fontSize="sm">エージェントモード</Text>
+                  <Switch
+                    isChecked={agentMode}
+                    onChange={(e) => setAgentMode(e.target.checked)}
+                    colorScheme="teal"
+                  />
+                </HStack>
               )}
 
               <IconButton
