@@ -578,6 +578,9 @@ export const FinalRefinedElectronAppMockup = () => {
   // バージョン
   const [appVersion, setAppVersion] = useState<string>('')
 
+  // ★ 前回のメッセージ数を保持し、増えた場合のみスクロール
+  const prevMessageCountRef = useRef<number>(0)
+
   // --------------------------------
   // 初期ロード
   // --------------------------------
@@ -631,11 +634,27 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [])
 
-  // チャット欄常にスクロール最下部
+  // ★ チャット欄スクロール制御: メッセージ数が増えたときのみスクロール
   useEffect(() => {
-    if (chatHistoryRef.current) {
-      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
+    // 現在のメッセージ数を取得
+    let currentMsgCount = 0
+    if (selectedChatId === 'autoAssist') {
+      currentMsgCount = autoAssistMessages.length
+    } else if (typeof selectedChatId === 'number') {
+      const found = chats.find((c) => c.id === selectedChatId)
+      if (found) {
+        currentMsgCount = found.messages.length
+      }
     }
+
+    // メッセージ数が増加していればスクロール
+    if (currentMsgCount > prevMessageCountRef.current) {
+      if (chatHistoryRef.current) {
+        chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
+      }
+    }
+
+    prevMessageCountRef.current = currentMsgCount
   }, [chats, selectedChatId, autoAssistMessages])
 
   // ★ ヘッダー画像を base64 で読み込み、data URI を生成
@@ -1844,17 +1863,6 @@ ${cleanTask}
             </Text>
           </Box>
 
-          {selectedChatId === 'autoAssist' && (
-            <HStack align="center">
-              <Text fontSize="sm">エージェントモード</Text>
-              <Switch
-                isChecked={agentMode}
-                onChange={(e) => setAgentMode(e.target.checked)}
-                colorScheme="teal"
-              />
-            </HStack>
-          )}
-
           <HStack spacing={4}>
             <Input
               value={apiKey}
@@ -2170,6 +2178,16 @@ ${cleanTask}
                   ナレッジを使用する
                 </Checkbox>
               )}
+              {selectedChatId === 'autoAssist' && (
+                <HStack align="center">
+                  <Text fontSize="sm">エージェントモード</Text>
+                  <Switch
+                    isChecked={agentMode}
+                    onChange={(e) => setAgentMode(e.target.checked)}
+                    colorScheme="teal"
+                  />
+                </HStack>
+              )}
 
               <IconButton
                 icon={<LuPaperclip />}
@@ -2393,6 +2411,16 @@ ${cleanTask}
                   ))}
                 </Box>
               )}
+            </FormControl>
+            <FormControl mt={5}>
+              <FormLabel>会話履歴のリセット</FormLabel>
+              <Button
+                colorScheme="red"
+                variant="outline"
+                onClick={() => setIsResetConfirmOpen(true)}
+              >
+                会話履歴リセット
+              </Button>
             </FormControl>
           </ModalBody>
           <ModalFooter>
