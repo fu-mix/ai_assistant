@@ -2412,6 +2412,16 @@ ${cleanTask}
                 </Box>
               )}
             </FormControl>
+            <FormControl mt={5}>
+              <FormLabel>会話履歴のリセット</FormLabel>
+              <Button
+                colorScheme="red"
+                variant="outline"
+                onClick={() => setIsResetConfirmOpen(true)}
+              >
+                会話履歴リセット
+              </Button>
+            </FormControl>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
