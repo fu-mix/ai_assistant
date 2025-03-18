@@ -1813,6 +1813,7 @@ ${cleanTask}
     e.preventDefault()
   }
 
+  // @ts-ignore
   function handleDragStart(e: React.DragEvent<HTMLLIElement>, index: number) {
     setDragStartIndex(index)
   }
