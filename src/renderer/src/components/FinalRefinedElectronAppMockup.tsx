@@ -1252,7 +1252,8 @@ ${cleanTask}
             return {
               ...chat,
               messages: cloned,
-              postMessages: clonedPost
+              postMessages: clonedPost,
+              inputMessage: ''
             }
           }
 
@@ -1845,6 +1846,9 @@ ${cleanTask}
 
   const selectedChatObj =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
+
+  console.log('inputmessage', inputMessage)
+  console.log('ref', chatInputRef.current)
 
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
