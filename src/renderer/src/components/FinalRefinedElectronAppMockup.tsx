@@ -1897,7 +1897,7 @@ ${cleanTask}
         <HStack spacing={5}>
           <Box>
             <Text fontSize="sm" color={headerBgDataUri ? 'white' : 'gray.600'}>
-              Version: {appVersion}
+              Ver. {appVersion}
             </Text>
           </Box>
 
