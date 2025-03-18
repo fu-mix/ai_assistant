@@ -581,6 +581,9 @@ export const FinalRefinedElectronAppMockup = () => {
   // ★ 前回のメッセージ数を保持し、増えた場合のみスクロール
   const prevMessageCountRef = useRef<number>(0)
 
+  // ★ ドラッグ元のアシスタントIndexを管理 (オートアシストは対象外)
+  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null)
+
   // --------------------------------
   // 初期ロード
   // --------------------------------
@@ -1805,6 +1808,40 @@ ${cleanTask}
     setInputMessage(oldContent)
   }
 
+  // ★ リスト用Drag Over
+  function handleListDragOver(e: React.DragEvent<HTMLLIElement>) {
+    e.preventDefault()
+  }
+
+  function handleDragStart(e: React.DragEvent<HTMLLIElement>, index: number) {
+    setDragStartIndex(index)
+  }
+
+  // ★ リスト項目用 drop 関数を別名に (handleListDrop)
+  function handleListDrop(e: React.DragEvent<HTMLLIElement>, dropIndex: number) {
+    e.preventDefault()
+    if (dragStartIndex == null || dragStartIndex === dropIndex) return
+
+    const newChats = [...chats]
+
+    // 1) オートアシストは対象外なので newChats からオートアシスト以外を抽出
+    const filtered = newChats.filter((c) => c.id !== AUTO_ASSIST_ID)
+
+    // 2) dragStartIndex, dropIndex に応じて順序を入れ替え
+    const dragItem = filtered[dragStartIndex]
+    filtered.splice(dragStartIndex, 1)
+    filtered.splice(dropIndex, 0, dragItem)
+
+    // 3) 置き換え後の filtered を再度 newChats に合流(AUTO_ASSIST_IDの位置は変えない)
+    const autoAssistObj = newChats.find((c) => c.id === AUTO_ASSIST_ID)
+    const finalChats = autoAssistObj ? [...filtered, autoAssistObj] : filtered
+
+    setChats(finalChats)
+    window.electronAPI.saveAgents(finalChats).catch(console.error)
+
+    setDragStartIndex(null)
+  }
+
   const selectedChatObj =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
@@ -1947,10 +1984,10 @@ ${cleanTask}
             </List>
           </Box>
 
-          {/* アシスタント一覧 */}
+          {/* アシスタント一覧 (ドラッグ＆ドロップ対応) */}
           <Box overflowY="auto" flex="1">
             <List spacing={3} p={4}>
-              {chats.map((chat) => {
+              {chats.map((chat, index) => {
                 if (chat.id === AUTO_ASSIST_ID) return null
 
                 return (
@@ -1960,11 +1997,16 @@ ${cleanTask}
                     bg={chat.id === selectedChatId ? 'blue.100' : 'white'}
                     borderRadius="md"
                     cursor="pointer"
-                    onClick={() => handleSelectChat(chat.id)}
                     overflow="hidden"
                     textOverflow="ellipsis"
                     whiteSpace="nowrap"
                     _hover={{ bg: chat.id === selectedChatId ? 'blue.100' : 'blue.50' }}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={handleListDragOver}
+                    // ★ 変更点: onDrop -> onListDrop
+                    onDrop={(e) => handleListDrop(e, index)}
+                    onClick={() => handleSelectChat(chat.id)}
                   >
                     <Flex justify="space-between" align="center">
                       <Box>
