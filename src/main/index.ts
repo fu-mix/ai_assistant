@@ -8,6 +8,12 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import * as fs from 'fs'
 import * as path from 'path'
 
+// === 追加: adm-zip をインポート ===
+import AdmZip from 'adm-zip'
+
+// 追加: os.userInfo() で実行ユーザー名を取得するため
+import * as os from 'os'
+
 /**
  * Messages定義
  */
@@ -38,9 +44,12 @@ type AgentData = {
   agentFilePath?: string // userDataにコピーしたファイルパス
   agentFileData?: string // 互換のため残す場合
   agentFileMimeType?: string
+  // 修正: agentFilePaths をサポートしうる場合もある (下位互換用にこのまま)
 }
 
-// タイトル設定の型を定義 (複数セグメント+フォント)
+/**
+ * タイトル設定の型を定義 (複数セグメント+フォント)
+ */
 type TitleSegment = {
   text: string
   color: string
@@ -48,6 +57,7 @@ type TitleSegment = {
 type TitleSettings = {
   segments: TitleSegment[]
   fontFamily: string
+  backgroundImagePath?: string // background 追加
 }
 
 import { createRequire } from 'module'
@@ -299,4 +309,275 @@ ipcMain.handle('save-title-settings', (_event, newSettings: TitleSettings) => {
   store?.set('titleSettings', newSettings)
 
   return true
+})
+
+//
+// === ↓ ここからが「エクスポート／インポート機能」の追記部分です ====
+//
+
+// === ここまでは既存 ===
+
+// ----------------------------------------------------
+// (1) ユーザー名を {userName} に置き換える (エクスポート時用)
+// ----------------------------------------------------
+function replaceRealUserNameWithToken(originalData: any): any {
+  // deep copy
+  const data = JSON.parse(JSON.stringify(originalData))
+  const userName = os.userInfo().username
+  // Windows想定のベースパスを作成 (例: C:\Users\xxx\AppData\Roaming\desain_assistant\files)
+  const basePrefix = `C:\\Users\\${userName}\\AppData\\Roaming\\desain_assistant\\files`
+  const tokenPrefix = `C:\\Users\\{userName}\\AppData\\Roaming\\desain_assistant\\files`
+
+  // もし agents があれば、agentFilePaths を置換
+  if (Array.isArray(data.agents)) {
+    data.agents.forEach((agent: any) => {
+      if (Array.isArray(agent.agentFilePaths)) {
+        agent.agentFilePaths = agent.agentFilePaths.map((filePath: string) => {
+          if (filePath.startsWith(basePrefix)) {
+            return filePath.replace(basePrefix, tokenPrefix)
+          }
+
+          return filePath
+        })
+      }
+    })
+  }
+
+  // titleSettings.backgroundImagePath も置換
+  if (data.titleSettings && data.titleSettings.backgroundImagePath) {
+    const p = data.titleSettings.backgroundImagePath
+    if (p.startsWith(basePrefix)) {
+      data.titleSettings.backgroundImagePath = p.replace(basePrefix, tokenPrefix)
+    }
+  }
+
+  return data
+}
+
+// ----------------------------------------------------
+// (2) {userName} を 実行ユーザー名 に書き換える (インポート時用)
+// ----------------------------------------------------
+function replaceTokenWithRealUserName(originalData: any): any {
+  // deep copy
+  const data = JSON.parse(JSON.stringify(originalData))
+  const userName = os.userInfo().username
+  // Windows想定
+  const tokenPrefix = `C:\\Users\\{userName}\\AppData\\Roaming\\desain_assistant\\files`
+  const basePrefix = `C:\\Users\\${userName}\\AppData\\Roaming\\desain_assistant\\files`
+
+  // agents
+  if (Array.isArray(data.agents)) {
+    data.agents.forEach((agent: any) => {
+      if (Array.isArray(agent.agentFilePaths)) {
+        agent.agentFilePaths = agent.agentFilePaths.map((filePath: string) => {
+          if (filePath.startsWith(tokenPrefix)) {
+            return filePath.replace(tokenPrefix, basePrefix)
+          }
+
+          return filePath
+        })
+      }
+    })
+  }
+
+  // titleSettings
+  if (data.titleSettings && data.titleSettings.backgroundImagePath) {
+    const p = data.titleSettings.backgroundImagePath
+    if (p.startsWith(tokenPrefix)) {
+      data.titleSettings.backgroundImagePath = p.replace(tokenPrefix, basePrefix)
+    }
+  }
+
+  return data
+}
+
+// ----------------------------------------------------
+// config.json + filesフォルダ → ZIP 生成エクスポート
+// ----------------------------------------------------
+
+// ipcMain.handle('show-save-dialog', async (_event, defaultFileName: string) => {
+ipcMain.handle('show-save-dialog', async (_event) => {
+  try {
+    // electron-store 全体データを取り出す (agents, titleSettings 等すべて)
+    const entireStoreData = store.store
+
+    // --- (A) ユーザー名部分を {userName} に置換 ---
+    const replacedForExport = replaceRealUserNameWithToken(entireStoreData)
+    const rawContentForExport = JSON.stringify(replacedForExport, null, 2)
+
+    // 「assistant_export.zip」をデフォルトにする
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'アシスタント一式をエクスポート',
+      defaultPath: 'assistant_export.zip',
+      filters: [{ name: 'ZIP Files', extensions: ['zip'] }]
+    })
+    if (canceled || !filePath) {
+      return // ユーザーキャンセル
+    }
+
+    // --- (B) ZIP を作成 ---
+    const zip = new AdmZip()
+
+    // 1) config.json を ZIP 内に追加 (history/config.jsonというパスにしておく)
+    zip.addFile('history/config.json', Buffer.from(rawContentForExport, 'utf-8'))
+
+    // 2) files フォルダ配下の全ファイルを ZIP に追加
+    const userDataDir = app.getPath('userData')
+    const filesDir = path.join(userDataDir, 'files')
+    if (fs.existsSync(filesDir)) {
+      // 再帰的に全ファイルを追加
+      zip.addLocalFolder(filesDir, 'files')
+    }
+
+    // --- (C) ZIPを書き出し ---
+    zip.writeZip(filePath)
+
+    console.log('[show-save-dialog] ZIPエクスポート完了:', filePath)
+
+    return
+  } catch (err) {
+    console.error('[show-save-dialog]エクスポート中エラー:', err)
+    throw err
+  }
+})
+
+// ----------------------------------------------------
+// ZIP(assistant_export.zip) を読み込み -> 展開 -> config.json復元
+// ----------------------------------------------------
+ipcMain.handle('show-open-dialog-and-read', async (_event) => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: 'アシスタント一式をインポート (ZIP)',
+      properties: ['openFile'],
+      filters: [
+        { name: 'ZIP Files', extensions: ['zip'] },
+        // 下位互換でjsonも一応許可
+        { name: 'JSON Files', extensions: ['json'] }
+      ]
+    })
+    if (canceled || filePaths.length === 0) {
+      return null
+    }
+
+    const chosenPath = filePaths[0]
+    if (!fs.existsSync(chosenPath)) {
+      return null
+    }
+
+    // -------------------------
+    // (A) もし拡張子が zip でなければ旧ロジック(従来のJSONインポート)を使う
+    // -------------------------
+    if (path.extname(chosenPath).toLowerCase() !== '.zip') {
+      // 旧: config.json だけ読む動作
+      const rawContent = fs.readFileSync(chosenPath, 'utf-8')
+
+      // そのまま返す
+      return rawContent
+    }
+
+    // -------------------------
+    // (B) ZIP 解凍して config.json + filesディレクトリ を取り出す
+    // -------------------------
+    const tmpDir = path.join(app.getPath('temp'), `tmp_import_${Date.now()}`)
+    fs.mkdirSync(tmpDir, { recursive: true })
+
+    const zip = new AdmZip(chosenPath)
+    zip.extractAllTo(tmpDir, true)
+    console.log('[show-open-dialog-and-read] ZIP解凍完了:', tmpDir)
+
+    // config.json は history/config.json に置かれている想定
+    const configJsonPath = path.join(tmpDir, 'history', 'config.json')
+    if (!fs.existsSync(configJsonPath)) {
+      console.error('ZIP内に history/config.json がありません')
+
+      return null
+    }
+
+    let rawContent = fs.readFileSync(configJsonPath, 'utf-8')
+    // JSONパースできるかチェック
+    let parsed: any = null
+    try {
+      parsed = JSON.parse(rawContent)
+    } catch (err) {
+      console.error('ZIP内config.jsonが壊れています', err)
+
+      return null
+    }
+
+    // {userName} を 実行ユーザー名 に置換
+    const replaced = replaceTokenWithRealUserName(parsed)
+    rawContent = JSON.stringify(replaced, null, 2)
+
+    // -------------------------
+    // (C) filesフォルダの中身を userData/files へコピー(上書き)
+    // -------------------------
+    const userDataDir = app.getPath('userData')
+    const filesDir = path.join(userDataDir, 'files')
+    const extractedFilesDir = path.join(tmpDir, 'files')
+
+    if (fs.existsSync(extractedFilesDir)) {
+      // ディレクトリを再帰的にコピー
+      copyFolderRecursiveSync(extractedFilesDir, filesDir)
+    }
+
+    console.log('[show-open-dialog-and-read] filesフォルダをコピー完了')
+
+    // 最後に、呼び出し元(レンダラー)へ rawContent(最終的に置換済みのconfig) を返す
+    return rawContent
+  } catch (err) {
+    console.error('[show-open-dialog-and-read]インポート中エラー:', err)
+    throw err
+  }
+})
+
+// 再帰コピー用: シンプルなフォルダコピー関数
+function copyFolderRecursiveSync(src: string, dest: string) {
+  if (!fs.existsSync(src)) {
+    return
+  }
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true })
+  }
+  const entries = fs.readdirSync(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      copyFolderRecursiveSync(srcPath, destPath)
+    } else {
+      fs.copyFileSync(srcPath, destPath)
+    }
+  }
+}
+
+// ----------------------------------------------------
+// 古い config.json を .old にリネームし、新しい config をコピー
+//   + store に反映
+// ----------------------------------------------------
+ipcMain.handle('replace-local-history-config', async (_event, newContent: string) => {
+  try {
+    const storeFilePath = store.path // electron-storeの実ファイル
+    if (!fs.existsSync(storeFilePath)) {
+      // もし存在しないなら、そのまま書き込み
+      fs.writeFileSync(storeFilePath, newContent, 'utf-8')
+    } else {
+      // oldにリネーム
+      const oldPath = storeFilePath + '.old'
+      // 既に old があれば削除
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath)
+      }
+      fs.renameSync(storeFilePath, oldPath)
+
+      // 新しい config をコピー
+      fs.writeFileSync(storeFilePath, newContent, 'utf-8')
+    }
+
+    // さらに store に反映 (次回アプリ起動時だけでなく即時反映するため)
+    const parsed = JSON.parse(newContent)
+    store.store = parsed
+  } catch (err) {
+    console.error('[replace-local-history-config] インポート適用中エラー:', err)
+    throw err
+  }
 })

@@ -27,6 +27,7 @@
     "@electron-toolkit/utils": "^3.0.0",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
+    "adm-zip": "^0.5.16",
     "axios": "^1.7.3",
     "electron-store": "^7.0.3",
     "electron-updater": "^6.1.7",

@@ -29,7 +29,11 @@ import {
   Td,
   Switch,
   Tooltip,
-  Select
+  Select,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem
 } from '@chakra-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -38,6 +42,7 @@ import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 import { MdOutlineContentCopy } from 'react-icons/md'
 import { FiEdit } from 'react-icons/fi' // タイトル編集アイコンなど
+import { HamburgerIcon } from '@chakra-ui/icons' // ハンバーガーボタン用
 
 /**
  * Electron API interface
@@ -57,6 +62,11 @@ interface ElectronAPI {
   // ★ ここから追記: タイトル設定の保存/読み込み
   loadTitleSettings?: () => Promise<TitleSettings | null>
   saveTitleSettings?: (settings: TitleSettings) => Promise<void>
+
+  // ▼ さらに追記: config.json のエクスポート / インポート (本体側で実装)
+  showSaveDialog?: (defaultFileName: string) => Promise<void>
+  showOpenDialogAndRead?: () => Promise<string | null>
+  replaceLocalHistoryConfig?: (newContent: string) => Promise<void>
 }
 
 declare global {
@@ -137,9 +147,6 @@ type SubtaskInfo = {
 
 /* ------------------------------------
  * タイトル編集モーダル
- *   - 背景画像アップロード機能を追加
- *   - デフォルトに戻すボタンを追加
- *   - 画像削除ボタンを追加
  * ------------------------------------ */
 function TitleEditModal({
   isOpen,
@@ -219,11 +226,9 @@ function TitleEditModal({
   // ★ 背景画像を選択
   const handleSelectBackgroundImage = async () => {
     try {
-      // もし既に画像があれば先に削除する
       if (tempBackgroundPath) {
         await window.electronAPI.deleteFileInUserData(tempBackgroundPath)
       }
-      // 新しいファイルを選択し、userDataにコピー
       const newPath = await window.electronAPI.copyFileToUserData()
       if (newPath) {
         setTempBackgroundPath(newPath)
@@ -267,12 +272,12 @@ function TitleEditModal({
     }
   }
 
-  // 保存 (タイトル設定を適用し、かつ electronAPI.saveTitleSettings も呼ぶ)
+  // 保存
   const handleSaveTitle = async () => {
     const newSettings: TitleSettings = {
       segments: tempSegments,
       fontFamily: tempFont,
-      backgroundImagePath: tempBackgroundPath // ★ 追加
+      backgroundImagePath: tempBackgroundPath
     }
     setTitleSettings(newSettings)
 
@@ -508,7 +513,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
   // --------------------------------
-  // タイトル設定 (部分文字+色 + フォント + 背景画像パス)
+  // タイトル設定
   // --------------------------------
   const [titleSettings, setTitleSettings] = useState<TitleSettings>({
     segments: [
@@ -520,12 +525,12 @@ export const FinalRefinedElectronAppMockup = () => {
       { text: 'ssistant', color: '#333333' }
     ],
     fontFamily: 'Arial',
-    backgroundImagePath: undefined // 追加: 初期は無し
+    backgroundImagePath: undefined
   })
   const [isTitleEditOpen, setIsTitleEditOpen] = useState(false)
   const [titleHovered, setTitleHovered] = useState(false)
 
-  // ★ 追加: ヘッダー背景を base64 で保持して data URI 化
+  // ★ 追加: ヘッダー背景Base64
   const [headerBgDataUri, setHeaderBgDataUri] = useState<string | undefined>(undefined)
 
   // --------------------------------
@@ -572,17 +577,14 @@ export const FinalRefinedElectronAppMockup = () => {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // メッセージ編集用Index
   const [editIndex, setEditIndex] = useState<number | null>(null)
 
-  // バージョン
   const [appVersion, setAppVersion] = useState<string>('')
 
-  // ★ 前回のメッセージ数を保持し、増えた場合のみスクロール
   const prevMessageCountRef = useRef<number>(0)
 
-  // ★ ドラッグ元のアシスタントIndexを管理 (オートアシストは対象外)
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   // --------------------------------
   // 初期ロード
@@ -624,7 +626,7 @@ export const FinalRefinedElectronAppMockup = () => {
       setIsExpired(true)
     }
 
-    // タイトル設定のロード (あれば)
+    // タイトル設定のロード
     if (window.electronAPI.loadTitleSettings) {
       window.electronAPI
         .loadTitleSettings()
@@ -637,9 +639,8 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }, [])
 
-  // ★ チャット欄スクロール制御: メッセージ数が増えたときのみスクロール
+  // ★ チャット欄スクロール制御
   useEffect(() => {
-    // 現在のメッセージ数を取得
     let currentMsgCount = 0
     if (selectedChatId === 'autoAssist') {
       currentMsgCount = autoAssistMessages.length
@@ -650,17 +651,15 @@ export const FinalRefinedElectronAppMockup = () => {
       }
     }
 
-    // メッセージ数が増加していればスクロール
     if (currentMsgCount > prevMessageCountRef.current) {
       if (chatHistoryRef.current) {
         chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
       }
     }
-
     prevMessageCountRef.current = currentMsgCount
   }, [chats, selectedChatId, autoAssistMessages])
 
-  // ★ ヘッダー画像を base64 で読み込み、data URI を生成
+  // ★ ヘッダー画像のbase64
   useEffect(() => {
     async function loadHeaderBgIfNeeded() {
       const bgPath = titleSettings.backgroundImagePath
@@ -676,7 +675,6 @@ export const FinalRefinedElectronAppMockup = () => {
 
           return
         }
-        // 拡張子から MIME を推定
         const lower = bgPath.toLowerCase()
         let mime = 'image/png'
         if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
@@ -692,33 +690,11 @@ export const FinalRefinedElectronAppMockup = () => {
     loadHeaderBgIfNeeded()
   }, [titleSettings.backgroundImagePath])
 
-  // CSV->JSON
-  function csvToJson(csv: string): string {
-    const lines = csv.trim().split('\n')
-    if (lines.length < 1) return JSON.stringify([])
-    const headers = lines[0].split(',')
-    const result = []
-    for (let i = 1; i < lines.length; i++) {
-      const row = lines[i].split(',')
-      if (row.length !== headers.length) continue
-      const obj: Record<string, string> = {}
-      headers.forEach((h, idx) => {
-        obj[h.trim()] = row[idx].trim()
-      })
-      // @ts-ignore
-      result.push(obj)
-    }
-
-    return JSON.stringify(result, null, 2)
-  }
-
   // -----------------------------
   // ファイル添付 (チャット用)
   // -----------------------------
   const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    // @ts-ignore
-    const fileNum = files?.length
     if (!files || files.length === 0) return
 
     const newFiles: { name: string; data: string; mimeType: string }[] = []
@@ -746,7 +722,7 @@ export const FinalRefinedElectronAppMockup = () => {
           })
         }
         processed++
-        if (processed === fileNum) {
+        if (processed === files.length) {
           setTempFiles((prev) => [...prev, ...newFiles])
         }
       }
@@ -817,13 +793,13 @@ export const FinalRefinedElectronAppMockup = () => {
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      if (!inputMessage.trim()) {
+        return
+      }
       sendMessage()
     }
   }
 
-  // --------------------------------
-  // handleSelectChat
-  // --------------------------------
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
     const target = chats.find((c) => c.id === id)
@@ -833,7 +809,7 @@ export const FinalRefinedElectronAppMockup = () => {
   }
 
   // --------------------------------
-  // オートアシスト系ロジック (省略: 既存コードをそのまま)
+  // オートアシスト系
   // --------------------------------
   async function executeSubtasksAndShowOnce(subtasks: SubtaskInfo[]) {
     setAutoAssistState('executing')
@@ -1065,9 +1041,7 @@ ${cleanTask}
   }
 
   async function sendMessage() {
-    // -------------------------------------------------------
-    // 1) もしオートアシストでメッセージ編集モードなら
-    // -------------------------------------------------------
+    // 1) オートアシスト + 編集モード
     if (selectedChatId === 'autoAssist' && editIndex != null) {
       setIsLoading(true)
       try {
@@ -1128,9 +1102,7 @@ ${cleanTask}
       return
     }
 
-    // -------------------------------------------------------
-    // 2) オートアシストがYes/No待ちの場合
-    // -------------------------------------------------------
+    // 2) オートアシストの Yes/No待ち
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -1204,9 +1176,7 @@ ${cleanTask}
       }
     }
 
-    // -------------------------------------------------------
     // 3) オートアシスト(通常)
-    // -------------------------------------------------------
     if (selectedChatId === 'autoAssist') {
       const userMsg: Message = { type: 'user', content: inputMessage }
       setAutoAssistMessages((prev) => [...prev, userMsg])
@@ -1229,9 +1199,7 @@ ${cleanTask}
       return
     }
 
-    // -------------------------------------------------------
     // 4) 通常アシスタント
-    // -------------------------------------------------------
     const selectedChat = chats.find((c) => c.id === selectedChatId)
     if (!selectedChat) return
 
@@ -1809,32 +1777,28 @@ ${cleanTask}
     setInputMessage(oldContent)
   }
 
-  // ★ リスト用Drag Over
-  function handleListDragOver(e: React.DragEvent<HTMLLIElement>) {
+  function handleListDragOver(e: React.DragEvent<HTMLLIElement>, idx: number) {
     e.preventDefault()
+    setDragOverIndex(idx)
   }
 
   // @ts-ignore
   function handleDragStart(e: React.DragEvent<HTMLLIElement>, index: number) {
     setDragStartIndex(index)
+    setDragOverIndex(null)
   }
 
-  // ★ リスト項目用 drop 関数を別名に (handleListDrop)
   function handleListDrop(e: React.DragEvent<HTMLLIElement>, dropIndex: number) {
     e.preventDefault()
     if (dragStartIndex == null || dragStartIndex === dropIndex) return
 
     const newChats = [...chats]
-
-    // 1) オートアシストは対象外なので newChats からオートアシスト以外を抽出
     const filtered = newChats.filter((c) => c.id !== AUTO_ASSIST_ID)
 
-    // 2) dragStartIndex, dropIndex に応じて順序を入れ替え
     const dragItem = filtered[dragStartIndex]
     filtered.splice(dragStartIndex, 1)
     filtered.splice(dropIndex, 0, dragItem)
 
-    // 3) 置き換え後の filtered を再度 newChats に合流(AUTO_ASSIST_IDの位置は変えない)
     const autoAssistObj = newChats.find((c) => c.id === AUTO_ASSIST_ID)
     const finalChats = autoAssistObj ? [...filtered, autoAssistObj] : filtered
 
@@ -1842,17 +1806,119 @@ ${cleanTask}
     window.electronAPI.saveAgents(finalChats).catch(console.error)
 
     setDragStartIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // -----------------------------
+  // config.json(ZIP) エクスポート＆インポート
+  // -----------------------------
+  async function handleExportConfig() {
+    try {
+      if (window.electronAPI.showSaveDialog) {
+        // config.json ではなく ZIPでのエクスポートを実施する (main側で実装済み)
+        await window.electronAPI.showSaveDialog('config.json')
+        toast({
+          title: 'アシスタントをエクスポートしました (ZIP)',
+          status: 'success',
+          duration: 2000,
+          isClosable: true
+        })
+      } else {
+        toast({
+          title: 'エラー',
+          description: 'エクスポート機能が見つかりません',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+      }
+    } catch (err) {
+      console.error('Export error:', err)
+      toast({
+        title: 'エラー',
+        description: 'エクスポート中にエラーが発生しました。',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  async function handleImportConfig() {
+    try {
+      if (!window.electronAPI.showOpenDialogAndRead) {
+        toast({
+          title: 'エラー',
+          description: 'インポート機能が見つかりません',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+
+        return
+      }
+      const fileContent = await window.electronAPI.showOpenDialogAndRead()
+      if (!fileContent) {
+        toast({
+          title: 'キャンセル',
+          description: 'ファイルが選択されませんでした',
+          status: 'info',
+          duration: 2000,
+          isClosable: true
+        })
+
+        return
+      }
+
+      if (window.electronAPI.replaceLocalHistoryConfig) {
+        await window.electronAPI.replaceLocalHistoryConfig(fileContent)
+      } else {
+        toast({
+          title: 'エラー',
+          description: 'replaceLocalHistoryConfigが実装されていません',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+
+        return
+      }
+
+      const newData = JSON.parse(fileContent) as {
+        agents?: ChatInfo[]
+        titleSettings?: TitleSettings
+      }
+      if (newData.agents) {
+        setChats(newData.agents)
+      }
+      if (newData.titleSettings) {
+        setTitleSettings(newData.titleSettings)
+      }
+
+      toast({
+        title: 'アシスタントをインポートしました',
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    } catch (err) {
+      console.error('Import error:', err)
+      toast({
+        title: 'エラー',
+        description: 'インポート中にエラーが発生しました。',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
   }
 
   const selectedChatObj =
     typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
-  console.log('inputmessage', inputMessage)
-  console.log('ref', chatInputRef.current)
-
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
-      {/* ヘッダー (背景画像 + タイトル) */}
+      {/* ヘッダー */}
       <Flex
         as="header"
         backgroundImage={headerBgDataUri ? headerBgDataUri : undefined}
@@ -1867,7 +1933,6 @@ ${cleanTask}
         justify="space-between"
         align="center"
       >
-        {/* タイトル (部分文字 + 色)、hoverで編集アイコン */}
         <HStack
           spacing={2}
           onMouseEnter={() => setTitleHovered(true)}
@@ -1914,7 +1979,7 @@ ${cleanTask}
               size="md"
               isDisabled={isExpired}
               bgColor="white"
-              w="300px"
+              w="200px"
             />
             <Button
               onClick={openCustomChatModal}
@@ -1924,13 +1989,27 @@ ${cleanTask}
             >
               新しいアシスタントの作成
             </Button>
+
+            {/* ハンバーガーメニュー */}
+            <Menu>
+              <MenuButton
+                as={IconButton}
+                aria-label="Options"
+                icon={<HamburgerIcon />}
+                //variant="outline"
+                isDisabled={isExpired}
+                style={headerBgDataUri ? { border: 'none' } : undefined}
+              />
+              <MenuList>
+                <MenuItem onClick={handleExportConfig}>アシスタントのエクスポート</MenuItem>
+                <MenuItem onClick={handleImportConfig}>アシスタントのインポート</MenuItem>
+              </MenuList>
+            </Menu>
           </HStack>
         </HStack>
       </Flex>
 
-      {/* メイン (左=アシスタント一覧, 右=チャット表示) */}
       <Flex as="main" flex="1" overflow="hidden" p={4}>
-        {/* 左カラム */}
         <Box
           w="20%"
           bg="white"
@@ -1941,7 +2020,6 @@ ${cleanTask}
           minW="280px"
           mr={4}
         >
-          {/* オートアシスト */}
           <Box p={4} borderBottom="1px solid #eee">
             <List spacing={3}>
               <ListItem
@@ -1989,29 +2067,31 @@ ${cleanTask}
             </List>
           </Box>
 
-          {/* アシスタント一覧 (ドラッグ＆ドロップ対応) */}
           <Box overflowY="auto" flex="1">
             <List spacing={3} p={4}>
               {chats.map((chat, index) => {
                 if (chat.id === AUTO_ASSIST_ID) return null
+                const isDragTarget = dragOverIndex === index
+                const isCurrentSelected = chat.id === selectedChatId
 
                 return (
                   <ListItem
                     key={chat.id}
                     p={2}
-                    bg={chat.id === selectedChatId ? 'blue.100' : 'white'}
                     borderRadius="md"
                     cursor="pointer"
                     overflow="hidden"
                     textOverflow="ellipsis"
                     whiteSpace="nowrap"
-                    _hover={{ bg: chat.id === selectedChatId ? 'blue.100' : 'blue.50' }}
                     draggable
                     onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={handleListDragOver}
-                    // ★ 変更点: onDrop -> onListDrop
+                    onDragOver={(e) => handleListDragOver(e, index)}
                     onDrop={(e) => handleListDrop(e, index)}
                     onClick={() => handleSelectChat(chat.id)}
+                    bg={isCurrentSelected ? 'blue.100' : isDragTarget ? 'gray.200' : 'white'}
+                    _hover={{
+                      bg: isCurrentSelected || isDragTarget ? 'gray.200' : 'blue.50'
+                    }}
                   >
                     <Flex justify="space-between" align="center">
                       <Box>
@@ -2031,8 +2111,7 @@ ${cleanTask}
                           </Text>
                         </Tooltip>
                       </Box>
-
-                      {chat.id === selectedChatId && (
+                      {isCurrentSelected && (
                         <HStack spacing={1}>
                           <IconButton
                             icon={<LuSettings />}
@@ -2067,7 +2146,6 @@ ${cleanTask}
           </Box>
         </Box>
 
-        {/* 右カラム (チャット表示) */}
         <Box w="80%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
           <Box ref={chatHistoryRef} flex="1" overflowY="auto" p={4}>
             {selectedChatId === 'autoAssist' ? (
@@ -2196,7 +2274,6 @@ ${cleanTask}
             )}
           </Box>
 
-          {/* 入力フォーム */}
           <Flex p={4} borderTop="1px" borderColor="gray.200" align="end">
             <HStack spacing={3} w="100%">
               <Textarea
@@ -2213,14 +2290,14 @@ ${cleanTask}
                 }
                 resize="vertical"
                 flex="1"
-                isDisabled={apiKey.length === 0 || isExpired}
+                isDisabled={isLoading || apiKey.length === 0 || isExpired}
               />
 
               {typeof selectedChatId === 'number' && (
                 <Checkbox
                   isChecked={useAgentFile}
                   onChange={(e) => setUseAgentFile(e.target.checked)}
-                  isDisabled={isExpired}
+                  isDisabled={isLoading || isExpired}
                 >
                   ナレッジを使用する
                 </Checkbox>
@@ -2232,6 +2309,7 @@ ${cleanTask}
                     isChecked={agentMode}
                     onChange={(e) => setAgentMode(e.target.checked)}
                     colorScheme="teal"
+                    isDisabled={isLoading || isExpired}
                   />
                 </HStack>
               )}
@@ -2258,14 +2336,15 @@ ${cleanTask}
                 isLoading={isLoading}
                 isDisabled={
                   apiKey.length === 0 ||
-                  (inputMessage.length === 0 && tempFiles.length === 0) ||
+                  //  (inputMessage.length === 0 && tempFiles.length === 0) ||
+                  isLoading ||
+                  inputMessage.length === 0 ||
                   isExpired
                 }
               />
             </HStack>
           </Flex>
 
-          {/* 選択ファイル一覧 */}
           {tempFiles.length > 0 && (
             <Box p={4} borderTop="1px" borderColor="gray.200">
               <Text fontSize="sm" color="gray.600" mb={2}>
@@ -2298,7 +2377,6 @@ ${cleanTask}
         </Box>
       </Flex>
 
-      {/* 期限切れモーダル */}
       <Modal isOpen={isExpired} onClose={() => {}} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -2314,7 +2392,6 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* 新アシスタント作成モーダル */}
       <Modal
         isOpen={isModalOpen}
         onClose={closeCustomChatModal}
@@ -2390,7 +2467,6 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* システムプロンプト編集モーダル */}
       <Modal
         isOpen={isPromptModalOpen}
         onClose={closeSystemPromptModal}
@@ -2481,7 +2557,6 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* リセット確認モーダル */}
       <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -2500,7 +2575,6 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* オートアシスト設定モーダル -> リセット確認 */}
       <Modal
         isOpen={isResetAutoAssistConfirm}
         onClose={() => setIsResetAutoAssistConfirm(false)}
@@ -2523,7 +2597,6 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* アシスタント削除モーダル */}
       <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal} isCentered>
         <ModalOverlay />
         <ModalContent>
@@ -2542,7 +2615,6 @@ ${cleanTask}
         </ModalContent>
       </Modal>
 
-      {/* オートアシスト設定モーダル */}
       <AutoAssistSettingsModal
         isOpen={isAutoAssistSettingsOpen}
         onClose={() => setIsAutoAssistSettingsOpen(false)}
@@ -2551,7 +2623,6 @@ ${cleanTask}
         onConfirmResetAutoAssist={handleConfirmResetAutoAssist}
       />
 
-      {/* タイトル編集モーダル (背景画像対応済み) */}
       <TitleEditModal
         isOpen={isTitleEditOpen}
         onClose={() => setIsTitleEditOpen(false)}
@@ -2560,4 +2631,28 @@ ${cleanTask}
       />
     </Flex>
   )
+}
+
+/**
+ * CSV→JSONの単純変換サンプル (既存記述)
+ */
+function csvToJson(csv: string): string {
+  const lines = csv.split(/\r?\n/)
+  if (lines.length <= 1) return '[]'
+  const headers = lines[0].split(',')
+  const result = []
+  for (let i = 1; i < lines.length; i++) {
+    const obj: any = {}
+    const currentline = lines[i].split(',')
+    if (currentline.length !== headers.length) {
+      continue
+    }
+    for (let j = 0; j < headers.length; j++) {
+      obj[headers[j]] = currentline[j]
+    }
+    // @ts-ignore
+    result.push(obj)
+  }
+
+  return JSON.stringify(result, null, 2)
 }

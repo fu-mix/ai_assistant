@@ -49,6 +49,17 @@ if (process.contextIsolated) {
       },
       saveTitleSettings: async (settings: any) => {
         return await ipcRenderer.invoke('save-title-settings', settings)
+      },
+
+      // ★ ここからエクスポート／インポート用の新メソッド
+      showSaveDialog: async (defaultFileName: string) => {
+        return await ipcRenderer.invoke('show-save-dialog', defaultFileName)
+      },
+      showOpenDialogAndRead: async () => {
+        return await ipcRenderer.invoke('show-open-dialog-and-read')
+      },
+      replaceLocalHistoryConfig: async (newContent: string) => {
+        return await ipcRenderer.invoke('replace-local-history-config', newContent)
       }
     })
   } catch (error) {
