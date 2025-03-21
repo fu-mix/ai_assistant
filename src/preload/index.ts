@@ -25,25 +25,22 @@ if (process.contextIsolated) {
         return await ipcRenderer.invoke('save-agents', agentsData)
       },
 
-      // ▼ oldFilePath も渡せるように修正
-      // ファイルを userDataにコピー (変更前ファイルパスを指定できる)
+      // ファイル操作
       copyFileToUserData: async (oldFilePath?: string) => {
         return await ipcRenderer.invoke('copy-file-to-userdata', oldFilePath)
       },
-
-      // userData配下のファイルをbase64化
       readFileByPath: async (filePath: string) => {
         return await ipcRenderer.invoke('readFileByPath', filePath)
       },
-      // ★ userDataファイル削除
       deleteFileInUserData: async (filePath: string) => {
         return await ipcRenderer.invoke('delete-file-in-userdata', filePath)
       },
+
       getAppVersion: async () => {
         return await ipcRenderer.invoke('get-app-version')
       },
 
-      // タイトル設定を読み込み/保存
+      // タイトル設定
       loadTitleSettings: async () => {
         return await ipcRenderer.invoke('load-title-settings')
       },
@@ -51,7 +48,7 @@ if (process.contextIsolated) {
         return await ipcRenderer.invoke('save-title-settings', settings)
       },
 
-      // ★ ここからエクスポート／インポート用の新メソッド
+      // 既存のエクスポート/インポートIPC
       showSaveDialog: async (defaultFileName: string) => {
         return await ipcRenderer.invoke('show-save-dialog', defaultFileName)
       },
@@ -60,6 +57,16 @@ if (process.contextIsolated) {
       },
       replaceLocalHistoryConfig: async (newContent: string) => {
         return await ipcRenderer.invoke('replace-local-history-config', newContent)
+      },
+
+      // ★ New: 部分エクスポート（複数IDを渡す）
+      exportSelectedAgents: async (selectedIds: number[]) => {
+        return await ipcRenderer.invoke('export-selected-agents', selectedIds)
+      },
+
+      // ★ New: 追加インポート
+      appendLocalHistoryConfig: async (newContent: string) => {
+        return await ipcRenderer.invoke('append-local-history-config', newContent)
       }
     })
   } catch (error) {
