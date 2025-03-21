@@ -747,6 +747,38 @@ function csvToJson(csv: string): string {
 export const FinalRefinedElectronAppMockup = () => {
   const toast = useToast()
 
+  // ▼ リサイズ用stateを追加（左カラム幅）
+  const [leftPaneWidth, setLeftPaneWidth] = useState<number>(280)
+  // ▼ リサイズ中かどうかのフラグ
+  const [isResizing, setIsResizing] = useState<boolean>(false)
+
+  // ▼ リサイズ時のマウス操作をハンドルするuseEffect
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizing) return
+      // ドラッグ中の場合、マウスのX座標で左カラム幅を更新
+      let newWidth = e.clientX
+      // 最小/最大幅などを設定する場合は調整
+      if (newWidth < 200) newWidth = 200
+      if (newWidth > 600) newWidth = 600
+      setLeftPaneWidth(newWidth)
+    }
+
+    function handleMouseUp() {
+      if (isResizing) {
+        setIsResizing(false)
+      }
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizing])
+
   // タイトル設定
   const [titleSettings, setTitleSettings] = useState<TitleSettings>({
     segments: [
@@ -1797,7 +1829,7 @@ ${st.task}
         #命令書
         あなたは有能な要約者です。
         テキストは、生成AIのシステムプロンプトになります。
-        この内容を要約してどのような事が出来るかをまとめます。
+        この内容を要約してどのような事が出来るのかをまとめます。
         #制約条件
         - テキストの内容について、どのような事が出来るのか、得意なのかを考えて、重要なキーワードを取りこぼさないように詳細に要約してください
         - 要約したもののみ出力してください。返事などは不要です。
@@ -2285,17 +2317,19 @@ ${st.task}
         </HStack>
       </Flex>
 
-      {/* メイン (左=アシスタント一覧, 右=チャット表示) */}
+      {/* メイン (左=アシスタント一覧, ドラッグハンドル, 右=チャット表示) */}
       <Flex as="main" flex="1" overflow="hidden" p={4}>
         <Box
+          // 元の w="20%" を残しつつ、追加で幅をstyleで上書き
           w="20%"
+          style={{ width: leftPaneWidth }}
           bg="white"
           shadow="lg"
           rounded="lg"
           display="flex"
           flexDirection="column"
           minW="280px"
-          mr={4}
+          mr={2}
         >
           {/* オートアシスト */}
           <Box p={4} borderBottom="1px solid #eee">
@@ -2371,12 +2405,14 @@ ${st.task}
                       _hover={{
                         bg: isCurrentSelected || isDragTarget ? 'gray.200' : 'blue.50'
                       }}
+                      // ellipsis関連の指定をListItem自身にも残しておく
                       overflow="hidden"
                       textOverflow="ellipsis"
                       whiteSpace="nowrap"
                     >
-                      <Flex justify="space-between" align="center">
-                        <Box>
+                      <Flex justify="space-between" align="center" minW="0">
+                        {/* minW="0"をつけることでBoxがflexで縮む余地を作り、ellipsisが効く */}
+                        <Box minW="0" flex="1">
                           <Tooltip
                             label={chat.customTitle}
                             isDisabled={chat.customTitle.length <= 11}
@@ -2387,7 +2423,7 @@ ${st.task}
                               overflow="hidden"
                               textOverflow="ellipsis"
                               whiteSpace="nowrap"
-                              maxW="200px"
+                              w="100%"
                             >
                               {chat.customTitle || '無題のアシスタント'}
                             </Text>
@@ -2430,8 +2466,19 @@ ${st.task}
           </Box>
         </Box>
 
+        {/* ドラッグハンドルを追加 */}
+        <Box
+          width="5px"
+          cursor="col-resize"
+          onMouseDown={() => setIsResizing(true)}
+          bg={isResizing ? 'gray.300' : ''}
+          _hover={{ bg: isResizing ? '' : 'gray.300' }}
+          mr={2}
+          borderRadius="md"
+        />
+
         {/* 右カラム(チャット表示) */}
-        <Box w="80%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
+        <Box w="100%" bg="white" shadow="lg" rounded="lg" display="flex" flexDirection="column">
           <Box ref={chatHistoryRef} flex="1" overflowY="auto" p={4}>
             {selectedChatId === 'autoAssist' ? (
               <>
