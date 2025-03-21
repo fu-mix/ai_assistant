@@ -531,7 +531,8 @@ ipcMain.handle('replace-local-history-config', async (_event, newContent: string
 //
 
 // ----------------------------------------------------
-// (New) exportSelectedAgents: 選択されたエージェントだけ + titleSettings をZIP化
+// (New) exportSelectedAgents: 選択されたエージェントだけをZIP化
+//    ※ 一部エクスポート時は titleSettings を含めないように修正
 // ----------------------------------------------------
 ipcMain.handle('export-selected-agents', async (_event, selectedIds: number[]) => {
   try {
@@ -539,10 +540,9 @@ ipcMain.handle('export-selected-agents', async (_event, selectedIds: number[]) =
     const allAgents: AgentData[] = entireStoreData.agents || []
     const exportedAgents = allAgents.filter((a) => selectedIds.includes(a.id))
 
-    // エクスポート時にタイトル設定も含める
+    // ★ 一部エクスポートの場合、titleSettingsは含めない
     const partialData = {
-      agents: exportedAgents,
-      titleSettings: entireStoreData.titleSettings || {}
+      agents: exportedAgents
     }
 
     // ユーザー名 → {userName} 置換
