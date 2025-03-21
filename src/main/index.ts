@@ -532,71 +532,90 @@ ipcMain.handle('replace-local-history-config', async (_event, newContent: string
 
 // ----------------------------------------------------
 // (New) exportSelectedAgents: 選択されたエージェントだけをZIP化
-//    ※ 一部エクスポート時は titleSettings を含めないように修正
+//    ※ 一部エクスポート時は titleSettings を含めない
+//    ※ さらに「会話履歴を含むかどうか」を指定できるように修正
 // ----------------------------------------------------
-ipcMain.handle('export-selected-agents', async (_event, selectedIds: number[]) => {
-  try {
-    const entireStoreData = store.store || {}
-    const allAgents: AgentData[] = entireStoreData.agents || []
-    const exportedAgents = allAgents.filter((a) => selectedIds.includes(a.id))
+ipcMain.handle(
+  'export-selected-agents',
+  async (_event, arg: { selectedIds: number[]; includeHistory: boolean }) => {
+    const debugFlag = `${import.meta.env.MAIN_VITE_DEBUG}`
+    try {
+      const { selectedIds, includeHistory } = arg
 
-    // ★ 一部エクスポートの場合、titleSettingsは含めない
-    const partialData = {
-      agents: exportedAgents
-    }
+      const entireStoreData = store.store || {}
+      const allAgents: AgentData[] = entireStoreData.agents || []
+      const exportedAgents = allAgents.filter((a) => selectedIds.includes(a.id))
 
-    // ユーザー名 → {userName} 置換
-    const replacedForExport = replaceRealUserNameWithToken(partialData)
-    const rawContentForExport = JSON.stringify(replacedForExport, null, 2)
+      // 会話履歴を含まない場合、messages / postMessages を空にする
+      if (!includeHistory) {
+        for (const ag of exportedAgents) {
+          ag.messages = []
+          ag.postMessages = []
+        }
+      }
 
-    const { canceled, filePath } = await dialog.showSaveDialog({
-      title: '部分エクスポート (ZIP)',
-      defaultPath: 'partial_export.zip',
-      filters: [{ name: 'ZIP Files', extensions: ['zip'] }]
-    })
-    if (canceled || !filePath) {
-      return
-    }
+      // 一部エクスポートの場合、titleSettingsは含めない
+      const partialData = {
+        agents: exportedAgents
+      }
 
-    const zip = new AdmZip()
-    zip.addFile('history/config.json', Buffer.from(rawContentForExport, 'utf-8'))
+      // ユーザー名 → {userName} 置換
+      const replacedForExport = replaceRealUserNameWithToken(partialData)
+      const rawContentForExport = JSON.stringify(replacedForExport, null, 2)
 
-    // 選択エージェントが持つファイルを収集
-    const userDataDir = app.getPath('userData')
-    const filesDir = path.join(userDataDir, 'files')
-    if (!fs.existsSync(filesDir)) {
-      // filesフォルダ自体が無ければ config.jsonだけ
-      zip.writeZip(filePath)
-      console.log('[export-selected-agents] partial export done (no files folder)')
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: '部分エクスポート (ZIP)',
+        defaultPath: 'partial_export.zip',
+        filters: [{ name: 'ZIP Files', extensions: ['zip'] }]
+      })
+      if (canceled || !filePath) {
+        return
+      }
 
-      return
-    }
+      const zip = new AdmZip()
+      zip.addFile('history/config.json', Buffer.from(rawContentForExport, 'utf-8'))
 
-    const uniquePaths = new Set<string>()
-    for (const agent of exportedAgents) {
-      if (agent.agentFilePaths) {
-        for (const p of agent.agentFilePaths) {
-          if (p.startsWith(filesDir)) {
-            uniquePaths.add(p)
+      // 選択エージェントが持つファイルを収集
+      const userDataDir = app.getPath('userData')
+      const filesDir = path.join(userDataDir, 'files')
+      if (!fs.existsSync(filesDir)) {
+        // filesフォルダ自体が無ければ config.jsonだけ
+        zip.writeZip(filePath)
+        if (debugFlag) {
+          console.log('[export-selected-agents] partial export done (no files folder)')
+        }
+
+        return
+      }
+
+      const uniquePaths = new Set<string>()
+      for (const agent of exportedAgents) {
+        if (agent.agentFilePaths) {
+          for (const p of agent.agentFilePaths) {
+            if (p.startsWith(filesDir)) {
+              uniquePaths.add(p)
+            }
           }
         }
       }
-    }
-    // 重複除去した上でzipに追加
-    uniquePaths.forEach((absPath) => {
-      if (fs.existsSync(absPath)) {
-        const relativePath = path.relative(filesDir, absPath)
-        zip.addLocalFile(absPath, 'files', relativePath)
-      }
-    })
+      // 重複除去した上でzipに追加
+      uniquePaths.forEach((absPath) => {
+        if (fs.existsSync(absPath)) {
+          const relativePath = path.relative(filesDir, absPath)
+          zip.addLocalFile(absPath, 'files', relativePath)
+        }
+      })
 
-    zip.writeZip(filePath)
-    console.log('[export-selected-agents] partial export complete:', filePath)
-  } catch (err) {
-    console.error('[export-selected-agents]エラー:', err)
-    throw err
+      zip.writeZip(filePath)
+      if (debugFlag) {
+        console.log('[export-selected-agents] partial export complete:', filePath)
+      }
+    } catch (err) {
+      console.error('[export-selected-agents]エラー:', err)
+      throw err
+    }
   }
-})
+)
 
 // ----------------------------------------------------
 // (New) append-local-history-config: インポートjsonを既存に追加 (ID衝突→新ID付与)

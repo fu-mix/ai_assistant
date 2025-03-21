@@ -67,7 +67,7 @@ interface ElectronAPI {
   replaceLocalHistoryConfig?: (newContent: string) => Promise<void>
 
   // 部分エクスポート・追加インポート用
-  exportSelectedAgents?: (selectedIds: number[]) => Promise<void>
+  exportSelectedAgents?: (arg: { selectedIds: number[]; includeHistory: boolean }) => Promise<void>
   appendLocalHistoryConfig?: (newContent: string) => Promise<void>
 }
 
@@ -489,6 +489,7 @@ function AutoAssistSettingsModal({
 
 /* ------------------------------------------------
  * ExportModal: 一部 or 全部 のエクスポート
+ *    ※「会話履歴を含める」チェックボックスを追加
  * ------------------------------------------------ */
 function ExportModal({
   isOpen,
@@ -502,11 +503,14 @@ function ExportModal({
   const toast = useToast()
   const [mode, setMode] = useState<'all' | 'partial'>('all')
   const [checkedIds, setCheckedIds] = useState<number[]>([])
+  // ▼ ここで追加: 「会話履歴を含める」チェック (デフォルトtrue)
+  const [includeHistory, setIncludeHistory] = useState<boolean>(true)
 
   useEffect(() => {
     if (isOpen) {
       setMode('all')
       setCheckedIds([])
+      setIncludeHistory(true)
     }
   }, [isOpen])
 
@@ -546,7 +550,11 @@ function ExportModal({
           return
         }
         // 新IPC
-        await window.electronAPI.exportSelectedAgents(checkedIds)
+        // ここで「includeHistory」も一緒に渡す
+        await window.electronAPI.exportSelectedAgents({
+          selectedIds: checkedIds,
+          includeHistory
+        })
       }
 
       toast({
@@ -585,28 +593,41 @@ function ExportModal({
           </FormControl>
 
           {mode === 'partial' && (
-            <Box
-              border="1px solid #ddd"
-              borderRadius="md"
-              p={3}
-              maxH="300px"
-              overflowY="auto"
-              mt={2}
-            >
-              {/* オートアシストは含む・含まないはお好みだが、ここでは除外例示 */}
-              {chats
-                .filter((c) => c.id !== 999999)
-                .map((chat) => (
-                  <HStack key={chat.id} mb={2}>
-                    <Checkbox
-                      isChecked={checkedIds.includes(chat.id)}
-                      onChange={() => handleToggleCheck(chat.id)}
-                    >
-                      {chat.customTitle}
-                    </Checkbox>
-                  </HStack>
-                ))}
-            </Box>
+            <>
+              <Box
+                border="1px solid #ddd"
+                borderRadius="md"
+                p={3}
+                maxH="300px"
+                overflowY="auto"
+                mt={2}
+                mb={2}
+              >
+                {/* オートアシストは含む・含まないはお好みだが、ここでは除外例示 */}
+                {chats
+                  .filter((c) => c.id !== 999999)
+                  .map((chat) => (
+                    <HStack key={chat.id} mb={2}>
+                      <Checkbox
+                        isChecked={checkedIds.includes(chat.id)}
+                        onChange={() => handleToggleCheck(chat.id)}
+                      >
+                        {chat.customTitle}
+                      </Checkbox>
+                    </HStack>
+                  ))}
+              </Box>
+
+              {/* ▼ 追加のチェックボックス */}
+              <FormControl display="flex" alignItems="center" mb={2}>
+                <Checkbox
+                  isChecked={includeHistory}
+                  onChange={(e) => setIncludeHistory(e.target.checked)}
+                >
+                  会話履歴を含める
+                </Checkbox>
+              </FormControl>
+            </>
           )}
         </ModalBody>
         <ModalFooter>
@@ -1035,7 +1056,7 @@ export const FinalRefinedElectronAppMockup = () => {
     e.preventDefault()
     setDragOverIndex(idx)
   }
-
+  // @ts-ignore
   function handleDragStart(e: React.DragEvent<HTMLLIElement>, index: number) {
     setDragStartIndex(index)
     setDragOverIndex(null)
@@ -1182,6 +1203,7 @@ ${cleanTask}
         return c
       })
       setChats(updatedStore as ChatInfo[])
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
@@ -1206,6 +1228,7 @@ ${cleanTask}
           return c
         })
         setChats(updated2 as ChatInfo[])
+        // @ts-ignore
         await window.electronAPI.saveAgents(updated2)
       }
     } catch (err) {
@@ -1228,6 +1251,7 @@ ${cleanTask}
         return c
       })
       setChats(updatedErr as ChatInfo[])
+      // @ts-ignore
       await window.electronAPI.saveAgents(updatedErr)
     } finally {
       setIsLoading(false)
