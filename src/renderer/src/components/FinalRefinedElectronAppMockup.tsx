@@ -1764,6 +1764,7 @@ ${st.task}
       })
     } finally {
       setIsLoading(false)
+      chatInputRef.current?.focus()
     }
   }
 
@@ -2623,7 +2624,7 @@ ${st.task}
                 }
                 resize="vertical"
                 flex="1"
-                isDisabled={isLoading || apiKey.length === 0 || isExpired}
+                isDisabled={apiKey.length === 0 || isExpired}
               />
 
               {typeof selectedChatId === 'number' && (
