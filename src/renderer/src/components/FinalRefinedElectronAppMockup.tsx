@@ -1126,8 +1126,26 @@ export const FinalRefinedElectronAppMockup = () => {
       .map((c) => `アシスタント名:"${c.customTitle}"\n要約:"${c.assistantSummary || ''}"`)
       .join('\n')
 
-    for (const rawTask of tasks) {
+    for (let i = 0; i < tasks.length; i++) {
+      const rawTask = tasks[i]
       const cleanTask = rawTask.replace(/^タスク\d+\s*:\s*/, '')
+
+      // タスクのコンテキスト情報を追加
+      // 複数タスクの場合、前後のタスク内容も含める
+      let taskContext = ''
+      if (tasks.length > 1) {
+        taskContext = `このタスクは全${tasks.length}ステップ中の${i + 1}番目のタスクです。\n`
+
+        // 前のタスクがある場合は、それも参考として提示
+        if (i > 0) {
+          taskContext += `前のタスク: ${tasks[i - 1].replace(/^タスク\d+\s*:\s*/, '')}\n`
+        }
+
+        // 次のタスクがある場合は、それも参考として提示
+        if (i < tasks.length - 1) {
+          taskContext += `次のタスク: ${tasks[i + 1].replace(/^タスク\d+\s*:\s*/, '')}\n`
+        }
+      }
 
       const systemPrompt = `
   #タスクの内容が実施可能と考えられるもの、#アシスタント名の下の#要約から探し出し、そのアシスタント名を以下のフォーマットに従って表示してください。
@@ -1145,17 +1163,13 @@ export const FinalRefinedElectronAppMockup = () => {
   
   [タスク内容]
   ${cleanTask}
+  
+  [タスクコンテキスト]
+  ${taskContext}
   `
-      const msgs: Messages[] = []
-      // ここは pendingEphemeralMsg をそのまま追加ではなく、テキストのみ使用する
-      // サブタスク識別時はファイル添付の内容は参照するが、APIには添付しない
-      if (pendingEphemeralMsg) {
-        // テキスト部分のみを利用
-        const userText = pendingEphemeralMsg.parts[0].text || ''
-        msgs.push({ role: 'user', parts: [{ text: userText }] })
-      }
 
-      msgs.push({ role: 'user', parts: [{ text: cleanTask }] })
+      // タスク内容のみを送信
+      const msgs: Messages[] = [{ role: 'user', parts: [{ text: cleanTask }] }]
 
       let recommended: string | null = null
       try {
@@ -1173,55 +1187,108 @@ export const FinalRefinedElectronAppMockup = () => {
     return output
   }
 
-  async function handleAutoAssistSend() {
+  async function handleAutoAssistSend(skipAddingUserMessage: boolean = false) {
     setIsLoading(true)
     try {
-      const ephemeralMsg: Messages = {
+      // ユーザーメッセージを作成
+      const userMsg: Message = { type: 'user', content: inputMessage }
+      let currentUpdatedChats = [...chats] // 現在のチャット状態をコピー
+
+      // skipAddingUserMessageがfalseの場合のみユーザーメッセージを追加
+      if (!skipAddingUserMessage) {
+        // UIに表示
+        setAutoAssistMessages((prev) => [...prev, userMsg])
+
+        // postMessages用のメッセージ形式を作成
+        const postUserMsg: Messages = {
+          role: 'user',
+          parts: [{ text: inputMessage }]
+        }
+
+        // chatsのオートアシストにユーザーメッセージを追加
+        currentUpdatedChats = chats.map((c) => {
+          if (c.id === AUTO_ASSIST_ID) {
+            return {
+              ...c,
+              messages: [...c.messages, userMsg],
+              postMessages: [...c.postMessages, postUserMsg],
+              inputMessage: ''
+            }
+          }
+
+          return c
+        })
+
+        // 状態と永続化を更新
+        setChats(currentUpdatedChats)
+        // 保存を実行
+        await window.electronAPI.saveAgents(currentUpdatedChats)
+      }
+
+      // 入力メッセージの保存（ファイル添付用）
+      const originalMsg: Messages = {
         role: 'user',
         parts: [{ text: inputMessage }]
       }
 
+      // ファイル添付をオリジナルメッセージに追加
       for (const f of tempFiles) {
         if (f.mimeType === 'text/csv') {
           try {
             const csvString = window.atob(f.data)
             const jsonStr = csvToJson(csvString)
-            ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
+            originalMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
           } catch {
-            ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
+            originalMsg.parts[0].text += '\n(CSV→JSON失敗)'
           }
         }
-        ephemeralMsg.parts.push({
+        originalMsg.parts.push({
           inlineData: { mimeType: f.mimeType, data: f.data }
         })
       }
 
+      // 入力フィールドクリア
       setInputMessage('')
       setTempFiles([])
 
-      // pendingEphemeralMsg を設定（元のコードと同じ）
-      setPendingEphemeralMsg(ephemeralMsg)
+      // タスク分解用のメッセージ（ファイル添付なし）
+      const parseMsg: Messages = {
+        role: 'user',
+        parts: [{ text: originalMsg.parts[0].text || '' }]
+      }
 
+      // ファイル情報を含む元のメッセージを後で使用するため保存
+      setPendingEphemeralMsg(originalMsg)
+
+      // タスク分割のプロンプト
       const parseSystemPrompt = `
-  ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
-  ユーザーの依頼で、処理内容が異なるところで分割する程度にとどめていください。
-  ユーザーの依頼分を詳細にタスク分解する必要はありません。
-  フォーマット：
-  例: ["タスク1:添付ファイルを分析","タスク2:ReactでUI生成"]
-  `
-      const parseResp = await window.electronAPI.postChatAI(
-        [ephemeralMsg],
-        apiKey,
-        parseSystemPrompt
-      )
+      ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
+      以下の点に注意してタスクを分割してください：
+      
+      1. ユーザーの依頼内容が複数の処理を必要とする場合、論理的なステップに分割する。分割が必要無い場合は無理に分割しないこと
+      2. 各タスクは明確で具体的な目標を持つようにする
+      3. タスク間に依存関係がある場合（例：タスク2がタスク1の結果を必要とする）は、その順序を維持する
+      4. 分割は2〜4個程度のタスクに抑え、細かすぎる分割は避ける
+      5. タスクには簡潔かつ明確な名前をつける
+      
+      フォーマット：
+      ["タスク1:添付ファイルを分析する", "タスク2:分析結果に基づいて要約を作成する"]
+      
+      各タスクが順番に実行され、前のタスクの結果が後続のタスクで利用可能になることを考慮してください。
+      `
+
+      // タスク分解リクエスト（ファイル添付なし）
+      const parseResp = await window.electronAPI.postChatAI([parseMsg], apiKey, parseSystemPrompt)
+
       const splittedRaw = parseResp.replaceAll('```json', '').replaceAll('```', '').trim()
       let splitted: string[] = []
       try {
         splitted = JSON.parse(splittedRaw)
       } catch {
-        splitted = [ephemeralMsg.parts[0].text || '']
+        splitted = [originalMsg.parts[0].text || '']
       }
 
+      // アシスタント推奨事も同様にファイル添付しない
       const subtaskInfos = await findAssistantsForEachTask(splitted)
       setPendingSubtasks(subtaskInfos)
 
@@ -1230,71 +1297,95 @@ export const FinalRefinedElectronAppMockup = () => {
           `タスク${idx + 1} : ${si.task}\n→ 推奨アシスタント : ${si.recommendedAssistant}`
       )
       const summaryMsg = `以下のタスクに分割し、推奨アシスタントを割り当てました:\n\n${lines.join('\n\n')}`
-      setAutoAssistMessages((prev) => [...prev, { type: 'ai', content: summaryMsg }])
 
-      const updatedStore = chats.map((c) => {
+      // AIメッセージをmessages用に作成 (ユーザーメッセージはすでに追加済みなので、AIメッセージだけを追加)
+      const aiMsg: Message = { type: 'ai', content: summaryMsg }
+      setAutoAssistMessages((prev) => [...prev, aiMsg])
+
+      // postMessages用のメッセージも作成
+      const postAiMsg: Messages = {
+        role: 'model',
+        parts: [{ text: summaryMsg }]
+      }
+
+      // 最新の更新されたチャット状態を使用
+      const updatedWithAIMessage = currentUpdatedChats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
           return {
             ...c,
-            messages: [...c.messages, { type: 'ai', content: summaryMsg }]
+            messages: [...c.messages, aiMsg],
+            postMessages: [...c.postMessages, postAiMsg]
           }
         }
 
         return c
       })
-      setChats(updatedStore as ChatInfo[])
-      // @ts-ignore
-      await window.electronAPI.saveAgents(updatedStore)
+
+      setChats(updatedWithAIMessage)
+      // 保存実行
+      await window.electronAPI.saveAgents(updatedWithAIMessage)
 
       if (agentMode) {
-        // エージェントモードON時は ephemeralMsg を直接渡す
-        // これにより pendingEphemeralMsg が更新される前に確実に値を渡せる
-        await executeSubtasksAndShowOnce(subtaskInfos, ephemeralMsg)
+        // エージェントモードON時は originalMsg を直接渡す
+        await executeSubtasksAndShowOnce(subtaskInfos, originalMsg)
       } else {
         setAutoAssistState('awaitConfirm')
-        setAutoAssistMessages((prev) => [
-          ...prev,
-          { type: 'ai', content: '実行しますか？ (Yesで実行 / Noでキャンセル)' }
-        ])
-        const updated2 = updatedStore.map((c) => {
+
+        // 確認メッセージをmessages用に作成
+        const confirmMsg = '実行しますか？ (Yesで実行 / Noでキャンセル)'
+        const confirmAiMsg: Message = { type: 'ai', content: confirmMsg }
+        setAutoAssistMessages((prev) => [...prev, confirmAiMsg])
+
+        // postMessages用のメッセージも作成
+        const postConfirmMsg: Messages = {
+          role: 'model',
+          parts: [{ text: confirmMsg }]
+        }
+
+        const updatedWithConfirm = updatedWithAIMessage.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
             return {
               ...c,
-              messages: [
-                ...c.messages,
-                { type: 'ai', content: '実行しますか？ (Yesで実行 / Noでキャンセル)' }
-              ]
+              messages: [...c.messages, confirmAiMsg],
+              postMessages: [...c.postMessages, postConfirmMsg]
             }
           }
 
           return c
         })
-        setChats(updated2 as ChatInfo[])
-        // @ts-ignore
-        await window.electronAPI.saveAgents(updated2)
+
+        setChats(updatedWithConfirm)
+        // 保存実行
+        await window.electronAPI.saveAgents(updatedWithConfirm)
       }
     } catch (err) {
       console.error('handleAutoAssistSend error:', err)
-      setAutoAssistMessages((prev) => [
-        ...prev,
-        { type: 'ai', content: 'タスク分割処理中にエラーが発生しました。' }
-      ])
-      const updatedErr = chats.map((c) => {
+
+      // エラーメッセージをmessages用に作成
+      const errorMsg = 'タスク分割処理中にエラーが発生しました。'
+      const errorAiMsg: Message = { type: 'ai', content: errorMsg }
+      setAutoAssistMessages((prev) => [...prev, errorAiMsg])
+
+      // postMessages用のエラーメッセージも作成
+      const postErrorMsg: Messages = {
+        role: 'model',
+        parts: [{ text: errorMsg }]
+      }
+
+      const updatedWithError = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
           return {
             ...c,
-            messages: [
-              ...c.messages,
-              { type: 'ai', content: 'タスク分割処理中にエラーが発生しました.' }
-            ]
+            messages: [...c.messages, errorAiMsg],
+            postMessages: [...c.postMessages, postErrorMsg]
           }
         }
 
         return c
       })
-      setChats(updatedErr as ChatInfo[])
-      // @ts-ignore
-      await window.electronAPI.saveAgents(updatedErr)
+
+      setChats(updatedWithError)
+      await window.electronAPI.saveAgents(updatedWithError)
     } finally {
       setIsLoading(false)
     }
@@ -1307,21 +1398,33 @@ export const FinalRefinedElectronAppMockup = () => {
       const ephemeralMsg = originalMsg || pendingEphemeralMsg
 
       const subtaskOutputs: string[] = []
+      // タスク間で情報を継承するための配列
+      const taskResults: string[] = []
+
       for (let i = 0; i < subtasks.length; i++) {
         const st = subtasks[i]
         let out = ''
 
+        // 現在のタスク情報を設定
+        const taskContext = `現在のタスク (${i + 1}/${subtasks.length}): ${st.task}`
+
+        // 前のタスクの結果があれば、それも含める
+        const previousResults =
+          taskResults.length > 0 ? `\n\n前のタスクの結果:\n${taskResults.join('\n\n')}` : ''
+
         if (!st.recommendedAssistant) {
           // fallback
           const fallbackSystemPrompt = `
-  あなたはAutoAssistです。
-  以下のタスクをあなたが実行してください:
-  ${st.task}
-  `
+    あなたはAutoAssistです。
+    以下のタスクをあなたが実行してください:
+    ${st.task}
+    
+    ${previousResults}
+    `
           // 新しいタスクメッセージを作成
           const taskMsg: Messages = {
             role: 'user',
-            parts: [{ text: st.task }]
+            parts: [{ text: `${taskContext}${previousResults}` }]
           }
 
           // 元のメッセージに添付ファイルがあれば、新しいタスクメッセージに追加
@@ -1358,7 +1461,7 @@ export const FinalRefinedElectronAppMockup = () => {
             // 新しいタスクメッセージを作成
             const taskMsg: Messages = {
               role: 'user',
-              parts: [{ text: st.task }]
+              parts: [{ text: `${taskContext}${previousResults}` }]
             }
 
             // 元のメッセージに添付ファイルがあれば、新しいタスクメッセージに追加
@@ -1372,12 +1475,21 @@ export const FinalRefinedElectronAppMockup = () => {
               }
             }
 
+            // 拡張されたシステムプロンプト - 前のタスクの結果を考慮するよう指示
+            const enhancedSystemPrompt = `
+    ${asstObj.systemPrompt}
+    
+    現在はオートアシスト機能のタスク${i + 1}/${subtasks.length}を実行中です。
+    依頼内容: ${st.task}
+    ${previousResults ? '前のタスクの結果を考慮して対応してください。' : ''}
+    `
+
             try {
               // 新しいタスクメッセージのみを送信
               const resp = await window.electronAPI.postChatAI(
                 [taskMsg],
                 apiKey,
-                asstObj.systemPrompt
+                enhancedSystemPrompt
               )
               out = resp
             } catch (err) {
@@ -1386,6 +1498,9 @@ export const FinalRefinedElectronAppMockup = () => {
           }
         }
 
+        // タスク結果を配列に追加して次のタスクで利用できるようにする
+        taskResults.push(`タスク${i + 1}の結果:\n${out}`)
+
         subtaskOutputs.push(
           `タスク${i + 1} : ${st.task}\n(アシスタント: ${
             st.recommendedAssistant || 'AutoAssist/fallback'
@@ -1393,21 +1508,35 @@ export const FinalRefinedElectronAppMockup = () => {
         )
       }
 
+      // 最終結果のメッセージを作成
       const finalMerged = `以下が最終的な実行結果です:\n${subtaskOutputs.join('\n')}`
-      setAutoAssistMessages((prev) => [...prev, { type: 'ai', content: finalMerged }])
+
+      // messages用のAIメッセージを作成
+      const finalAiMsg: Message = { type: 'ai', content: finalMerged }
+      setAutoAssistMessages((prev) => [...prev, finalAiMsg])
+
+      // postMessages用のメッセージも作成
+      const postFinalMsg: Messages = {
+        role: 'model',
+        parts: [{ text: finalMerged }]
+      }
 
       // 最終結果を保存する処理
       const updatedChats = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
           return {
             ...c,
-            messages: [...c.messages, { type: 'ai', content: finalMerged }]
+            messages: [...c.messages, finalAiMsg],
+            // postMessagesにも最終結果を追加
+            postMessages: [...c.postMessages, postFinalMsg]
           }
         }
 
         return c
       })
+
       setChats(updatedChats as ChatInfo[])
+      // 保存が確実に完了するのを待つ
       await window.electronAPI.saveAgents(updatedChats)
     } finally {
       setPendingSubtasks([])
@@ -1415,6 +1544,7 @@ export const FinalRefinedElectronAppMockup = () => {
       setAutoAssistState('idle')
     }
   }
+
   // --------------------------------
   // sendMessage本体
   // --------------------------------
@@ -1424,43 +1554,61 @@ export const FinalRefinedElectronAppMockup = () => {
     if (selectedChatId === 'autoAssist' && editIndex != null) {
       setIsLoading(true)
       try {
+        // ユーザーメッセージを作成・表示
+        const userContent = inputMessage
         const clonedAuto = [...autoAssistMessages]
         clonedAuto.splice(editIndex, clonedAuto.length - editIndex, {
           type: 'user',
-          content: inputMessage
+          content: userContent
         })
         setAutoAssistMessages(clonedAuto)
+
+        // postMessages用のメッセージ形式を作成
+        const postUserMsg: Messages = {
+          role: 'user',
+          parts: [{ text: userContent }]
+        }
 
         const updatedChats = chats.map((chat) => {
           if (chat.id === AUTO_ASSIST_ID) {
             const cloned = [...chat.messages]
             cloned.splice(editIndex, cloned.length - editIndex, {
               type: 'user',
-              content: inputMessage
+              content: userContent
             })
             const clonedPost = [...chat.postMessages]
-            clonedPost.splice(editIndex, clonedPost.length - editIndex)
+            clonedPost.splice(editIndex, clonedPost.length - editIndex, postUserMsg)
 
             return {
               ...chat,
               messages: cloned,
-              postMessages: clonedPost
+              postMessages: clonedPost,
+              inputMessage: '' // 明示的にクリアする
             }
           }
 
           return chat
         })
         setChats(updatedChats)
+        // 保存が確実に完了するのを待つ
         await window.electronAPI.saveAgents(updatedChats)
 
+        // 編集モードに使用した入力内容をグローバルにコピー
+        const tempInputContent = inputMessage
+
+        // 入力フィールドとファイル添付をクリア
         setEditIndex(null)
-        setInputMessage('')
         setTempFiles([])
-        await handleAutoAssistSend()
+
+        // 一時的に入力内容を設定して、handleAutoAssistSendを呼ぶ
+        // ただし、ユーザーメッセージは既に追加済みなので、スキップフラグをtrueにする
+        setInputMessage(tempInputContent)
+        await handleAutoAssistSend(true) // ユーザーメッセージの追加をスキップ
+        setInputMessage('') // 処理後に入力を空にする
 
         toast({
           title: 'オートアシストの編集結果を再実行しました',
-          description: '指定index以降の履歴を削除し、新しい内容で再実行しました。',
+          description: '指定index以降の履歴を削除し、新しい内容で実行しました。',
           status: 'info',
           duration: 2500,
           isClosable: true
@@ -1480,22 +1628,44 @@ export const FinalRefinedElectronAppMockup = () => {
 
       return
     }
-
     // 2) オートアシスト + Yes/No待ち
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
+
+      // ユーザーのYes/No応答をUIに表示
       setAutoAssistMessages((prev) => [...prev, userMsg])
 
-      let updated = chats.map((c) => {
+      // postMessages用のメッセージ形式を作成
+      const postUserMsg: Messages = {
+        role: 'user',
+        parts: [{ text: inputMessage }]
+      }
+
+      // まず現在のチャット状態をコピー
+      let currentChats = [...chats]
+
+      // ユーザーメッセージを追加
+      let updatedChats = currentChats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
-          return { ...c, messages: [...c.messages, userMsg] }
+          return {
+            ...c,
+            messages: [...c.messages, userMsg],
+            // postMessagesにもユーザーメッセージを追加
+            postMessages: [...c.postMessages, postUserMsg],
+            inputMessage: '' // 明示的にクリアする
+          }
         }
 
         return c
       })
-      setChats(updated)
-      await window.electronAPI.saveAgents(updated)
+
+      setChats(updatedChats)
+      // 保存を確実に実行
+      await window.electronAPI.saveAgents(updatedChats)
+
+      // このあとの処理で使用する現在の状態を更新
+      currentChats = updatedChats
 
       if (ans === 'yes') {
         setIsLoading(true)
@@ -1507,22 +1677,34 @@ export const FinalRefinedElectronAppMockup = () => {
 
         return
       } else if (ans === 'no') {
-        setAutoAssistMessages((prev) => [
-          ...prev,
-          { type: 'ai', content: 'タスク実行をキャンセルしました.' }
-        ])
-        updated = updated.map((c) => {
+        // キャンセルメッセージを作成
+        const cancelMsg = 'タスク実行をキャンセルしました.'
+        const cancelAiMsg: Message = { type: 'ai', content: cancelMsg }
+        setAutoAssistMessages((prev) => [...prev, cancelAiMsg])
+
+        // postMessages用のメッセージ形式も作成
+        const postCancelMsg: Messages = {
+          role: 'model',
+          parts: [{ text: cancelMsg }]
+        }
+
+        // 最新の状態に基づいて更新
+        updatedChats = currentChats.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
             return {
               ...c,
-              messages: [...c.messages, { type: 'ai', content: 'タスク実行をキャンセルしました.' }]
+              messages: [...c.messages, cancelAiMsg],
+              // postMessagesにもキャンセルメッセージを追加
+              postMessages: [...c.postMessages, postCancelMsg]
             }
           }
 
           return c
         })
-        setChats(updated)
-        await window.electronAPI.saveAgents(updated)
+
+        setChats(updatedChats)
+        // 保存が確実に完了するのを待つ
+        await window.electronAPI.saveAgents(updatedChats)
 
         setPendingSubtasks([])
         setPendingEphemeralMsg(null)
@@ -1531,25 +1713,34 @@ export const FinalRefinedElectronAppMockup = () => {
 
         return
       } else {
-        setAutoAssistMessages((prev) => [
-          ...prev,
-          { type: 'ai', content: 'Yes で実行 / No でキャンセル です.' }
-        ])
-        updated = updated.map((c) => {
+        // 不明な応答の場合のメッセージを作成
+        const unknownMsg = 'Yes で実行 / No でキャンセル です.'
+        const unknownAiMsg: Message = { type: 'ai', content: unknownMsg }
+        setAutoAssistMessages((prev) => [...prev, unknownAiMsg])
+
+        // postMessages用のメッセージ形式も作成
+        const postUnknownMsg: Messages = {
+          role: 'model',
+          parts: [{ text: unknownMsg }]
+        }
+
+        // 最新の状態に基づいて更新
+        updatedChats = currentChats.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
             return {
               ...c,
-              messages: [
-                ...c.messages,
-                { type: 'ai', content: 'Yes で実行 / No でキャンセル です.' }
-              ]
+              messages: [...c.messages, unknownAiMsg],
+              // postMessagesにも不明応答メッセージを追加
+              postMessages: [...c.postMessages, postUnknownMsg]
             }
           }
 
           return c
         })
-        setChats(updated)
-        await window.electronAPI.saveAgents(updated)
+
+        setChats(updatedChats)
+        // 保存が確実に完了するのを待つ
+        await window.electronAPI.saveAgents(updatedChats)
         setInputMessage('')
 
         return
@@ -1558,22 +1749,11 @@ export const FinalRefinedElectronAppMockup = () => {
 
     // 3) オートアシスト(通常)
     if (selectedChatId === 'autoAssist') {
-      const userMsg: Message = { type: 'user', content: inputMessage }
-      setAutoAssistMessages((prev) => [...prev, userMsg])
-      const updated = chats.map((c) => {
-        if (c.id === AUTO_ASSIST_ID) {
-          return { ...c, messages: [...c.messages, userMsg] }
-        }
-
-        return c
-      })
-      setChats(updated)
-      await window.electronAPI.saveAgents(updated)
-
       setIsLoading(true)
-      setInputMessage('')
-      setTempFiles([])
-      await handleAutoAssistSend()
+
+      // 修正: inputMessageを先にクリアする前に、handleAutoAssistSendを呼び出す
+      await handleAutoAssistSend(false)
+
       setIsLoading(false)
 
       return
@@ -2562,13 +2742,39 @@ export const FinalRefinedElectronAppMockup = () => {
                     position="relative"
                     onMouseEnter={() => setHoveredMessageIndex(idx)}
                     onMouseLeave={() => setHoveredMessageIndex(null)}
-                    style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxWidth: '100%',
+                      overflow: 'hidden'
+                    }}
                   >
                     <div>
                       {msg.type === 'user' ? (
                         msg.content
                       ) : (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          className="markdown"
+                          components={{
+                            pre: ({ node, ...props }) => (
+                              <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                                <pre {...props} />
+                              </div>
+                            ),
+                            code: ({ node, ...props }) => (
+                              <code
+                                style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                                {...props}
+                              />
+                            ),
+                            table: ({ node, ...props }) => (
+                              <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                                <table {...props} />
+                              </div>
+                            )
+                          }}
+                        >
                           {msg.content}
                         </ReactMarkdown>
                       )}
@@ -2620,13 +2826,39 @@ export const FinalRefinedElectronAppMockup = () => {
                   position="relative"
                   onMouseEnter={() => setHoveredMessageIndex(idx)}
                   onMouseLeave={() => setHoveredMessageIndex(null)}
-                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxWidth: '100%',
+                    overflow: 'hidden'
+                  }}
                 >
                   <div>
                     {msg.type === 'user' ? (
                       msg.content
                     ) : (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        className="markdown"
+                        components={{
+                          pre: ({ node, ...props }) => (
+                            <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                              <pre {...props} />
+                            </div>
+                          ),
+                          code: ({ node, ...props }) => (
+                            <code
+                              style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                              {...props}
+                            />
+                          ),
+                          table: ({ node, ...props }) => (
+                            <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                              <table {...props} />
+                            </div>
+                          )
+                        }}
+                      >
                         {msg.content}
                       </ReactMarkdown>
                     )}
