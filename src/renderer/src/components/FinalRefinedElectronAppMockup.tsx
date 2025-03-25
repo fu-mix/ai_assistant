@@ -1633,114 +1633,140 @@ export const FinalRefinedElectronAppMockup = () => {
       const ans = inputMessage.trim().toLowerCase()
       const userMsg: Message = { type: 'user', content: inputMessage }
 
-      // ユーザーのYes/No応答をUIに表示
+      // UI表示用と保存用のチャットデータ操作を分離
+
+      // 1. まずUIに直接表示（即時反映のため）
       setAutoAssistMessages((prev) => [...prev, userMsg])
 
-      // postMessages用のメッセージ形式を作成
+      // 2. 保存用データの準備
       const postUserMsg: Messages = {
         role: 'user',
         parts: [{ text: inputMessage }]
       }
 
-      // まず現在のチャット状態をコピー
-      let currentChats = [...chats]
+      try {
+        // 3. 現在のチャット状態をコピー
+        let currentChats = [...chats]
 
-      // ユーザーメッセージを追加
-      let updatedChats = currentChats.map((c) => {
-        if (c.id === AUTO_ASSIST_ID) {
-          return {
-            ...c,
-            messages: [...c.messages, userMsg],
-            // postMessagesにもユーザーメッセージを追加
-            postMessages: [...c.postMessages, postUserMsg],
-            inputMessage: '' // 明示的にクリアする
-          }
-        }
-
-        return c
-      })
-
-      setChats(updatedChats)
-      // 保存を確実に実行
-      await window.electronAPI.saveAgents(updatedChats)
-
-      // このあとの処理で使用する現在の状態を更新
-      currentChats = updatedChats
-
-      if (ans === 'yes') {
-        setIsLoading(true)
-        // ここでは pendingEphemeralMsg は既に設定されているので、そのまま渡す
-        await executeSubtasksAndShowOnce(pendingSubtasks, pendingEphemeralMsg)
-        setIsLoading(false)
-        setAutoAssistState('idle')
-        setInputMessage('')
-
-        return
-      } else if (ans === 'no') {
-        // キャンセルメッセージを作成
-        const cancelMsg = 'タスク実行をキャンセルしました.'
-        const cancelAiMsg: Message = { type: 'ai', content: cancelMsg }
-        setAutoAssistMessages((prev) => [...prev, cancelAiMsg])
-
-        // postMessages用のメッセージ形式も作成
-        const postCancelMsg: Messages = {
-          role: 'model',
-          parts: [{ text: cancelMsg }]
-        }
-
-        // 最新の状態に基づいて更新
-        updatedChats = currentChats.map((c) => {
+        // 4. ユーザーメッセージを追加
+        const updatedWithUserMsg = currentChats.map((c) => {
           if (c.id === AUTO_ASSIST_ID) {
             return {
               ...c,
-              messages: [...c.messages, cancelAiMsg],
-              // postMessagesにもキャンセルメッセージを追加
-              postMessages: [...c.postMessages, postCancelMsg]
+              messages: [...c.messages, userMsg],
+              postMessages: [...c.postMessages, postUserMsg],
+              inputMessage: '' // 明示的にクリアする
             }
           }
 
           return c
         })
 
-        setChats(updatedChats)
-        // 保存が確実に完了するのを待つ
-        await window.electronAPI.saveAgents(updatedChats)
+        // 5. 状態を更新して保存（ユーザーメッセージ分）
+        setChats(updatedWithUserMsg)
 
-        setPendingSubtasks([])
-        setPendingEphemeralMsg(null)
-        setAutoAssistState('idle')
-        setInputMessage('')
+        // 6. 保存処理の完了を待機
+        await window.electronAPI.saveAgents(updatedWithUserMsg)
 
-        return
-      } else {
-        // 不明な応答の場合のメッセージを作成
-        const unknownMsg = 'Yes で実行 / No でキャンセル です.'
-        const unknownAiMsg: Message = { type: 'ai', content: unknownMsg }
-        setAutoAssistMessages((prev) => [...prev, unknownAiMsg])
+        // 7. 処理後の状態を保持するための変数を更新
+        currentChats = updatedWithUserMsg
 
-        // postMessages用のメッセージ形式も作成
-        const postUnknownMsg: Messages = {
-          role: 'model',
-          parts: [{ text: unknownMsg }]
-        }
+        if (ans === 'yes') {
+          setIsLoading(true)
 
-        // 最新の状態に基づいて更新
-        updatedChats = currentChats.map((c) => {
-          if (c.id === AUTO_ASSIST_ID) {
-            return {
-              ...c,
-              messages: [...c.messages, unknownAiMsg],
-              // postMessagesにも不明応答メッセージを追加
-              postMessages: [...c.postMessages, postUnknownMsg]
-            }
+          // Yes応答の後、タスク実行前に現在の状態を確実に保存
+          await window.electronAPI.saveAgents(currentChats)
+
+          // タスク実行
+          // @ts-ignore
+          await executeSubtasksAndShowOnce(pendingSubtasks, pendingEphemeralMsg)
+
+          setIsLoading(false)
+          setAutoAssistState('idle')
+          setInputMessage('')
+
+          return
+        } else if (ans === 'no') {
+          // キャンセルメッセージを作成
+          const cancelMsg = 'タスク実行をキャンセルしました.'
+          const cancelAiMsg: Message = { type: 'ai', content: cancelMsg }
+
+          // UI表示を先に更新
+          setAutoAssistMessages((prev) => [...prev, cancelAiMsg])
+
+          // postMessages用のメッセージ形式も作成
+          const postCancelMsg: Messages = {
+            role: 'model',
+            parts: [{ text: cancelMsg }]
           }
 
-          return c
-        })
+          // 最新の状態に基づいて更新
+          const updatedWithCancel = currentChats.map((c) => {
+            if (c.id === AUTO_ASSIST_ID) {
+              return {
+                ...c,
+                messages: [...c.messages, cancelAiMsg],
+                postMessages: [...c.postMessages, postCancelMsg]
+              }
+            }
 
-        setChats(updatedChats)
-        // 保存が確実に完了するのを待つ
-        await window.electronAPI.saveAgents(updatedChats)
+            return c
+          })
+
+          // 状態を更新して保存
+          setChats(updatedWithCancel)
+          await window.electronAPI.saveAgents(updatedWithCancel)
+
+          setPendingSubtasks([])
+          setPendingEphemeralMsg(null)
+          setAutoAssistState('idle')
+          setInputMessage('')
+
+          return
+        } else {
+          // 不明な応答の場合のメッセージを作成
+          const unknownMsg = 'Yes で実行 / No でキャンセル です.'
+          const unknownAiMsg: Message = { type: 'ai', content: unknownMsg }
+
+          // UI表示を先に更新
+          setAutoAssistMessages((prev) => [...prev, unknownAiMsg])
+
+          // postMessages用のメッセージ形式も作成
+          const postUnknownMsg: Messages = {
+            role: 'model',
+            parts: [{ text: unknownMsg }]
+          }
+
+          // 最新の状態に基づいて更新
+          const updatedWithUnknown = currentChats.map((c) => {
+            if (c.id === AUTO_ASSIST_ID) {
+              return {
+                ...c,
+                messages: [...c.messages, unknownAiMsg],
+                postMessages: [...c.postMessages, postUnknownMsg]
+              }
+            }
+
+            return c
+          })
+
+          // 状態を更新して保存
+          setChats(updatedWithUnknown)
+          await window.electronAPI.saveAgents(updatedWithUnknown)
+
+          setInputMessage('')
+
+          return
+        }
+      } catch (err) {
+        console.error('Yes/No応答処理中にエラーが発生しました:', err)
+        toast({
+          title: 'エラー',
+          description: 'メッセージの処理中にエラーが発生しました。',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
         setInputMessage('')
 
         return
