@@ -1130,24 +1130,31 @@ export const FinalRefinedElectronAppMockup = () => {
       const cleanTask = rawTask.replace(/^タスク\d+\s*:\s*/, '')
 
       const systemPrompt = `
-#タスクの内容が実施可能と考えられるもの、#アシスタント名の下の#要約から探し出し、そのアシスタント名を以下のフォーマットに従って表示してください。
-#フォーマット例:
-{
-  "assistantTitle": "ReactAssistant"
-}
-#もし該当なしなら:
-{
-  "assistantTitle": null
-}
-
-[アシスタント一覧]
-${summaries}
-
-[タスク内容]
-${cleanTask}
-`
+  #タスクの内容が実施可能と考えられるもの、#アシスタント名の下の#要約から探し出し、そのアシスタント名を以下のフォーマットに従って表示してください。
+  #フォーマット例:
+  {
+    "assistantTitle": "ReactAssistant"
+  }
+  #もし該当なしなら:
+  {
+    "assistantTitle": null
+  }
+  
+  [アシスタント一覧]
+  ${summaries}
+  
+  [タスク内容]
+  ${cleanTask}
+  `
       const msgs: Messages[] = []
-      if (pendingEphemeralMsg) msgs.push(pendingEphemeralMsg)
+      // ここは pendingEphemeralMsg をそのまま追加ではなく、テキストのみ使用する
+      // サブタスク識別時はファイル添付の内容は参照するが、APIには添付しない
+      if (pendingEphemeralMsg) {
+        // テキスト部分のみを利用
+        const userText = pendingEphemeralMsg.parts[0].text || ''
+        msgs.push({ role: 'user', parts: [{ text: userText }] })
+      }
+
       msgs.push({ role: 'user', parts: [{ text: cleanTask }] })
 
       let recommended: string | null = null
@@ -1192,13 +1199,16 @@ ${cleanTask}
       setInputMessage('')
       setTempFiles([])
 
+      // pendingEphemeralMsg を設定（元のコードと同じ）
+      setPendingEphemeralMsg(ephemeralMsg)
+
       const parseSystemPrompt = `
-ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
-ユーザーの依頼で、処理内容が異なるところで分割する程度にとどめていください。
-ユーザーの依頼分を詳細にタスク分解する必要はありません。
-フォーマット：
-例: ["タスク1:添付ファイルを分析","タスク2:ReactでUI生成"]
-`
+  ユーザー依頼をタスクに分割し、必ず JSON配列だけを返してください。
+  ユーザーの依頼で、処理内容が異なるところで分割する程度にとどめていください。
+  ユーザーの依頼分を詳細にタスク分解する必要はありません。
+  フォーマット：
+  例: ["タスク1:添付ファイルを分析","タスク2:ReactでUI生成"]
+  `
       const parseResp = await window.electronAPI.postChatAI(
         [ephemeralMsg],
         apiKey,
@@ -1211,8 +1221,6 @@ ${cleanTask}
       } catch {
         splitted = [ephemeralMsg.parts[0].text || '']
       }
-
-      setPendingEphemeralMsg(ephemeralMsg)
 
       const subtaskInfos = await findAssistantsForEachTask(splitted)
       setPendingSubtasks(subtaskInfos)
@@ -1239,7 +1247,9 @@ ${cleanTask}
       await window.electronAPI.saveAgents(updatedStore)
 
       if (agentMode) {
-        await executeSubtasksAndShowOnce(subtaskInfos)
+        // エージェントモードON時は ephemeralMsg を直接渡す
+        // これにより pendingEphemeralMsg が更新される前に確実に値を渡せる
+        await executeSubtasksAndShowOnce(subtaskInfos, ephemeralMsg)
       } else {
         setAutoAssistState('awaitConfirm')
         setAutoAssistMessages((prev) => [
@@ -1290,9 +1300,12 @@ ${cleanTask}
     }
   }
 
-  async function executeSubtasksAndShowOnce(subtasks: SubtaskInfo[]) {
+  async function executeSubtasksAndShowOnce(subtasks: SubtaskInfo[], originalMsg?: Messages) {
     setAutoAssistState('executing')
     try {
+      // originalMsg が提供されていない場合は pendingEphemeralMsg を使用
+      const ephemeralMsg = originalMsg || pendingEphemeralMsg
+
       const subtaskOutputs: string[] = []
       for (let i = 0; i < subtasks.length; i++) {
         const st = subtasks[i]
@@ -1301,15 +1314,34 @@ ${cleanTask}
         if (!st.recommendedAssistant) {
           // fallback
           const fallbackSystemPrompt = `
-あなたはAutoAssistです。
-以下のタスクをあなたが実行してください:
-${st.task}
-`
-          const arr: Messages[] = []
-          if (pendingEphemeralMsg) arr.push(pendingEphemeralMsg)
-          arr.push({ role: 'user', parts: [{ text: st.task }] })
+  あなたはAutoAssistです。
+  以下のタスクをあなたが実行してください:
+  ${st.task}
+  `
+          // 新しいタスクメッセージを作成
+          const taskMsg: Messages = {
+            role: 'user',
+            parts: [{ text: st.task }]
+          }
+
+          // 元のメッセージに添付ファイルがあれば、新しいタスクメッセージに追加
+          if (ephemeralMsg && ephemeralMsg.parts && ephemeralMsg.parts.length > 1) {
+            for (let j = 1; j < ephemeralMsg.parts.length; j++) {
+              if (ephemeralMsg.parts[j].inlineData) {
+                taskMsg.parts.push({
+                  inlineData: ephemeralMsg.parts[j].inlineData
+                })
+              }
+            }
+          }
+
           try {
-            const resp = await window.electronAPI.postChatAI(arr, apiKey, fallbackSystemPrompt)
+            // 新しいタスクメッセージのみを送信
+            const resp = await window.electronAPI.postChatAI(
+              [taskMsg],
+              apiKey,
+              fallbackSystemPrompt
+            )
             out = resp
           } catch (err) {
             out = '(実行中にエラー)'
@@ -1323,11 +1355,30 @@ ${st.task}
           if (!asstObj) {
             out = '(指定アシスタントが見つかりません)'
           } else {
-            const arr: Messages[] = []
-            if (pendingEphemeralMsg) arr.push(pendingEphemeralMsg)
-            arr.push({ role: 'user', parts: [{ text: st.task }] })
+            // 新しいタスクメッセージを作成
+            const taskMsg: Messages = {
+              role: 'user',
+              parts: [{ text: st.task }]
+            }
+
+            // 元のメッセージに添付ファイルがあれば、新しいタスクメッセージに追加
+            if (ephemeralMsg && ephemeralMsg.parts && ephemeralMsg.parts.length > 1) {
+              for (let j = 1; j < ephemeralMsg.parts.length; j++) {
+                if (ephemeralMsg.parts[j].inlineData) {
+                  taskMsg.parts.push({
+                    inlineData: ephemeralMsg.parts[j].inlineData
+                  })
+                }
+              }
+            }
+
             try {
-              const resp = await window.electronAPI.postChatAI(arr, apiKey, asstObj.systemPrompt)
+              // 新しいタスクメッセージのみを送信
+              const resp = await window.electronAPI.postChatAI(
+                [taskMsg],
+                apiKey,
+                asstObj.systemPrompt
+              )
               out = resp
             } catch (err) {
               out = '(アシスタント実行エラー)'
@@ -1344,16 +1395,30 @@ ${st.task}
 
       const finalMerged = `以下が最終的な実行結果です:\n${subtaskOutputs.join('\n')}`
       setAutoAssistMessages((prev) => [...prev, { type: 'ai', content: finalMerged }])
+
+      // 最終結果を保存する処理
+      const updatedChats = chats.map((c) => {
+        if (c.id === AUTO_ASSIST_ID) {
+          return {
+            ...c,
+            messages: [...c.messages, { type: 'ai', content: finalMerged }]
+          }
+        }
+
+        return c
+      })
+      setChats(updatedChats as ChatInfo[])
+      await window.electronAPI.saveAgents(updatedChats)
     } finally {
       setPendingSubtasks([])
       setPendingEphemeralMsg(null)
       setAutoAssistState('idle')
     }
   }
-
   // --------------------------------
   // sendMessage本体
   // --------------------------------
+
   async function sendMessage() {
     // 1) オートアシスト + 編集モード
     if (selectedChatId === 'autoAssist' && editIndex != null) {
@@ -1434,7 +1499,8 @@ ${st.task}
 
       if (ans === 'yes') {
         setIsLoading(true)
-        await executeSubtasksAndShowOnce(pendingSubtasks)
+        // ここでは pendingEphemeralMsg は既に設定されているので、そのまま渡す
+        await executeSubtasksAndShowOnce(pendingSubtasks, pendingEphemeralMsg)
         setIsLoading(false)
         setAutoAssistState('idle')
         setInputMessage('')
