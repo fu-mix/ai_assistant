@@ -1089,7 +1089,7 @@ export const FinalRefinedElectronAppMockup = () => {
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (!inputMessage.trim()) {
+      if (!inputMessage.trim() || isLoading) {
         return
       }
       sendMessage()
@@ -1819,6 +1819,7 @@ export const FinalRefinedElectronAppMockup = () => {
           setIsLoading(true)
 
           // タスク実行
+          // @ts-ignore
           await executeSubtasksAndShowOnce(pendingSubtasks, pendingEphemeralMsg)
 
           setIsLoading(false)
