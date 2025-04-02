@@ -854,6 +854,29 @@ export const FinalRefinedElectronAppMockup = () => {
   // for scroll
   const prevMessageCountRef = useRef<number>(0)
 
+  const saveAutoAssistData = async (updatedChats: ChatInfo[]) => {
+    try {
+      // UIの状態を更新
+      setChats(updatedChats)
+
+      // オートアシストの状態も別途更新
+      const autoAssist = updatedChats.find((c) => c.id === AUTO_ASSIST_ID)
+      if (autoAssist) {
+        setAutoAssistMessages(autoAssist.messages)
+      }
+
+      // 保存を実行して完了を待つ
+      await window.electronAPI.saveAgents(updatedChats)
+
+      // 念のため状態を再確認
+      return true
+    } catch (err) {
+      console.error('Failed to save AutoAssist data:', err)
+
+      return false
+    }
+  }
+
   // --------------------------------
   // 初期ロード
   // --------------------------------
@@ -1189,40 +1212,72 @@ export const FinalRefinedElectronAppMockup = () => {
 
   async function handleAutoAssistSend(skipAddingUserMessage: boolean = false) {
     setIsLoading(true)
+
     try {
+      // 現在のチャット状態のコピーを取得（常に最新の状態を使う）
+      const currentChats = [...chats]
+
       // ユーザーメッセージを作成
       const userMsg: Message = { type: 'user', content: inputMessage }
-      let currentUpdatedChats = [...chats] // 現在のチャット状態をコピー
 
-      // skipAddingUserMessageがfalseの場合のみユーザーメッセージを追加
-      if (!skipAddingUserMessage) {
-        // UIに表示
-        setAutoAssistMessages((prev) => [...prev, userMsg])
+      // postMessages用のメッセージ形式を作成
+      const postUserMsg: Messages = {
+        role: 'user',
+        parts: [{ text: inputMessage }]
+      }
 
-        // postMessages用のメッセージ形式を作成
-        const postUserMsg: Messages = {
-          role: 'user',
-          parts: [{ text: inputMessage }]
-        }
+      // 安全のために自動アシストエントリを明示的に検索
+      const autoAssistIndex = currentChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-        // chatsのオートアシストにユーザーメッセージを追加
-        currentUpdatedChats = chats.map((c) => {
-          if (c.id === AUTO_ASSIST_ID) {
-            return {
-              ...c,
-              messages: [...c.messages, userMsg],
-              postMessages: [...c.postMessages, postUserMsg],
-              inputMessage: ''
-            }
-          }
-
-          return c
+      if (autoAssistIndex === -1) {
+        console.error('AutoAssist entry not found!')
+        toast({
+          title: 'エラー',
+          description: 'オートアシストが見つかりません',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
         })
+        setIsLoading(false)
 
-        // 状態と永続化を更新
-        setChats(currentUpdatedChats)
+        return
+      }
+
+      if (!skipAddingUserMessage) {
+        // 既存のオートアシストを取得し、ユーザーメッセージを追加
+        const autoAssist = { ...currentChats[autoAssistIndex] }
+
+        // 既存のメッセージを保持しながら、新しいメッセージを追加
+        autoAssist.messages = [...autoAssist.messages, userMsg]
+        autoAssist.postMessages = [...autoAssist.postMessages, postUserMsg]
+        autoAssist.inputMessage = ''
+
+        // 新しいチャット配列を作成（オートアシストを更新）
+        const updatedChats = [...currentChats]
+        updatedChats[autoAssistIndex] = autoAssist
+
+        // UIに表示を先行
+        setAutoAssistMessages(autoAssist.messages)
+
         // 保存を実行
-        await window.electronAPI.saveAgents(currentUpdatedChats)
+        await saveAutoAssistData(updatedChats)
+
+        // ユーザーメッセージを保存した後のチャット状態を再取得（Safety measure）
+        const verifiedChats = await window.electronAPI.loadAgents()
+        const verifiedAutoAssist = verifiedChats.find((c) => c.id === AUTO_ASSIST_ID)
+
+        if (verifiedAutoAssist) {
+          const userMsgExists = verifiedAutoAssist.messages.some(
+            (m) => m.type === 'user' && m.content === inputMessage
+          )
+
+          if (!userMsgExists) {
+            // 再度保存を試みる（直接APIを呼び出す）
+            await window.electronAPI.saveAgents(updatedChats)
+          } else {
+            console.log('User message verified in saved data.')
+          }
+        }
       }
 
       // 入力メッセージの保存（ファイル添付用）
@@ -1298,9 +1353,8 @@ export const FinalRefinedElectronAppMockup = () => {
       )
       const summaryMsg = `以下のタスクに分割し、推奨アシスタントを割り当てました:\n\n${lines.join('\n\n')}`
 
-      // AIメッセージをmessages用に作成 (ユーザーメッセージはすでに追加済みなので、AIメッセージだけを追加)
+      // AIメッセージをmessages用に作成
       const aiMsg: Message = { type: 'ai', content: summaryMsg }
-      setAutoAssistMessages((prev) => [...prev, aiMsg])
 
       // postMessages用のメッセージも作成
       const postAiMsg: Messages = {
@@ -1308,22 +1362,32 @@ export const FinalRefinedElectronAppMockup = () => {
         parts: [{ text: summaryMsg }]
       }
 
-      // 最新の更新されたチャット状態を使用
-      const updatedWithAIMessage = currentUpdatedChats.map((c) => {
-        if (c.id === AUTO_ASSIST_ID) {
-          return {
-            ...c,
-            messages: [...c.messages, aiMsg],
-            postMessages: [...c.postMessages, postAiMsg]
-          }
-        }
+      // 再度最新のチャットを取得
+      const latestChats = await window.electronAPI.loadAgents()
+      const autoAssistEntryIndex = latestChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-        return c
-      })
+      if (autoAssistEntryIndex === -1) {
+        console.error('AutoAssist entry not found when adding AI task message!')
 
-      setChats(updatedWithAIMessage)
-      // 保存実行
-      await window.electronAPI.saveAgents(updatedWithAIMessage)
+        return
+      }
+
+      // 既存の最新オートアシストを取得
+      const autoAssist = { ...latestChats[autoAssistEntryIndex] }
+
+      // メッセージを追加
+      autoAssist.messages = [...autoAssist.messages, aiMsg]
+      autoAssist.postMessages = [...autoAssist.postMessages, postAiMsg]
+
+      // 更新されたチャット配列を作成
+      const updatedWithAIMessage = [...latestChats]
+      updatedWithAIMessage[autoAssistEntryIndex] = autoAssist
+
+      // UIに表示を先行
+      setAutoAssistMessages(autoAssist.messages)
+
+      // チャットの状態を更新・保存
+      await saveAutoAssistData(updatedWithAIMessage)
 
       if (agentMode) {
         // エージェントモードON時は originalMsg を直接渡す
@@ -1334,7 +1398,6 @@ export const FinalRefinedElectronAppMockup = () => {
         // 確認メッセージをmessages用に作成
         const confirmMsg = '実行しますか？ (Yesで実行 / Noでキャンセル)'
         const confirmAiMsg: Message = { type: 'ai', content: confirmMsg }
-        setAutoAssistMessages((prev) => [...prev, confirmAiMsg])
 
         // postMessages用のメッセージも作成
         const postConfirmMsg: Messages = {
@@ -1342,21 +1405,32 @@ export const FinalRefinedElectronAppMockup = () => {
           parts: [{ text: confirmMsg }]
         }
 
-        const updatedWithConfirm = updatedWithAIMessage.map((c) => {
-          if (c.id === AUTO_ASSIST_ID) {
-            return {
-              ...c,
-              messages: [...c.messages, confirmAiMsg],
-              postMessages: [...c.postMessages, postConfirmMsg]
-            }
-          }
+        // 最新の状態を取得（API経由で再取得）
+        const latestChatsAfterAI = await window.electronAPI.loadAgents()
+        const confirmAutoAssistIndex = latestChatsAfterAI.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-          return c
-        })
+        if (confirmAutoAssistIndex === -1) {
+          console.error('AutoAssist entry not found when adding confirm message!')
 
-        setChats(updatedWithConfirm)
-        // 保存実行
-        await window.electronAPI.saveAgents(updatedWithConfirm)
+          return
+        }
+
+        // 既存のオートアシストを取得
+        const confirmAutoAssist = { ...latestChatsAfterAI[confirmAutoAssistIndex] }
+
+        // メッセージを追加
+        confirmAutoAssist.messages = [...confirmAutoAssist.messages, confirmAiMsg]
+        confirmAutoAssist.postMessages = [...confirmAutoAssist.postMessages, postConfirmMsg]
+
+        // 更新されたチャット配列を作成
+        const updatedWithConfirm = [...latestChatsAfterAI]
+        updatedWithConfirm[confirmAutoAssistIndex] = confirmAutoAssist
+
+        // UIに表示を先行
+        setAutoAssistMessages(confirmAutoAssist.messages)
+
+        // チャットの状態を更新・保存
+        await saveAutoAssistData(updatedWithConfirm)
       }
     } catch (err) {
       console.error('handleAutoAssistSend error:', err)
@@ -1364,7 +1438,6 @@ export const FinalRefinedElectronAppMockup = () => {
       // エラーメッセージをmessages用に作成
       const errorMsg = 'タスク分割処理中にエラーが発生しました。'
       const errorAiMsg: Message = { type: 'ai', content: errorMsg }
-      setAutoAssistMessages((prev) => [...prev, errorAiMsg])
 
       // postMessages用のエラーメッセージも作成
       const postErrorMsg: Messages = {
@@ -1372,20 +1445,43 @@ export const FinalRefinedElectronAppMockup = () => {
         parts: [{ text: errorMsg }]
       }
 
-      const updatedWithError = chats.map((c) => {
-        if (c.id === AUTO_ASSIST_ID) {
-          return {
-            ...c,
-            messages: [...c.messages, errorAiMsg],
-            postMessages: [...c.postMessages, postErrorMsg]
-          }
+      try {
+        // 最新の状態を取得
+        const errorChats = await window.electronAPI.loadAgents()
+        const errorAutoAssistIndex = errorChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
+
+        if (errorAutoAssistIndex !== -1) {
+          // オートアシストを取得
+          const errorAutoAssist = { ...errorChats[errorAutoAssistIndex] }
+
+          // メッセージを追加
+          errorAutoAssist.messages = [...errorAutoAssist.messages, errorAiMsg]
+          errorAutoAssist.postMessages = [...errorAutoAssist.postMessages, postErrorMsg]
+
+          // 更新されたチャット配列を作成
+          const updatedWithError = [...errorChats]
+          updatedWithError[errorAutoAssistIndex] = errorAutoAssist
+
+          // UIに表示を先行
+          setAutoAssistMessages(errorAutoAssist.messages)
+
+          // チャットの状態を更新・保存
+          await saveAutoAssistData(updatedWithError)
         }
+      } catch (saveErr) {
+        console.error('Failed to save error message:', saveErr)
+      }
 
-        return c
+      // UIにエラーを追加（最低限の対応）
+      setAutoAssistMessages((prev) => [...prev, errorAiMsg])
+
+      toast({
+        title: 'エラー',
+        description: 'タスク分割処理中にエラーが発生しました。',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
       })
-
-      setChats(updatedWithError)
-      await window.electronAPI.saveAgents(updatedWithError)
     } finally {
       setIsLoading(false)
     }
@@ -1511,40 +1607,91 @@ export const FinalRefinedElectronAppMockup = () => {
       // 最終結果のメッセージを作成
       const finalMerged = `以下が最終的な実行結果です:\n${subtaskOutputs.join('\n')}`
 
-      // messages用のAIメッセージを作成
-      const finalAiMsg: Message = { type: 'ai', content: finalMerged }
-      setAutoAssistMessages((prev) => [...prev, finalAiMsg])
+      try {
+        // 最新の状態をAPIから取得
+        const latestChats = await window.electronAPI.loadAgents()
+        const autoAssistIndex = latestChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-      // postMessages用のメッセージも作成
-      const postFinalMsg: Messages = {
-        role: 'model',
-        parts: [{ text: finalMerged }]
-      }
-
-      // 最終結果を保存する処理
-      const updatedChats = chats.map((c) => {
-        if (c.id === AUTO_ASSIST_ID) {
-          return {
-            ...c,
-            messages: [...c.messages, finalAiMsg],
-            // postMessagesにも最終結果を追加
-            postMessages: [...c.postMessages, postFinalMsg]
-          }
+        if (autoAssistIndex === -1) {
+          console.error('AutoAssist entry not found when saving final results')
+          throw new Error('AutoAssist entry not found when saving final results')
         }
 
-        return c
-      })
+        // 既存のオートアシストを取得
+        const autoAssist = { ...latestChats[autoAssistIndex] }
 
-      setChats(updatedChats as ChatInfo[])
-      // 保存が確実に完了するのを待つ
-      await window.electronAPI.saveAgents(updatedChats)
+        // ユーザーメッセージが含まれているか確認（念のため）
+        const hasUserMessages = autoAssist.messages.some((msg) => msg.type === 'user')
+        if (!hasUserMessages) {
+          console.warn('No user messages found in autoAssist history when saving final results.')
+          console.log('Current autoAssist messages:', JSON.stringify(autoAssist.messages))
+        }
+
+        // messages用のAIメッセージを作成
+        const finalAiMsg: Message = { type: 'ai', content: finalMerged }
+
+        // メッセージを追加
+        autoAssist.messages = [...autoAssist.messages, finalAiMsg]
+
+        // postMessages用のメッセージも作成
+        const postFinalMsg: Messages = {
+          role: 'model',
+          parts: [{ text: finalMerged }]
+        }
+
+        // postMessagesにも追加
+        autoAssist.postMessages = [...autoAssist.postMessages, postFinalMsg]
+
+        // 更新されたチャット配列を作成
+        const updatedChats = [...latestChats]
+        updatedChats[autoAssistIndex] = autoAssist
+
+        // UIに表示を先行
+        setAutoAssistMessages(autoAssist.messages)
+
+        // チャットの状態を更新・保存
+        await saveAutoAssistData(updatedChats)
+      } catch (saveError) {
+        console.error('Error saving final results:', saveError)
+
+        // エラーが発生しても、少なくともUIには表示する
+        const finalAiMsg: Message = { type: 'ai', content: finalMerged }
+        setAutoAssistMessages((prev) => [...prev, finalAiMsg])
+
+        // トーストでユーザーに通知
+        toast({
+          title: '保存エラー',
+          description:
+            '結果の保存中にエラーが発生しました。画面には表示されますが、保存されない可能性があります。',
+          status: 'error',
+          duration: 5000,
+          isClosable: true
+        })
+      }
+    } catch (executionError) {
+      console.error('Error executing subtasks:', executionError)
+
+      // 実行エラーメッセージ
+      const errorMsg = 'タスク実行中にエラーが発生しました。'
+      const errorAiMsg: Message = { type: 'ai', content: errorMsg }
+
+      // UIに表示
+      setAutoAssistMessages((prev) => [...prev, errorAiMsg])
+
+      // トーストでユーザーに通知
+      toast({
+        title: 'エラー',
+        description: 'タスク実行中にエラーが発生しました。',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
     } finally {
       setPendingSubtasks([])
       setPendingEphemeralMsg(null)
       setAutoAssistState('idle')
     }
   }
-
   // --------------------------------
   // sendMessage本体
   // --------------------------------
@@ -1645,40 +1792,33 @@ export const FinalRefinedElectronAppMockup = () => {
       }
 
       try {
-        // 3. 現在のチャット状態をコピー
-        let currentChats = [...chats]
+        // 3. 最新のチャット状態をAPIから直接取得
+        const latestChats = await window.electronAPI.loadAgents()
+        const autoAssistIndex = latestChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-        // 4. ユーザーメッセージを追加
-        const updatedWithUserMsg = currentChats.map((c) => {
-          if (c.id === AUTO_ASSIST_ID) {
-            return {
-              ...c,
-              messages: [...c.messages, userMsg],
-              postMessages: [...c.postMessages, postUserMsg],
-              inputMessage: '' // 明示的にクリアする
-            }
-          }
+        if (autoAssistIndex === -1) {
+          throw new Error('AutoAssist entry not found when processing Yes/No response')
+        }
 
-          return c
-        })
+        // 4. オートアシストエントリを取得
+        const autoAssist = { ...latestChats[autoAssistIndex] }
 
-        // 5. 状態を更新して保存（ユーザーメッセージ分）
-        setChats(updatedWithUserMsg)
+        // 5. ユーザーメッセージを追加
+        autoAssist.messages = [...autoAssist.messages, userMsg]
+        autoAssist.postMessages = [...autoAssist.postMessages, postUserMsg]
+        autoAssist.inputMessage = ''
 
-        // 6. 保存処理の完了を待機
-        await window.electronAPI.saveAgents(updatedWithUserMsg)
+        // 6. 更新されたチャット配列を作成
+        const updatedWithUserMsg = [...latestChats]
+        updatedWithUserMsg[autoAssistIndex] = autoAssist
 
-        // 7. 処理後の状態を保持するための変数を更新
-        currentChats = updatedWithUserMsg
+        // 7. 状態を更新して保存
+        await saveAutoAssistData(updatedWithUserMsg)
 
         if (ans === 'yes') {
           setIsLoading(true)
 
-          // Yes応答の後、タスク実行前に現在の状態を確実に保存
-          await window.electronAPI.saveAgents(currentChats)
-
           // タスク実行
-          // @ts-ignore
           await executeSubtasksAndShowOnce(pendingSubtasks, pendingEphemeralMsg)
 
           setIsLoading(false)
@@ -1700,22 +1840,27 @@ export const FinalRefinedElectronAppMockup = () => {
             parts: [{ text: cancelMsg }]
           }
 
-          // 最新の状態に基づいて更新
-          const updatedWithCancel = currentChats.map((c) => {
-            if (c.id === AUTO_ASSIST_ID) {
-              return {
-                ...c,
-                messages: [...c.messages, cancelAiMsg],
-                postMessages: [...c.postMessages, postCancelMsg]
-              }
-            }
+          // 最新の状態を取得
+          const cancelChats = await window.electronAPI.loadAgents()
+          const cancelAutoAssistIndex = cancelChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-            return c
-          })
+          if (cancelAutoAssistIndex === -1) {
+            throw new Error('AutoAssist entry not found when processing cancel')
+          }
+
+          // オートアシストを取得
+          const cancelAutoAssist = { ...cancelChats[cancelAutoAssistIndex] }
+
+          // メッセージを追加
+          cancelAutoAssist.messages = [...cancelAutoAssist.messages, cancelAiMsg]
+          cancelAutoAssist.postMessages = [...cancelAutoAssist.postMessages, postCancelMsg]
+
+          // 更新されたチャット配列を作成
+          const updatedWithCancel = [...cancelChats]
+          updatedWithCancel[cancelAutoAssistIndex] = cancelAutoAssist
 
           // 状態を更新して保存
-          setChats(updatedWithCancel)
-          await window.electronAPI.saveAgents(updatedWithCancel)
+          await saveAutoAssistData(updatedWithCancel)
 
           setPendingSubtasks([])
           setPendingEphemeralMsg(null)
@@ -1737,22 +1882,27 @@ export const FinalRefinedElectronAppMockup = () => {
             parts: [{ text: unknownMsg }]
           }
 
-          // 最新の状態に基づいて更新
-          const updatedWithUnknown = currentChats.map((c) => {
-            if (c.id === AUTO_ASSIST_ID) {
-              return {
-                ...c,
-                messages: [...c.messages, unknownAiMsg],
-                postMessages: [...c.postMessages, postUnknownMsg]
-              }
-            }
+          // 最新の状態を取得
+          const unknownChats = await window.electronAPI.loadAgents()
+          const unknownAutoAssistIndex = unknownChats.findIndex((c) => c.id === AUTO_ASSIST_ID)
 
-            return c
-          })
+          if (unknownAutoAssistIndex === -1) {
+            throw new Error('AutoAssist entry not found when processing unknown response')
+          }
+
+          // オートアシストを取得
+          const unknownAutoAssist = { ...unknownChats[unknownAutoAssistIndex] }
+
+          // メッセージを追加
+          unknownAutoAssist.messages = [...unknownAutoAssist.messages, unknownAiMsg]
+          unknownAutoAssist.postMessages = [...unknownAutoAssist.postMessages, postUnknownMsg]
+
+          // 更新されたチャット配列を作成
+          const updatedWithUnknown = [...unknownChats]
+          updatedWithUnknown[unknownAutoAssistIndex] = unknownAutoAssist
 
           // 状態を更新して保存
-          setChats(updatedWithUnknown)
-          await window.electronAPI.saveAgents(updatedWithUnknown)
+          await saveAutoAssistData(updatedWithUnknown)
 
           setInputMessage('')
 
