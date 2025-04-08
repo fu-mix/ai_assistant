@@ -667,3 +667,159 @@ ipcMain.handle('append-local-history-config', async (_event, newContent: string)
     throw err
   }
 })
+
+// 外部API呼び出し用のIPC通信ハンドラを追加
+ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) => {
+  const debugFlag = `${import.meta.env.MAIN_VITE_DEBUG}`
+  try {
+    const { endpoint, method, headers, bodyTemplate, queryParamsTemplate, authType, authConfig } =
+      apiConfig
+
+    if (debugFlag) {
+      console.log('\n=== API Request ===')
+      console.log('Endpoint:', endpoint)
+      console.log('Method:', method)
+      console.log('Headers:', JSON.stringify(headers, null, 2))
+      console.log('Parameters:', JSON.stringify(params, null, 2))
+
+      // 認証情報は機密なのでマスク処理
+      let authInfo = 'None'
+      if (authType === 'bearer') authInfo = 'Bearer Token: ********'
+      else if (authType === 'apiKey')
+        authInfo = `API Key (${authConfig?.keyName || 'unknown'}): ********`
+      else if (authType === 'basic') authInfo = 'Basic Auth: ********'
+      console.log('Authentication:', authInfo)
+    }
+
+    // 認証情報の処理
+    const finalHeaders = { ...headers }
+    if (authType === 'bearer' && authConfig?.token) {
+      // テンプレート文字列を実際の値に置換
+      let token = authConfig.token
+      if (token.includes('${params.apiKey}') && params.apiKey) {
+        token = params.apiKey // 直接apiKeyパラメータを使用
+      }
+      finalHeaders['Authorization'] = `Bearer ${token}`
+    } else if (authType === 'basic' && authConfig?.username && authConfig?.password) {
+      const auth = Buffer.from(`${authConfig.username}:${authConfig.password}`).toString('base64')
+      finalHeaders['Authorization'] = `Basic ${auth}`
+    } else if (authType === 'apiKey' && authConfig?.keyName && authConfig?.keyValue) {
+      if (authConfig.inHeader) {
+        finalHeaders[authConfig.keyName] = authConfig.keyValue
+      }
+    }
+
+    // リクエストボディとクエリパラメータの処理
+    let url = endpoint
+    let requestData = null
+
+    if (queryParamsTemplate) {
+      try {
+        const paramsObj = params || {} // パラメーターがnullまたはundefinedの場合に空オブジェクトを使用
+
+        // テンプレートからクエリパラメータを生成する際にparamsを渡す
+        const templateFn = new Function(
+          'params',
+          'return `' + queryParamsTemplate.replace(/`/g, '\\`') + '`'
+        )
+
+        // paramsを引数として渡す
+        const queryParamsJson = templateFn(paramsObj)
+        const queryParams = JSON.parse(queryParamsJson)
+
+        const queryString = Object.entries(queryParams)
+          .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+          .join('&')
+        if (debugFlag) {
+          console.log('Query Parameters:', queryString)
+        }
+
+        url = `${endpoint}${url.includes('?') ? '&' : '?'}${queryString}`
+      } catch (err) {
+        console.error('Failed to process query parameters:', err)
+      }
+    }
+
+    if (bodyTemplate && (method === 'POST' || method === 'PUT')) {
+      try {
+        const paramsObj = params || {} // パラメーターがnullまたはundefinedの場合に空オブジェクトを使用
+
+        // テンプレートからリクエストボディを生成する際にparamsを渡す
+        const templateFn = new Function(
+          'params',
+          'return `' + bodyTemplate.replace(/`/g, '\\`') + '`'
+        )
+
+        // paramsを引数として渡す
+        const bodyJson = templateFn(paramsObj)
+        requestData = JSON.parse(bodyJson)
+        if (debugFlag) {
+          console.log('Request Body:', JSON.stringify(requestData, null, 2))
+        }
+      } catch (err) {
+        console.error('Failed to process request body:', err)
+      }
+    }
+
+    if (debugFlag) {
+      console.log('==================\n')
+    }
+
+    // APIリクエスト実行
+    const response = await axios({
+      method: method.toLowerCase(),
+      url,
+      headers: finalHeaders,
+      data: requestData,
+      httpsAgent: new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`),
+      proxy: false
+    })
+
+    if (debugFlag) {
+      console.log('\n=== API Response ===')
+      console.log('Status:', response.status)
+      console.log('Headers:', JSON.stringify(response.headers, null, 2))
+      console.log('Data:', JSON.stringify(response.data, null, 2).substring(0, 1000) + '...')
+      console.log('====================\n')
+    }
+
+    // レスポンスの処理
+    let formattedResponse = response.data
+    if (apiConfig.responseTemplate) {
+      try {
+        // evalを使わない、より安全なアプローチ
+        const templateFn = new Function(
+          'responseObj',
+          'return `' + apiConfig.responseTemplate.replace(/`/g, '\\`') + '`'
+        )
+
+        // responseObjを実際に使用
+        formattedResponse = templateFn(response.data)
+      } catch (err) {
+        console.error('Error formatting response:', err)
+      }
+    }
+
+    return {
+      success: true,
+      data: formattedResponse,
+      status: response.status
+    }
+  } catch (error) {
+    console.error('Error calling external API:', error)
+
+    if (debugFlag) {
+      console.log('\n=== API Error ===')
+      console.log('Message:', error.message)
+      console.log('Status:', error.response?.status)
+      console.log('Data:', error.response?.data)
+      console.log('================\n')
+    }
+
+    return {
+      success: false,
+      error: error.message,
+      status: error.response?.status || 500
+    }
+  }
+})

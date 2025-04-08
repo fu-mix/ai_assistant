@@ -59,14 +59,19 @@ if (process.contextIsolated) {
         return await ipcRenderer.invoke('replace-local-history-config', newContent)
       },
 
-      // ★ New: 部分エクスポート（複数IDを渡す）
-      exportSelectedAgents: async (selectedIds: number[]) => {
-        return await ipcRenderer.invoke('export-selected-agents', selectedIds)
+      // 部分エクスポート（オブジェクトとして渡す）
+      exportSelectedAgents: async (arg: { selectedIds: number[]; includeHistory: boolean }) => {
+        return await ipcRenderer.invoke('export-selected-agents', arg)
       },
 
-      // ★ New: 追加インポート
+      // 追加インポート
       appendLocalHistoryConfig: async (newContent: string) => {
         return await ipcRenderer.invoke('append-local-history-config', newContent)
+      },
+
+      // 外部API呼び出し
+      callExternalAPI: async (apiConfig: any, params: any) => {
+        return await ipcRenderer.invoke('callExternalAPI', apiConfig, params)
       }
     })
   } catch (error) {

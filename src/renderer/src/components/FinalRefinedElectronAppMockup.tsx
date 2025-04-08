@@ -36,7 +36,10 @@ import {
   MenuItem,
   Radio,
   RadioGroup,
-  VStack
+  VStack,
+  FormHelperText,
+  Divider,
+  Badge
 } from '@chakra-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -125,6 +128,8 @@ type ChatInfo = {
   inputMessage: string
   agentFilePaths?: string[]
   assistantSummary?: string
+  apiConfigs?: APIConfig[]
+  enableAPICall?: boolean
 }
 
 /**
@@ -138,6 +143,41 @@ type AutoAssistState = 'idle' | 'awaitConfirm' | 'executing'
 type SubtaskInfo = {
   task: string
   recommendedAssistant: string | null
+}
+
+/**
+ * APIの設定を表す型
+ */
+type APITrigger = {
+  type: 'keyword' | 'pattern'
+  value: string
+  description: string
+}
+
+type APIConfig = {
+  id: string
+  name: string
+  description?: string
+  endpoint: string
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  headers: Record<string, string>
+  bodyTemplate?: string
+  queryParamsTemplate?: string
+  responseTemplate?: string
+  authType?: 'none' | 'basic' | 'bearer' | 'apiKey'
+  authConfig?: {
+    username?: string
+    password?: string
+    token?: string
+    keyName?: string
+    keyValue?: string
+    inHeader?: boolean
+  }
+  triggers: APITrigger[]
+  parameterExtraction?: {
+    paramName: string
+    description: string
+  }[]
 }
 
 /* ------------------------------------------------
@@ -491,6 +531,7 @@ function AutoAssistSettingsModal({
  * ExportModal: 一部 or 全部 のエクスポート
  *    ※「会話履歴を含める」チェックボックスを追加
  * ------------------------------------------------ */
+
 function ExportModal({
   isOpen,
   onClose,
@@ -549,8 +590,7 @@ function ExportModal({
 
           return
         }
-        // 新IPC
-        // ここで「includeHistory」も一緒に渡す
+        // 新IPC - ここでオブジェクトとして渡す
         await window.electronAPI.exportSelectedAgents({
           selectedIds: checkedIds,
           includeHistory
@@ -661,6 +701,22 @@ function ImportModeModal({
 }) {
   const toast = useToast()
 
+  // インポートデータが有効なJSONか確認する関数
+  const validateImportData = (data: string | null): boolean => {
+    if (!data) return false
+
+    try {
+      const parsed = JSON.parse(data)
+
+      // 最低限、agentsプロパティが配列であることを確認
+      return Array.isArray(parsed.agents)
+    } catch (err) {
+      console.error('インポートデータのJSON解析エラー:', err)
+
+      return false
+    }
+  }
+
   const handleReplace = () => {
     if (!importedRaw) {
       toast({
@@ -673,6 +729,20 @@ function ImportModeModal({
 
       return
     }
+
+    // データ検証
+    if (!validateImportData(importedRaw)) {
+      toast({
+        title: 'エラー',
+        description: 'インポートデータが正しい形式ではありません',
+        status: 'error',
+        duration: 2000,
+        isClosable: true
+      })
+
+      return
+    }
+
     onReplace(importedRaw)
     onClose()
   }
@@ -689,6 +759,20 @@ function ImportModeModal({
 
       return
     }
+
+    // データ検証
+    if (!validateImportData(importedRaw)) {
+      toast({
+        title: 'エラー',
+        description: 'インポートデータが正しい形式ではありません',
+        status: 'error',
+        duration: 2000,
+        isClosable: true
+      })
+
+      return
+    }
+
     onAppend(importedRaw)
     onClose()
   }
@@ -716,7 +800,6 @@ function ImportModeModal({
     </Modal>
   )
 }
-
 /* ------------------------------------------------
  * CSV→JSONの単純変換ユーティリティ
  * ------------------------------------------------ */
@@ -739,6 +822,810 @@ function csvToJson(csv: string): string {
   }
 
   return JSON.stringify(result, null, 2)
+}
+
+function APIConfigEditor({
+  config,
+  onSave,
+  onCancel
+}: {
+  config: APIConfig
+  onSave: (config: APIConfig) => void
+  onCancel: () => void
+}) {
+  const [localConfig, setLocalConfig] = useState<APIConfig>({ ...config })
+  const [triggers, setTriggers] = useState<APITrigger[]>(config.triggers || [])
+  const [newTriggerType, setNewTriggerType] = useState<'keyword' | 'pattern'>('keyword')
+  const [newTriggerValue, setNewTriggerValue] = useState('')
+  const [newTriggerDescription, setNewTriggerDescription] = useState('')
+
+  const handleChange = (field: keyof APIConfig, value: any) => {
+    setLocalConfig({ ...localConfig, [field]: value })
+  }
+
+  const handleAuthChange = (field: string, value: any) => {
+    setLocalConfig({
+      ...localConfig,
+      authConfig: { ...(localConfig.authConfig || {}), [field]: value }
+    })
+  }
+
+  const handleHeadersChange = (headersString: string) => {
+    try {
+      const headers = JSON.parse(headersString)
+      setLocalConfig({ ...localConfig, headers })
+    } catch (err) {
+      // JSON解析エラーの場合は何もしない
+      console.error('Invalid JSON for headers:', err)
+    }
+  }
+
+  const handleAddTrigger = () => {
+    if (!newTriggerValue.trim()) return
+
+    setTriggers([
+      ...triggers,
+      {
+        type: newTriggerType,
+        value: newTriggerValue.trim(),
+        description:
+          newTriggerDescription.trim() ||
+          `${newTriggerType === 'keyword' ? 'キーワード' : 'パターン'}トリガー`
+      }
+    ])
+
+    setNewTriggerValue('')
+    setNewTriggerDescription('')
+  }
+
+  const handleRemoveTrigger = (index: number) => {
+    setTriggers(triggers.filter((_, i) => i !== index))
+  }
+
+  const handleSaveConfig = () => {
+    onSave({
+      ...localConfig,
+      triggers
+    })
+  }
+
+  // 展開するテンプレートの例を安全に作成する関数
+  const getSafeTemplate = (type: string) => {
+    if (type === 'body') {
+      return `{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "\${params.prompt}"
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.7,
+    "maxOutputTokens": 2048
+  }
+}`
+    } else if (type === 'query') {
+      return '{\n  "q": "${params.query}",\n  "limit": 10\n}'
+    } else if (type === 'response') {
+      return '${responseObj.candidates[0].content.parts[0].text}'
+    }
+
+    return ''
+  }
+
+  return (
+    <Box>
+      <FormControl mb={4}>
+        <FormLabel>API名</FormLabel>
+        <Input
+          value={localConfig.name}
+          onChange={(e) => handleChange('name', e.target.value)}
+          placeholder="天気API、検索API など"
+        />
+      </FormControl>
+
+      <FormControl mb={4}>
+        <FormLabel>API説明</FormLabel>
+        <Input
+          value={localConfig.description || ''}
+          onChange={(e) => handleChange('description', e.target.value)}
+          placeholder="このAPIの機能や用途を説明"
+        />
+      </FormControl>
+
+      <FormControl mb={4}>
+        <FormLabel>エンドポイント</FormLabel>
+        <Input
+          value={localConfig.endpoint}
+          onChange={(e) => handleChange('endpoint', e.target.value)}
+          placeholder="https://api.example.com/data"
+        />
+      </FormControl>
+
+      <FormControl mb={4}>
+        <FormLabel>メソッド</FormLabel>
+        <Select value={localConfig.method} onChange={(e) => handleChange('method', e.target.value)}>
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="DELETE">DELETE</option>
+        </Select>
+      </FormControl>
+
+      <FormControl mb={4}>
+        <FormLabel>認証タイプ</FormLabel>
+        <Select
+          value={localConfig.authType || 'none'}
+          onChange={(e) => handleChange('authType', e.target.value)}
+        >
+          <option value="none">認証なし</option>
+          <option value="apiKey">APIキー</option>
+          <option value="bearer">Bearer Token</option>
+          <option value="basic">Basic認証</option>
+        </Select>
+      </FormControl>
+
+      {localConfig.authType === 'apiKey' && (
+        <>
+          <FormControl mb={4}>
+            <FormLabel>APIキー名</FormLabel>
+            <Input
+              value={localConfig.authConfig?.keyName || ''}
+              onChange={(e) => handleAuthChange('keyName', e.target.value)}
+              placeholder="X-API-Key"
+            />
+          </FormControl>
+
+          <FormControl mb={4}>
+            <FormLabel>APIキー値</FormLabel>
+            <Input
+              value={localConfig.authConfig?.keyValue || ''}
+              onChange={(e) => handleAuthChange('keyValue', e.target.value)}
+              placeholder="your-api-key"
+            />
+          </FormControl>
+
+          <FormControl mb={4}>
+            <Checkbox
+              isChecked={localConfig.authConfig?.inHeader || false}
+              onChange={(e) => handleAuthChange('inHeader', e.target.checked)}
+            >
+              ヘッダーに含める (チェックしない場合はクエリパラメータ)
+            </Checkbox>
+          </FormControl>
+        </>
+      )}
+
+      {localConfig.authType === 'bearer' && (
+        <FormControl mb={4}>
+          <FormLabel>Bearer Token</FormLabel>
+          <Input
+            value={localConfig.authConfig?.token || ''}
+            onChange={(e) => handleAuthChange('token', e.target.value)}
+            placeholder="your-access-token"
+          />
+        </FormControl>
+      )}
+
+      {localConfig.authType === 'basic' && (
+        <>
+          <FormControl mb={4}>
+            <FormLabel>ユーザー名</FormLabel>
+            <Input
+              value={localConfig.authConfig?.username || ''}
+              onChange={(e) => handleAuthChange('username', e.target.value)}
+              placeholder="username"
+            />
+          </FormControl>
+
+          <FormControl mb={4}>
+            <FormLabel>パスワード</FormLabel>
+            <Input
+              type="password"
+              value={localConfig.authConfig?.password || ''}
+              onChange={(e) => handleAuthChange('password', e.target.value)}
+              placeholder="password"
+            />
+          </FormControl>
+        </>
+      )}
+
+      <FormControl mb={4}>
+        <FormLabel>リクエストヘッダー (JSONフォーマット)</FormLabel>
+        <Textarea
+          value={JSON.stringify(localConfig.headers || {}, null, 2)}
+          onChange={(e) => handleHeadersChange(e.target.value)}
+          placeholder={'{\n  "Content-Type": "application/json"\n}'}
+        />
+      </FormControl>
+
+      {(localConfig.method === 'POST' || localConfig.method === 'PUT') && (
+        <FormControl mb={4}>
+          <FormLabel>リクエストボディテンプレート (ES6テンプレート構文)</FormLabel>
+          <Textarea
+            value={localConfig.bodyTemplate || ''}
+            onChange={(e) => handleChange('bodyTemplate', e.target.value)}
+            placeholder={getSafeTemplate('body')}
+            rows={10}
+          />
+          <FormHelperText>$&#123;params.xxx&#125; の形式でパラメータを参照できます</FormHelperText>
+        </FormControl>
+      )}
+
+      <FormControl mb={4}>
+        <FormLabel>クエリパラメータテンプレート (ES6テンプレート構文)</FormLabel>
+        <Textarea
+          value={localConfig.queryParamsTemplate || ''}
+          onChange={(e) => handleChange('queryParamsTemplate', e.target.value)}
+          placeholder={getSafeTemplate('query')}
+        />
+        <FormHelperText>$&#123;params.xxx&#125; の形式でパラメータを参照できます</FormHelperText>
+      </FormControl>
+
+      <FormControl mb={4}>
+        <FormLabel>レスポンステンプレート (ES6テンプレート構文)</FormLabel>
+        <Textarea
+          value={localConfig.responseTemplate || ''}
+          onChange={(e) => handleChange('responseTemplate', e.target.value)}
+          placeholder={getSafeTemplate('response')}
+        />
+        <FormHelperText>responseObj 変数でAPIレスポンスにアクセスできます</FormHelperText>
+      </FormControl>
+
+      <Divider my={6} />
+
+      <Heading size="md" mb={4}>
+        APIトリガー設定
+      </Heading>
+      <Text fontSize="sm" color="gray.600" mb={4}>
+        以下のトリガーに一致するとAPIが呼び出されます。複数設定できます。
+      </Text>
+
+      {/* 現在のトリガーリスト */}
+      {triggers.length > 0 ? (
+        <Box mb={4}>
+          <List spacing={2}>
+            {triggers.map((trigger, index) => (
+              <ListItem key={index} p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
+                <Flex justify="space-between" align="center">
+                  <Box>
+                    <Badge colorScheme={trigger.type === 'keyword' ? 'blue' : 'purple'}>
+                      {trigger.type === 'keyword' ? 'キーワード' : 'パターン'}
+                    </Badge>
+                    <Text mt={1} fontWeight="bold">
+                      {trigger.value}
+                    </Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {trigger.description}
+                    </Text>
+                  </Box>
+                  <IconButton
+                    icon={<AiOutlineDelete />}
+                    aria-label="削除"
+                    size="sm"
+                    colorScheme="red"
+                    onClick={() => handleRemoveTrigger(index)}
+                  />
+                </Flex>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      ) : (
+        <Box mb={4} p={3} borderWidth="1px" borderRadius="md" bg="yellow.50">
+          <Text color="yellow.800">
+            トリガーが設定されていません。少なくとも1つのトリガーを追加することをお勧めします。
+          </Text>
+        </Box>
+      )}
+
+      {/* 新しいトリガーの追加 */}
+      <Box mb={6} p={4} borderWidth="1px" borderRadius="md">
+        <Heading size="sm" mb={3}>
+          新しいトリガーを追加
+        </Heading>
+
+        <FormControl mb={3}>
+          <FormLabel>トリガータイプ</FormLabel>
+          <RadioGroup
+            value={newTriggerType}
+            onChange={(v) => setNewTriggerType(v as 'keyword' | 'pattern')}
+          >
+            <HStack spacing={5}>
+              <Radio value="keyword">キーワード (カンマ区切り)</Radio>
+              <Radio value="pattern">パターン (正規表現)</Radio>
+            </HStack>
+          </RadioGroup>
+        </FormControl>
+
+        <FormControl mb={3}>
+          <FormLabel>{newTriggerType === 'keyword' ? 'キーワード' : 'パターン'}</FormLabel>
+          <Input
+            value={newTriggerValue}
+            onChange={(e) => setNewTriggerValue(e.target.value)}
+            placeholder={
+              newTriggerType === 'keyword'
+                ? '例: 天気,気象,気温'
+                : '例: (東京|大阪|名古屋)の(天気|気温)'
+            }
+          />
+          <FormHelperText>
+            {newTriggerType === 'keyword'
+              ? 'カンマで区切って複数のキーワードを指定できます。いずれかのキーワードが含まれるとトリガーされます。'
+              : '正規表現パターンを指定します。パターンに一致するとトリガーされます。'}
+          </FormHelperText>
+        </FormControl>
+
+        <FormControl mb={3}>
+          <FormLabel>説明 (オプション)</FormLabel>
+          <Input
+            value={newTriggerDescription}
+            onChange={(e) => setNewTriggerDescription(e.target.value)}
+            placeholder="例: 天気に関する質問を検出"
+          />
+        </FormControl>
+
+        <Button colorScheme="blue" onClick={handleAddTrigger} isDisabled={!newTriggerValue.trim()}>
+          トリガーを追加
+        </Button>
+      </Box>
+
+      <HStack spacing={4} justify="flex-end" mt={6}>
+        <Button onClick={onCancel}>キャンセル</Button>
+        <Button colorScheme="blue" onClick={handleSaveConfig}>
+          保存
+        </Button>
+      </HStack>
+    </Box>
+  )
+}
+
+function APISettingsModal({
+  isOpen,
+  onClose,
+  apiConfigs = [],
+  onSave
+}: {
+  isOpen: boolean
+  onClose: () => void
+  apiConfigs: APIConfig[]
+  onSave: (configs: APIConfig[]) => void
+}) {
+  const toast = useToast()
+  const [localConfigs, setLocalConfigs] = useState<APIConfig[]>([])
+  const [currentEditConfig, setCurrentEditConfig] = useState<APIConfig | null>(null)
+  const [isAddingConfig, setIsAddingConfig] = useState(false)
+
+  // モーダルが開いたら設定をコピー
+  useEffect(() => {
+    if (isOpen) {
+      setLocalConfigs(JSON.parse(JSON.stringify(apiConfigs)))
+    }
+  }, [isOpen, apiConfigs])
+
+  const handleAddConfig = () => {
+    const newConfig: APIConfig = {
+      id: `api-${Date.now()}`,
+      name: '新しいAPI',
+      description: '',
+      endpoint: '',
+      method: 'GET',
+      headers: {},
+      authType: 'none',
+      triggers: []
+    }
+    setCurrentEditConfig(newConfig)
+    setIsAddingConfig(true)
+  }
+
+  const handleEditConfig = (config: APIConfig) => {
+    setCurrentEditConfig(JSON.parse(JSON.stringify(config)))
+    setIsAddingConfig(false)
+  }
+
+  const handleSaveConfig = (config: APIConfig) => {
+    if (isAddingConfig) {
+      setLocalConfigs([...localConfigs, config])
+    } else {
+      setLocalConfigs(localConfigs.map((c) => (c.id === config.id ? config : c)))
+    }
+    setCurrentEditConfig(null)
+    setIsAddingConfig(false)
+  }
+
+  const handleDeleteConfig = (id: string) => {
+    setLocalConfigs(localConfigs.filter((c) => c.id !== id))
+  }
+
+  const handleSaveAll = () => {
+    onSave(localConfigs)
+    toast({
+      title: 'API設定を保存しました',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+    onClose()
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
+      <ModalOverlay />
+      <ModalContent maxW="4xl">
+        <ModalHeader>外部API設定</ModalHeader>
+        <ModalBody>
+          {currentEditConfig ? (
+            <Box maxH="70vh" overflowY="auto" pr={2}>
+              <APIConfigEditor
+                config={currentEditConfig}
+                onSave={handleSaveConfig}
+                onCancel={() => {
+                  setCurrentEditConfig(null)
+                  setIsAddingConfig(false)
+                }}
+              />
+            </Box>
+          ) : (
+            <>
+              <Button colorScheme="blue" mb={4} onClick={handleAddConfig}>
+                新しいAPIを追加
+              </Button>
+
+              {localConfigs.length === 0 ? (
+                <Text>
+                  設定されたAPIはありません。「新しいAPIを追加」ボタンから作成してください。
+                </Text>
+              ) : (
+                <List spacing={3}>
+                  {localConfigs.map((config) => (
+                    <ListItem key={config.id} p={3} borderWidth="1px" borderRadius="md">
+                      <Flex justify="space-between" align="center">
+                        <Box>
+                          <Text fontWeight="bold">{config.name}</Text>
+                          <Text fontSize="sm" color="gray.600">
+                            {config.method} {config.endpoint}
+                          </Text>
+                          <Text fontSize="xs" color="gray.500">
+                            トリガー:{' '}
+                            {config.triggers.length > 0
+                              ? config.triggers
+                                  .map((t) => (t.type === 'keyword' ? t.value : 'パターン'))
+                                  .join(', ')
+                              : 'なし'}
+                          </Text>
+                        </Box>
+                        <HStack>
+                          <IconButton
+                            icon={<FiEdit />}
+                            aria-label="編集"
+                            size="sm"
+                            onClick={() => handleEditConfig(config)}
+                          />
+                          <IconButton
+                            icon={<AiOutlineDelete />}
+                            aria-label="削除"
+                            size="sm"
+                            colorScheme="red"
+                            onClick={() => handleDeleteConfig(config.id)}
+                          />
+                        </HStack>
+                      </Flex>
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </>
+          )}
+        </ModalBody>
+
+        {!currentEditConfig && (
+          <ModalFooter>
+            <Button mr={3} onClick={onClose}>
+              キャンセル
+            </Button>
+            <Button colorScheme="blue" onClick={handleSaveAll}>
+              保存
+            </Button>
+          </ModalFooter>
+        )}
+      </ModalContent>
+    </Modal>
+  )
+}
+
+// API検知関数 - ユーザーメッセージからトリガーされるAPIを検出
+async function detectTriggeredAPIs(
+  userMessage: string,
+  apiConfigs: APIConfig[]
+): Promise<APIConfig[]> {
+  console.log('detectTriggeredAPIs - 開始', {
+    messageLength: userMessage.length,
+    apiConfigsCount: apiConfigs.length
+  })
+
+  const triggeredAPIs: APIConfig[] = []
+
+  for (const apiConfig of apiConfigs) {
+    // トリガーが設定されていない場合はスキップ
+    if (!apiConfig.triggers || apiConfig.triggers.length === 0) {
+      console.log(`APIConfig ${apiConfig.name} - トリガーなし、スキップ`)
+      continue
+    }
+
+    let isTriggered = false
+
+    // 各トリガーをチェック
+    for (const trigger of apiConfig.triggers) {
+      console.log(
+        `トリガーチェック: ${apiConfig.name}, type=${trigger.type}, value=${trigger.value}`
+      )
+
+      if (trigger.type === 'keyword') {
+        // キーワードタイプのトリガー
+        const keywords = trigger.value.split(',').map((k) => k.trim())
+        console.log('キーワード検索:', keywords)
+
+        if (
+          keywords.some((keyword) => {
+            const found = userMessage.toLowerCase().includes(keyword.toLowerCase())
+            if (found) console.log(`キーワード検出: ${keyword}`)
+
+            return found
+          })
+        ) {
+          isTriggered = true
+          break
+        }
+      } else if (trigger.type === 'pattern') {
+        // パターンタイプのトリガー
+        try {
+          const regex = new RegExp(trigger.value, 'i')
+          const match = regex.test(userMessage)
+          console.log(`パターンマッチ: ${trigger.value} => ${match}`)
+
+          if (match) {
+            isTriggered = true
+            break
+          }
+        } catch (err) {
+          console.error(`無効な正規表現パターン: ${trigger.value}`, err)
+        }
+      }
+    }
+
+    if (isTriggered) {
+      console.log(`APIトリガー検出: ${apiConfig.name}`)
+      triggeredAPIs.push(apiConfig)
+    } else {
+      console.log(`APIトリガーなし: ${apiConfig.name}`)
+    }
+  }
+
+  console.log(
+    '検出されたAPI:',
+    triggeredAPIs.map((api) => api.name)
+  )
+
+  return triggeredAPIs
+}
+
+// API処理関数 - 検出されたAPIを実行し結果を統合
+async function processAPITriggers(
+  userMessage: string,
+  apiConfigs: APIConfig[],
+  apiKey: string // apiKey パラメータを追加
+): Promise<string> {
+  console.log('processAPITriggers - 開始:', userMessage.substring(0, 50) + '...')
+
+  const triggeredAPIs = await detectTriggeredAPIs(userMessage, apiConfigs)
+  console.log(
+    '検出されたAPIトリガー:',
+    triggeredAPIs.map((api) => api.name)
+  )
+
+  if (triggeredAPIs.length === 0) {
+    console.log('APIトリガーなし - 元メッセージを返します')
+
+    return userMessage // APIトリガーなし
+  }
+
+  let processedMessage = userMessage
+
+  for (const apiConfig of triggeredAPIs) {
+    console.log(`API呼び出し実行: ${apiConfig.name}`)
+    try {
+      // パラメータ抽出 - ここでapiKeyを渡す
+      const params = await extractParametersWithLLM(userMessage, apiConfig, apiKey)
+      console.log('抽出パラメータ:', params)
+
+      // API呼び出し実行
+      console.log('window.electronAPI.callExternalAPI を呼び出します')
+      const apiResponse = await window.electronAPI.callExternalAPI(apiConfig, params)
+      console.log('API応答:', apiResponse)
+
+      // 結果テキスト生成
+      let resultText = ''
+      if (apiResponse.success) {
+        resultText =
+          typeof apiResponse.data === 'string'
+            ? apiResponse.data
+            : JSON.stringify(apiResponse.data, null, 2)
+      } else {
+        resultText = `エラー: ${apiResponse.error || '不明なエラー'}`
+      }
+
+      // メッセージに結果を追加（ノートとして）
+      processedMessage += `\n\n[補足情報: ${apiConfig.name}]\n${resultText}`
+      console.log('処理後メッセージ:', processedMessage.substring(0, 100) + '...')
+    } catch (err) {
+      console.error(`API呼び出し失敗: ${apiConfig.name}`, err)
+      processedMessage += `\n\n[補足情報: ${apiConfig.name}]\nAPI呼び出し中にエラーが発生しました。`
+    }
+  }
+
+  return processedMessage
+}
+
+async function extractParametersWithLLM(
+  userMessage: string,
+  apiConfig: APIConfig,
+  apiKey: string
+): Promise<any> {
+  // デフォルトパラメータの設定（最低限のフォールバック）
+  const defaultParams: any = {}
+
+  // トリガーがキーワードタイプの場合、それを除いた残りをpromptとして設定
+  if (apiConfig.triggers && apiConfig.triggers.length > 0) {
+    for (const trigger of apiConfig.triggers) {
+      if (trigger.type === 'keyword') {
+        const keywords = trigger.value.split(',').map((k) => k.trim())
+        for (const keyword of keywords) {
+          if (userMessage.toLowerCase().includes(keyword.toLowerCase())) {
+            // キーワードを除去してpromptパラメータとして設定
+            let cleanedMessage = userMessage
+            const keywordRegex = new RegExp(keyword, 'i')
+            cleanedMessage = cleanedMessage.replace(keywordRegex, '').trim()
+            defaultParams.prompt = cleanedMessage
+            // トークンがconfig経由で提供されている場合は使用
+            if (apiConfig.authConfig?.token) {
+              defaultParams.apiKey = apiConfig.authConfig.token
+            }
+            break
+          }
+        }
+      }
+    }
+  }
+
+  // パラメータ抽出設定がない場合はデフォルトパラメータを返す
+  if (!apiConfig.parameterExtraction || apiConfig.parameterExtraction.length === 0) {
+    console.log('パラメータ抽出設定なし、デフォルトパラメータ使用:', defaultParams)
+
+    return defaultParams
+  }
+
+  // パラメータ抽出設定がある場合はLLMを使用して抽出
+  const extractionPrompt = `
+あなたはパラメータ抽出エンジンです。
+ユーザーのメッセージから必要なパラメータを抽出してください。
+
+ユーザーメッセージ:
+"${userMessage}"
+
+抽出すべきパラメータ:
+${apiConfig.parameterExtraction.map((p) => `- ${p.paramName}: ${p.description}`).join('\n')}
+
+結果は以下のJSON形式で返してください:
+{
+  "パラメータ名": "抽出値"
+}
+余計な説明は不要です。JSONだけを返してください。
+`
+
+  try {
+    const extractionResponse = await window.electronAPI.postChatAI(
+      [{ role: 'user', parts: [{ text: extractionPrompt }] }],
+      apiKey,
+      'あなたはパラメータ抽出エンジンです。JSONだけを返してください。'
+    )
+
+    const jsonMatch = extractionResponse.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.log('LLMからのパラメータ抽出失敗、デフォルトパラメータ使用:', defaultParams)
+
+      return defaultParams
+    }
+
+    try {
+      const extractedParams = JSON.parse(jsonMatch[0])
+
+      // APIキーの追加
+      if (apiConfig.authConfig?.token) {
+        extractedParams.apiKey = apiConfig.authConfig.token
+      }
+
+      console.log('LLMから抽出されたパラメータ:', extractedParams)
+
+      return extractedParams
+    } catch (parseError) {
+      console.error('パラメータJSON解析エラー:', parseError)
+
+      return defaultParams
+    }
+  } catch (err) {
+    console.error('パラメータ抽出中にエラー:', err)
+
+    return defaultParams
+  }
+}
+
+// APIに渡すシステムプロンプトを強化する関数
+function enhanceSystemPromptWithAPIContext(
+  originalPrompt: string,
+  apiConfigs: APIConfig[],
+  apiResult?: { originalMessage?: string; processedMessage?: string; error?: string } | null
+): string {
+  if (!apiConfigs || apiConfigs.length === 0) {
+    return originalPrompt
+  }
+
+  // API情報の説明テキスト
+  const apiInfo = apiConfigs
+    .map((api) => {
+      return `
+- API名: ${api.name}
+  - 説明: ${api.description || 'なし'}
+  - 提供する情報: ${api.triggers.map((t) => t.description).join(', ') || 'なし'}
+  `
+    })
+    .join('\n')
+
+  // API実行結果の情報を追加
+  let apiResultInfo = ''
+  if (apiResult) {
+    if (apiResult.error) {
+      apiResultInfo = `
+注意: 直近のユーザーメッセージに対するAPI呼び出しに失敗しました。
+エラー: ${apiResult.error}
+
+これは内部エラーであり、ユーザーには通知されていません。
+通常通り対応し、このエラーについては言及しないでください。
+`
+    } else if (
+      apiResult.processedMessage &&
+      apiResult.processedMessage !== apiResult.originalMessage
+    ) {
+      // APIが成功して追加情報が含まれている場合
+      apiResultInfo = `
+注意: 直近のユーザーメッセージに対して、API呼び出しが実行され、追加情報が含まれています。
+オリジナルメッセージ: "${apiResult.originalMessage}"
+APIから追加された情報も含むメッセージ: "${apiResult.processedMessage}"
+
+この情報はユーザーに表示されません。ユーザーは追加された情報を認識していないため、
+回答には自然に情報を織り込んでください。
+`
+    }
+  }
+
+  // システムプロンプトに追加
+  return `
+${originalPrompt}
+
+あなたには様々な外部情報へのアクセス機能があります。ユーザーの質問やリクエストによっては、これらの情報源からデータが自動的に提供されます。以下は利用可能な情報源のリストです：
+
+${apiInfo}
+${apiResultInfo}
+
+これらの情報源からのデータはユーザーの質問に含まれる場合があります。このデータを使って最適な回答を提供してください。
+
+データが提供されている場合は、その情報を活用して回答してください。ユーザーには「このデータは〇〇APIから取得しました」などと説明する必要はありません。自然な回答に情報を組み込んでください。
+
+データが提供されていない場合でも、一般的な知識に基づいて最善の回答を提供してください。
+`
 }
 
 /* ------------------------------------------------
@@ -853,6 +1740,16 @@ export const FinalRefinedElectronAppMockup = () => {
 
   // for scroll
   const prevMessageCountRef = useRef<number>(0)
+
+  // API設定関連の状態追加
+  const [isAPISettingsOpen, setIsAPISettingsOpen] = useState(false)
+  const [editingAPIConfigs, setEditingAPIConfigs] = useState<APIConfig[]>([])
+  const [enableAPICall, setEnableAPICall] = useState(false)
+
+  // メインコンポーネントの状態変数に追加
+  const [modalEnableAPICall, setModalEnableAPICall] = useState(false)
+  const [modalAPIConfigs, setModalAPIConfigs] = useState<APIConfig[]>([])
+  const [isCreateAPISettingsOpen, setIsCreateAPISettingsOpen] = useState(false)
 
   const saveAutoAssistData = async (updatedChats: ChatInfo[]) => {
     try {
@@ -1775,6 +2672,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
       return
     }
+
     // 2) オートアシスト + Yes/No待ち
     if (selectedChatId === 'autoAssist' && autoAssistState === 'awaitConfirm') {
       const ans = inputMessage.trim().toLowerCase()
@@ -2034,11 +2932,22 @@ export const FinalRefinedElectronAppMockup = () => {
         }
 
         const ephemeralAll = [...newSelectedChat.postMessages, ephemeralMsg]
-        const resp = await window.electronAPI.postChatAI(
-          ephemeralAll,
-          apiKey,
-          newSelectedChat.systemPrompt
-        )
+
+        // システムプロンプトも強化
+        let enhancedSystemPrompt = newSelectedChat.systemPrompt
+        if (
+          newSelectedChat.apiConfigs &&
+          newSelectedChat.apiConfigs.length > 0 &&
+          newSelectedChat.enableAPICall !== false
+        ) {
+          enhancedSystemPrompt = enhanceSystemPromptWithAPIContext(
+            newSelectedChat.systemPrompt,
+            newSelectedChat.apiConfigs
+          )
+        }
+
+        const resp = await window.electronAPI.postChatAI(ephemeralAll, apiKey, enhancedSystemPrompt)
+
         const aiMsg: Message = { type: 'ai', content: resp }
 
         const finalUpdated = updatedChats.map((chat) => {
@@ -2084,10 +2993,64 @@ export const FinalRefinedElectronAppMockup = () => {
     // (通常) 新規メッセージ
     setIsLoading(true)
     try {
+      // ユーザー表示用のメッセージ
       const userMsg: Message = { type: 'user', content: inputMessage }
+
+      // UIに先に表示する
+      const immediateUpdatedChats = chats.map((chat) => {
+        if (chat.id === selectedChatId) {
+          return {
+            ...chat,
+            messages: [...chat.messages, userMsg],
+            inputMessage: ''
+          }
+        }
+
+        return chat
+      })
+
+      // UIを更新（メッセージを表示）
+      setChats(immediateUpdatedChats)
+      setInputMessage('')
+
+      // API処理を追加（選択されたチャットにAPI設定があり、かつ有効な場合）
+      let processedUserContent = inputMessage
+      let apiProcessingResult = null
+
+      if (
+        selectedChat.apiConfigs &&
+        selectedChat.apiConfigs.length > 0 &&
+        selectedChat.enableAPICall !== false
+      ) {
+        try {
+          processedUserContent = await processAPITriggers(
+            inputMessage,
+            selectedChat.apiConfigs,
+            apiKey
+          )
+
+          // オリジナルのメッセージと異なる場合、API処理が行われたと判断
+          if (processedUserContent !== inputMessage) {
+            apiProcessingResult = {
+              originalMessage: inputMessage,
+              processedMessage: processedUserContent
+            }
+          }
+        } catch (apiErr) {
+          console.error('API処理中にエラー:', apiErr)
+          // エラー時は元のメッセージを使用
+          processedUserContent = inputMessage
+          apiProcessingResult = {
+            originalMessage: inputMessage,
+            error: apiErr.message || '不明なエラー'
+          }
+        }
+      }
+
+      // APIへ送信するメッセージはAPI処理結果を使用
       const ephemeralMsg: Messages = {
         role: 'user',
-        parts: [{ text: inputMessage }]
+        parts: [{ text: processedUserContent }]
       }
 
       for (const f of tempFiles) {
@@ -2138,7 +3101,8 @@ export const FinalRefinedElectronAppMockup = () => {
         }
       }
 
-      const updatedChats = chats.map((chat) => {
+      // postMessagesの更新を含めた完全な状態更新
+      const fullUpdatedChats = chats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
             ...chat,
@@ -2150,20 +3114,34 @@ export const FinalRefinedElectronAppMockup = () => {
 
         return chat
       })
-      setChats(updatedChats)
 
-      setInputMessage('')
+      // 状態を更新し、保存
+      setChats(fullUpdatedChats)
+      await window.electronAPI.saveAgents(fullUpdatedChats)
+
       setTempFiles([])
 
       const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
-      const resp = await window.electronAPI.postChatAI(
-        ephemeralAll,
-        apiKey,
-        selectedChat.systemPrompt
-      )
+
+      // システムプロンプトも強化
+      let enhancedSystemPrompt = selectedChat.systemPrompt
+      if (
+        selectedChat.apiConfigs &&
+        selectedChat.apiConfigs.length > 0 &&
+        selectedChat.enableAPICall !== false
+      ) {
+        enhancedSystemPrompt = enhanceSystemPromptWithAPIContext(
+          selectedChat.systemPrompt,
+          selectedChat.apiConfigs,
+          apiProcessingResult
+        )
+      }
+
+      const resp = await window.electronAPI.postChatAI(ephemeralAll, apiKey, enhancedSystemPrompt)
+
       const aiMsg: Message = { type: 'ai', content: resp }
 
-      const finalUpdated = updatedChats.map((chat) => {
+      const finalUpdated = fullUpdatedChats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
             ...chat,
@@ -2198,6 +3176,8 @@ export const FinalRefinedElectronAppMockup = () => {
     setModalChatTitle('')
     setModalSystemPrompt('')
     setModalAgentFiles([])
+    setModalEnableAPICall(false)
+    setModalAPIConfigs([])
     setIsModalOpen(true)
   }
   const closeCustomChatModal = () => {
@@ -2279,7 +3259,9 @@ export const FinalRefinedElectronAppMockup = () => {
       createdAt: new Date().toLocaleString(),
       inputMessage: '',
       agentFilePaths: modalAgentFiles.map((f) => f.path),
-      assistantSummary: summaryText
+      assistantSummary: summaryText,
+      apiConfigs: modalAPIConfigs,
+      enableAPICall: modalEnableAPICall
     }
 
     const updated = [...chats, newChat]
@@ -2362,6 +3344,11 @@ export const FinalRefinedElectronAppMockup = () => {
       return { name: filename, path: p }
     })
     setEditingAgentFiles(mapped)
+
+    // API設定の初期化を追加
+    setEditingAPIConfigs(sc.apiConfigs || [])
+    setEnableAPICall(sc.enableAPICall !== false)
+
     setIsPromptModalOpen(true)
   }
 
@@ -2406,7 +3393,9 @@ export const FinalRefinedElectronAppMockup = () => {
           ...chat,
           customTitle: editingCustomTitle,
           systemPrompt: editingSystemPrompt,
-          agentFilePaths: editingAgentFiles.map((f) => f.path)
+          agentFilePaths: editingAgentFiles.map((f) => f.path),
+          apiConfigs: editingAPIConfigs,
+          enableAPICall: enableAPICall
         }
       }
 
@@ -3263,6 +4252,27 @@ export const FinalRefinedElectronAppMockup = () => {
                 </Box>
               )}
             </FormControl>
+            <FormControl mt={4} mb={4} display="flex" alignItems="center">
+              <FormLabel htmlFor="create-api-call-enabled" mb="0">
+                外部API呼び出しを有効にする
+              </FormLabel>
+              <Switch
+                id="create-api-call-enabled"
+                isChecked={modalEnableAPICall}
+                onChange={(e) => setModalEnableAPICall(e.target.checked)}
+              />
+            </FormControl>
+
+            <FormControl mt={4} mb={4}>
+              <Button
+                onClick={() => setIsCreateAPISettingsOpen(true)}
+                colorScheme="teal"
+                isDisabled={!modalEnableAPICall}
+              >
+                外部API設定
+              </Button>
+              <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
+            </FormControl>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeCustomChatModal}>
@@ -3274,7 +4284,14 @@ export const FinalRefinedElectronAppMockup = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-
+      <APISettingsModal
+        isOpen={isCreateAPISettingsOpen}
+        onClose={() => setIsCreateAPISettingsOpen(false)}
+        apiConfigs={modalAPIConfigs}
+        onSave={(configs) => {
+          setModalAPIConfigs(configs)
+        }}
+      />
       {/* システムプロンプト編集モーダル */}
       <Modal
         isOpen={isPromptModalOpen}
@@ -3355,6 +4372,28 @@ export const FinalRefinedElectronAppMockup = () => {
                 会話履歴リセット
               </Button>
             </FormControl>
+
+            <FormControl mt={5} mb={4} display="flex" alignItems="center">
+              <FormLabel htmlFor="api-call-enabled" mb="0">
+                外部API呼び出しを有効にする
+              </FormLabel>
+              <Switch
+                id="api-call-enabled"
+                isChecked={enableAPICall}
+                onChange={(e) => setEnableAPICall(e.target.checked)}
+              />
+            </FormControl>
+
+            <FormControl mt={4} mb={4}>
+              <Button
+                onClick={() => setIsAPISettingsOpen(true)}
+                colorScheme="teal"
+                isDisabled={!enableAPICall}
+              >
+                外部API設定
+              </Button>
+              <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
+            </FormControl>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
@@ -3366,7 +4405,14 @@ export const FinalRefinedElectronAppMockup = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-
+      <APISettingsModal
+        isOpen={isAPISettingsOpen}
+        onClose={() => setIsAPISettingsOpen(false)}
+        apiConfigs={editingAPIConfigs}
+        onSave={(configs) => {
+          setEditingAPIConfigs(configs)
+        }}
+      />
       {/* 会話リセット確認モーダル */}
       <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
         <ModalOverlay />
