@@ -39,7 +39,9 @@ import {
   VStack,
   FormHelperText,
   Divider,
-  Badge
+  Badge,
+  InputRightElement,
+  InputGroup
 } from '@chakra-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -853,6 +855,10 @@ function APIConfigEditor({
     JSON.stringify(config.headers || {}, null, 2)
   )
   const [headersJsonError, setHeadersJsonError] = useState<string | null>(null)
+  // APIキー表示/非表示の状態を管理
+  const [showApiKey, setShowApiKey] = useState<boolean>(false)
+  const [showBearerToken, setShowBearerToken] = useState<boolean>(false)
+  const [showPassword, setShowPassword] = useState<boolean>(false)
 
   const handleChange = (field: keyof APIConfig, value: any) => {
     setLocalConfig({ ...localConfig, [field]: value })
@@ -1011,11 +1017,20 @@ function APIConfigEditor({
 
           <FormControl mb={4}>
             <FormLabel>APIキー値</FormLabel>
-            <Input
-              value={localConfig.authConfig?.keyValue || ''}
-              onChange={(e) => handleAuthChange('keyValue', e.target.value)}
-              placeholder="your-api-key"
-            />
+            <InputGroup>
+              <Input
+                type={showApiKey ? 'text' : 'password'}
+                value={localConfig.authConfig?.keyValue || ''}
+                onChange={(e) => handleAuthChange('keyValue', e.target.value)}
+                placeholder="your-api-key"
+              />
+              <InputRightElement width="4.5rem">
+                <Button h="1.75rem" size="sm" onClick={() => setShowApiKey(!showApiKey)}>
+                  {showApiKey ? '隠す' : '表示'}
+                </Button>
+              </InputRightElement>
+            </InputGroup>
+            <FormHelperText>APIキーは安全に保管され、ローカルに保存されます</FormHelperText>
           </FormControl>
 
           <FormControl mb={4}>
@@ -1032,11 +1047,20 @@ function APIConfigEditor({
       {localConfig.authType === 'bearer' && (
         <FormControl mb={4}>
           <FormLabel>Bearer Token</FormLabel>
-          <Input
-            value={localConfig.authConfig?.token || ''}
-            onChange={(e) => handleAuthChange('token', e.target.value)}
-            placeholder="your-access-token"
-          />
+          <InputGroup>
+            <Input
+              type={showBearerToken ? 'text' : 'password'}
+              value={localConfig.authConfig?.token || ''}
+              onChange={(e) => handleAuthChange('token', e.target.value)}
+              placeholder="your-access-token"
+            />
+            <InputRightElement width="4.5rem">
+              <Button h="1.75rem" size="sm" onClick={() => setShowBearerToken(!showBearerToken)}>
+                {showBearerToken ? '隠す' : '表示'}
+              </Button>
+            </InputRightElement>
+          </InputGroup>
+          <FormHelperText>トークンは安全に保管され、ローカルに保存されます</FormHelperText>
         </FormControl>
       )}
 
@@ -1053,12 +1077,20 @@ function APIConfigEditor({
 
           <FormControl mb={4}>
             <FormLabel>パスワード</FormLabel>
-            <Input
-              type="password"
-              value={localConfig.authConfig?.password || ''}
-              onChange={(e) => handleAuthChange('password', e.target.value)}
-              placeholder="password"
-            />
+            <InputGroup>
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                value={localConfig.authConfig?.password || ''}
+                onChange={(e) => handleAuthChange('password', e.target.value)}
+                placeholder="password"
+              />
+              <InputRightElement width="4.5rem">
+                <Button h="1.75rem" size="sm" onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? '隠す' : '表示'}
+                </Button>
+              </InputRightElement>
+            </InputGroup>
+            <FormHelperText>パスワードは安全に保管され、ローカルに保存されます</FormHelperText>
           </FormControl>
         </>
       )}
@@ -1413,17 +1445,11 @@ async function detectTriggeredAPIs(
   userMessage: string,
   apiConfigs: APIConfig[]
 ): Promise<APIConfig[]> {
-  console.log('detectTriggeredAPIs - 開始', {
-    messageLength: userMessage.length,
-    apiConfigsCount: apiConfigs.length
-  })
-
   const triggeredAPIs: APIConfig[] = []
 
   for (const apiConfig of apiConfigs) {
     // トリガーが設定されていない場合はスキップ
     if (!apiConfig.triggers || apiConfig.triggers.length === 0) {
-      console.log(`APIConfig ${apiConfig.name} - トリガーなし、スキップ`)
       continue
     }
 
@@ -1431,19 +1457,13 @@ async function detectTriggeredAPIs(
 
     // 各トリガーをチェック
     for (const trigger of apiConfig.triggers) {
-      console.log(
-        `トリガーチェック: ${apiConfig.name}, type=${trigger.type}, value=${trigger.value}`
-      )
-
       if (trigger.type === 'keyword') {
         // キーワードタイプのトリガー
         const keywords = trigger.value.split(',').map((k) => k.trim())
-        console.log('キーワード検索:', keywords)
 
         if (
           keywords.some((keyword) => {
             const found = userMessage.toLowerCase().includes(keyword.toLowerCase())
-            if (found) console.log(`キーワード検出: ${keyword}`)
 
             return found
           })
@@ -1456,7 +1476,6 @@ async function detectTriggeredAPIs(
         try {
           const regex = new RegExp(trigger.value, 'i')
           const match = regex.test(userMessage)
-          console.log(`パターンマッチ: ${trigger.value} => ${match}`)
 
           if (match) {
             isTriggered = true
@@ -1469,17 +1488,9 @@ async function detectTriggeredAPIs(
     }
 
     if (isTriggered) {
-      console.log(`APIトリガー検出: ${apiConfig.name}`)
       triggeredAPIs.push(apiConfig)
-    } else {
-      console.log(`APIトリガーなし: ${apiConfig.name}`)
     }
   }
-
-  console.log(
-    '検出されたAPI:',
-    triggeredAPIs.map((api) => api.name)
-  )
 
   return triggeredAPIs
 }
@@ -1490,28 +1501,18 @@ async function processAPITriggers(
   apiConfigs: APIConfig[],
   apiKey: string
 ): Promise<string> {
-  console.log('processAPITriggers - 開始:', userMessage.substring(0, 50) + '...')
-
   const triggeredAPIs = await detectTriggeredAPIs(userMessage, apiConfigs)
-  console.log(
-    '検出されたAPIトリガー:',
-    triggeredAPIs.map((api) => api.name)
-  )
 
   if (triggeredAPIs.length === 0) {
-    console.log('APIトリガーなし - 元メッセージを返します')
-
     return userMessage // APIトリガーなし
   }
 
   let processedMessage = userMessage
 
   for (const apiConfig of triggeredAPIs) {
-    console.log(`API呼び出し実行: ${apiConfig.name}`)
     try {
       // パラメータ抽出 - ここでapiKeyを渡す
       const params = await extractParametersWithLLM(userMessage, apiConfig, apiKey)
-      console.log('抽出パラメータ:', params)
 
       // callExternalAPIメソッドの存在確認
       if (!window.electronAPI.callExternalAPI) {
@@ -1521,9 +1522,8 @@ async function processAPITriggers(
       }
 
       // API呼び出し実行
-      console.log('window.electronAPI.callExternalAPI を呼び出します')
+
       const apiResponse = await window.electronAPI.callExternalAPI(apiConfig, params)
-      console.log('API応答:', apiResponse)
 
       // 結果テキスト生成
       let resultText = ''
@@ -1538,7 +1538,6 @@ async function processAPITriggers(
 
       // メッセージに結果を追加（ノートとして）
       processedMessage += `\n\n[補足情報: ${apiConfig.name}]\n${resultText}`
-      console.log('処理後メッセージ:', processedMessage.substring(0, 100) + '...')
     } catch (err) {
       console.error(`API呼び出し失敗: ${apiConfig.name}`, err)
       processedMessage += `\n\n[補足情報: ${apiConfig.name}]\nAPI呼び出し中にエラーが発生しました。`
@@ -1578,8 +1577,6 @@ async function extractParametersWithLLM(
 
   // パラメータ抽出設定がない場合はデフォルトパラメータを返す
   if (!apiConfig.parameterExtraction || apiConfig.parameterExtraction.length === 0) {
-    console.log('パラメータ抽出設定なし、デフォルトパラメータ使用:', defaultParams)
-
     return defaultParams
   }
 
@@ -1610,8 +1607,6 @@ ${apiConfig.parameterExtraction.map((p) => `- ${p.paramName}: ${p.description}`)
 
     const jsonMatch = extractionResponse.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
-      console.log('LLMからのパラメータ抽出失敗、デフォルトパラメータ使用:', defaultParams)
-
       return defaultParams
     }
 
@@ -1625,8 +1620,6 @@ ${apiConfig.parameterExtraction.map((p) => `- ${p.paramName}: ${p.description}`)
 
       // オリジナルのメッセージを保持するためにoriginalMessageパラメータを追加
       extractedParams.originalMessage = userMessage
-
-      console.log('LLMから抽出されたパラメータ:', extractedParams)
 
       return extractedParams
     } catch (parseError) {
