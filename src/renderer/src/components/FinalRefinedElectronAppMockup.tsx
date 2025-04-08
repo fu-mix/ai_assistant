@@ -72,6 +72,17 @@ interface ElectronAPI {
   // 部分エクスポート・追加インポート用
   exportSelectedAgents?: (arg: { selectedIds: number[]; includeHistory: boolean }) => Promise<void>
   appendLocalHistoryConfig?: (newContent: string) => Promise<void>
+
+  // 追加: 外部API呼び出し用の定義
+  callExternalAPI?: (
+    apiConfig: APIConfig,
+    params: any
+  ) => Promise<{
+    success: boolean
+    data?: any
+    error?: string
+    status?: number
+  }>
 }
 
 declare global {
@@ -1477,7 +1488,7 @@ async function detectTriggeredAPIs(
 async function processAPITriggers(
   userMessage: string,
   apiConfigs: APIConfig[],
-  apiKey: string // apiKey パラメータを追加
+  apiKey: string
 ): Promise<string> {
   console.log('processAPITriggers - 開始:', userMessage.substring(0, 50) + '...')
 
@@ -1501,6 +1512,13 @@ async function processAPITriggers(
       // パラメータ抽出 - ここでapiKeyを渡す
       const params = await extractParametersWithLLM(userMessage, apiConfig, apiKey)
       console.log('抽出パラメータ:', params)
+
+      // callExternalAPIメソッドの存在確認
+      if (!window.electronAPI.callExternalAPI) {
+        console.error('callExternalAPI機能が実装されていません')
+        processedMessage += `\n\n[補足情報: ${apiConfig.name}]\nAPI呼び出し機能が利用できません。`
+        continue
+      }
 
       // API呼び出し実行
       console.log('window.electronAPI.callExternalAPI を呼び出します')
@@ -1538,18 +1556,15 @@ async function extractParametersWithLLM(
   // デフォルトパラメータの設定（最低限のフォールバック）
   const defaultParams: any = {}
 
-  // トリガーがキーワードタイプの場合、それを除いた残りをpromptとして設定
+  // トリガーがキーワードタイプの場合、promptパラメータを設定するが、キーワードは削除しない
   if (apiConfig.triggers && apiConfig.triggers.length > 0) {
     for (const trigger of apiConfig.triggers) {
       if (trigger.type === 'keyword') {
         const keywords = trigger.value.split(',').map((k) => k.trim())
         for (const keyword of keywords) {
           if (userMessage.toLowerCase().includes(keyword.toLowerCase())) {
-            // キーワードを除去してpromptパラメータとして設定
-            let cleanedMessage = userMessage
-            const keywordRegex = new RegExp(keyword, 'i')
-            cleanedMessage = cleanedMessage.replace(keywordRegex, '').trim()
-            defaultParams.prompt = cleanedMessage
+            // キーワードを削除せず、元のメッセージをpromptパラメータとして設定
+            defaultParams.prompt = userMessage
             // トークンがconfig経由で提供されている場合は使用
             if (apiConfig.authConfig?.token) {
               defaultParams.apiKey = apiConfig.authConfig.token
@@ -1607,6 +1622,9 @@ ${apiConfig.parameterExtraction.map((p) => `- ${p.paramName}: ${p.description}`)
       if (apiConfig.authConfig?.token) {
         extractedParams.apiKey = apiConfig.authConfig.token
       }
+
+      // オリジナルのメッセージを保持するためにoriginalMessageパラメータを追加
+      extractedParams.originalMessage = userMessage
 
       console.log('LLMから抽出されたパラメータ:', extractedParams)
 
