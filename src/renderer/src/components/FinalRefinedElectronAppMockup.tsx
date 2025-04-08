@@ -838,6 +838,10 @@ function APIConfigEditor({
   const [newTriggerType, setNewTriggerType] = useState<'keyword' | 'pattern'>('keyword')
   const [newTriggerValue, setNewTriggerValue] = useState('')
   const [newTriggerDescription, setNewTriggerDescription] = useState('')
+  const [headersText, setHeadersText] = useState<string>(
+    JSON.stringify(config.headers || {}, null, 2)
+  )
+  const [headersJsonError, setHeadersJsonError] = useState<string | null>(null)
 
   const handleChange = (field: keyof APIConfig, value: any) => {
     setLocalConfig({ ...localConfig, [field]: value })
@@ -850,16 +854,30 @@ function APIConfigEditor({
     })
   }
 
-  const handleHeadersChange = (headersString: string) => {
+  const handleHeadersChange = (newHeadersText: string) => {
+    // テキスト自体は常に更新
+    setHeadersText(newHeadersText)
+
     try {
-      const headers = JSON.parse(headersString)
+      // 空の場合は空オブジェクトとして扱う
+      if (newHeadersText.trim() === '') {
+        setLocalConfig({ ...localConfig, headers: {} })
+        setHeadersJsonError(null)
+
+        return
+      }
+
+      // JSONとして解析を試みる
+      const headers = JSON.parse(newHeadersText)
       setLocalConfig({ ...localConfig, headers })
+      setHeadersJsonError(null)
     } catch (err) {
-      // JSON解析エラーの場合は何もしない
+      // JSON解析エラーの場合、エラーメッセージを設定するが
+      // テキストは保持したまま
       console.error('Invalid JSON for headers:', err)
+      setHeadersJsonError('無効なJSONフォーマットです')
     }
   }
-
   const handleAddTrigger = () => {
     if (!newTriggerValue.trim()) return
 
@@ -1034,13 +1052,14 @@ function APIConfigEditor({
         </>
       )}
 
-      <FormControl mb={4}>
+      <FormControl mb={4} isInvalid={!!headersJsonError}>
         <FormLabel>リクエストヘッダー (JSONフォーマット)</FormLabel>
         <Textarea
-          value={JSON.stringify(localConfig.headers || {}, null, 2)}
+          value={headersText}
           onChange={(e) => handleHeadersChange(e.target.value)}
           placeholder={'{\n  "Content-Type": "application/json"\n}'}
         />
+        {headersJsonError && <FormHelperText color="red.500">{headersJsonError}</FormHelperText>}
       </FormControl>
 
       {(localConfig.method === 'POST' || localConfig.method === 'PUT') && (
@@ -1253,84 +1272,125 @@ function APISettingsModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
+    <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="outside">
       <ModalOverlay />
-      <ModalContent maxW="4xl">
-        <ModalHeader>外部API設定</ModalHeader>
-        <ModalBody>
-          {currentEditConfig ? (
-            <Box maxH="70vh" overflowY="auto" pr={2}>
-              <APIConfigEditor
-                config={currentEditConfig}
-                onSave={handleSaveConfig}
-                onCancel={() => {
-                  setCurrentEditConfig(null)
-                  setIsAddingConfig(false)
-                }}
-              />
-            </Box>
-          ) : (
-            <>
-              <Button colorScheme="blue" mb={4} onClick={handleAddConfig}>
-                新しいAPIを追加
-              </Button>
+      <ModalContent
+        maxW="4xl"
+        h="calc(90vh)"
+        position="relative" // 相対位置設定を追加
+        display="flex"
+        flexDirection="column"
+      >
+        <ModalHeader position="sticky" top={0} bg="white" zIndex={1} borderBottomWidth="1px">
+          外部API設定
+        </ModalHeader>
 
-              {localConfigs.length === 0 ? (
-                <Text>
-                  設定されたAPIはありません。「新しいAPIを追加」ボタンから作成してください。
-                </Text>
-              ) : (
-                <List spacing={3}>
-                  {localConfigs.map((config) => (
-                    <ListItem key={config.id} p={3} borderWidth="1px" borderRadius="md">
-                      <Flex justify="space-between" align="center">
-                        <Box>
-                          <Text fontWeight="bold">{config.name}</Text>
-                          <Text fontSize="sm" color="gray.600">
-                            {config.method} {config.endpoint}
-                          </Text>
-                          <Text fontSize="xs" color="gray.500">
-                            トリガー:{' '}
-                            {config.triggers.length > 0
-                              ? config.triggers
-                                  .map((t) => (t.type === 'keyword' ? t.value : 'パターン'))
-                                  .join(', ')
-                              : 'なし'}
-                          </Text>
-                        </Box>
-                        <HStack>
-                          <IconButton
-                            icon={<FiEdit />}
-                            aria-label="編集"
-                            size="sm"
-                            onClick={() => handleEditConfig(config)}
-                          />
-                          <IconButton
-                            icon={<AiOutlineDelete />}
-                            aria-label="削除"
-                            size="sm"
-                            colorScheme="red"
-                            onClick={() => handleDeleteConfig(config.id)}
-                          />
-                        </HStack>
-                      </Flex>
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-            </>
-          )}
-        </ModalBody>
+        {/* スクロール可能なコンテンツエリア */}
+        <Box
+          position="relative" // Box要素に相対位置を設定
+          flex="1"
+          overflow="hidden" // 内部スクロールのためにhiddenに設定
+        >
+          <Box
+            position="absolute" // 絶対位置配置で内部コンテンツをラップ
+            top={0}
+            left={0}
+            right={0}
+            bottom={0}
+            overflowY="auto" // 縦方向のスクロールを有効化
+            px={6} // 横パディング
+            pt={4} // 上部パディング
+            pb={16} // 下部パディング（フッターの高さ分）
+            onWheel={(e) => e.stopPropagation()}
+          >
+            {currentEditConfig ? (
+              <Box width="100%" pb={24}>
+                {' '}
+                {/* 下部に余白を追加 */}
+                <APIConfigEditor
+                  config={currentEditConfig}
+                  onSave={handleSaveConfig}
+                  onCancel={() => {
+                    setCurrentEditConfig(null)
+                    setIsAddingConfig(false)
+                  }}
+                />
+              </Box>
+            ) : (
+              <>
+                <Button colorScheme="blue" mb={4} onClick={handleAddConfig}>
+                  新しいAPIを追加
+                </Button>
 
+                {localConfigs.length === 0 ? (
+                  <Text>
+                    設定されたAPIはありません。「新しいAPIを追加」ボタンから作成してください。
+                  </Text>
+                ) : (
+                  <List spacing={3}>
+                    {localConfigs.map((config) => (
+                      <ListItem key={config.id} p={3} borderWidth="1px" borderRadius="md">
+                        <Flex justify="space-between" align="center">
+                          <Box>
+                            <Text fontWeight="bold">{config.name}</Text>
+                            <Text fontSize="sm" color="gray.600">
+                              {config.method} {config.endpoint}
+                            </Text>
+                            <Text fontSize="xs" color="gray.500">
+                              トリガー:{' '}
+                              {config.triggers.length > 0
+                                ? config.triggers
+                                    .map((t) => (t.type === 'keyword' ? t.value : 'パターン'))
+                                    .join(', ')
+                                : 'なし'}
+                            </Text>
+                          </Box>
+                          <HStack>
+                            <IconButton
+                              icon={<FiEdit />}
+                              aria-label="編集"
+                              size="sm"
+                              onClick={() => handleEditConfig(config)}
+                            />
+                            <IconButton
+                              icon={<AiOutlineDelete />}
+                              aria-label="削除"
+                              size="sm"
+                              colorScheme="red"
+                              onClick={() => handleDeleteConfig(config.id)}
+                            />
+                          </HStack>
+                        </Flex>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </>
+            )}
+          </Box>
+        </Box>
+
+        {/* 固定フッター */}
         {!currentEditConfig && (
-          <ModalFooter>
+          <Box
+            position="absolute" // 絶対位置で配置
+            bottom={0}
+            left={0}
+            right={0}
+            borderTopWidth="1px"
+            bg="white"
+            zIndex={10} // 高いz-indexでコンテンツの上に表示
+            p={4}
+            display="flex"
+            justifyContent="flex-end"
+          >
             <Button mr={3} onClick={onClose}>
               キャンセル
             </Button>
             <Button colorScheme="blue" onClick={handleSaveAll}>
               保存
             </Button>
-          </ModalFooter>
+          </Box>
         )}
       </ModalContent>
     </Modal>
