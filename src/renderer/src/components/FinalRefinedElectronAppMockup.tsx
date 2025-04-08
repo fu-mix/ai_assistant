@@ -2953,10 +2953,44 @@ export const FinalRefinedElectronAppMockup = () => {
           return
         }
 
+        // API処理を追加（選択されたチャットにAPI設定があり、かつ有効な場合）
+        let processedUserContent = inputMessage
+        let apiProcessingResult = null
+
+        if (
+          newSelectedChat.apiConfigs &&
+          newSelectedChat.apiConfigs.length > 0 &&
+          newSelectedChat.enableAPICall !== false
+        ) {
+          try {
+            processedUserContent = await processAPITriggers(
+              inputMessage,
+              newSelectedChat.apiConfigs,
+              apiKey
+            )
+
+            // オリジナルのメッセージと異なる場合、API処理が行われたと判断
+            if (processedUserContent !== inputMessage) {
+              apiProcessingResult = {
+                originalMessage: inputMessage,
+                processedMessage: processedUserContent
+              }
+            }
+          } catch (apiErr) {
+            console.error('API処理中にエラー:', apiErr)
+            // エラー時は元のメッセージを使用
+            processedUserContent = inputMessage
+            apiProcessingResult = {
+              originalMessage: inputMessage,
+              error: apiErr.message || '不明なエラー'
+            }
+          }
+        }
+
         // 再実行
         const ephemeralMsg: Messages = {
           role: 'user',
-          parts: [{ text: inputMessage }]
+          parts: [{ text: processedUserContent }]
         }
         for (const f of tempFiles) {
           if (f.mimeType === 'text/csv') {
@@ -3020,7 +3054,8 @@ export const FinalRefinedElectronAppMockup = () => {
         ) {
           enhancedSystemPrompt = enhanceSystemPromptWithAPIContext(
             newSelectedChat.systemPrompt,
-            newSelectedChat.apiConfigs
+            newSelectedChat.apiConfigs,
+            apiProcessingResult
           )
         }
 
