@@ -1499,7 +1499,8 @@ async function detectTriggeredAPIs(
 async function processAPITriggers(
   userMessage: string,
   apiConfigs: APIConfig[],
-  apiKey: string
+  apiKey: string,
+  selectedChat?: ChatInfo | null
 ): Promise<string> {
   const triggeredAPIs = await detectTriggeredAPIs(userMessage, apiConfigs)
 
@@ -1514,6 +1515,29 @@ async function processAPITriggers(
       // パラメータ抽出 - ここでapiKeyを渡す
       const params = await extractParametersWithLLM(userMessage, apiConfig, apiKey)
 
+      // 会話履歴がある場合は適切な形式に変換
+      if (selectedChat && selectedChat.messages && selectedChat.messages.length > 0) {
+        // OpenAI形式のフォーマット済み会話履歴
+        const openAIFormattedHistory = selectedChat.messages.map((msg) => ({
+          role: msg.type === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }))
+        params.openAIFormattedHistory = openAIFormattedHistory
+        params.openAIFormattedHistoryStr = JSON.stringify(openAIFormattedHistory).slice(1, -1) // 配列の [ ] を取り除く
+
+        // Gemini形式のフォーマット済み会話履歴
+        const geminiFormattedHistory = selectedChat.messages.map((msg) => ({
+          role: msg.type === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.content }]
+        }))
+        params.geminiFormattedHistory = geminiFormattedHistory
+        params.geminiFormattedHistoryStr = JSON.stringify(geminiFormattedHistory).slice(1, -1) // 配列の [ ] を取り除く
+      }
+
+      // オリジナルの会話履歴も含める（必要に応じて）
+      params.conversationHistory = selectedChat?.messages || []
+      params.prompt = userMessage
+
       // callExternalAPIメソッドの存在確認
       if (!window.electronAPI.callExternalAPI) {
         console.error('callExternalAPI機能が実装されていません')
@@ -1522,7 +1546,6 @@ async function processAPITriggers(
       }
 
       // API呼び出し実行
-
       const apiResponse = await window.electronAPI.callExternalAPI(apiConfig, params)
 
       // 結果テキスト生成
@@ -2959,7 +2982,8 @@ export const FinalRefinedElectronAppMockup = () => {
             processedUserContent = await processAPITriggers(
               inputMessage,
               newSelectedChat.apiConfigs,
-              apiKey
+              apiKey,
+              selectedChat
             )
 
             // オリジナルのメッセージと異なる場合、API処理が行われたと判断
