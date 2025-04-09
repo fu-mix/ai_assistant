@@ -840,11 +840,13 @@ function csvToJson(csv: string): string {
 function APIConfigEditor({
   config,
   onSave,
-  onCancel
+  onCancel,
+  applyDirectly = false
 }: {
   config: APIConfig
   onSave: (config: APIConfig) => void
   onCancel: () => void
+  applyDirectly?: boolean
 }) {
   const [localConfig, setLocalConfig] = useState<APIConfig>({ ...config })
   const [triggers, setTriggers] = useState<APITrigger[]>(config.triggers || [])
@@ -859,6 +861,8 @@ function APIConfigEditor({
   const [showApiKey, setShowApiKey] = useState<boolean>(false)
   const [showBearerToken, setShowBearerToken] = useState<boolean>(false)
   const [showPassword, setShowPassword] = useState<boolean>(false)
+  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState<boolean>(false)
+  const toast = useToast()
 
   const handleChange = (field: keyof APIConfig, value: any) => {
     setLocalConfig({ ...localConfig, [field]: value })
@@ -918,9 +922,35 @@ function APIConfigEditor({
   }
 
   const handleSaveConfig = () => {
-    onSave({
+    const updatedConfig = {
       ...localConfig,
       triggers
+    }
+
+    if (applyDirectly) {
+      // 直接適用する場合は確認ダイアログを表示
+      setIsSaveConfirmOpen(true)
+    } else {
+      // 通常の保存処理
+      onSave(updatedConfig)
+    }
+  }
+
+  const handleConfirmDirectSave = () => {
+    const updatedConfig = {
+      ...localConfig,
+      triggers
+    }
+    onSave(updatedConfig)
+    setIsSaveConfirmOpen(false)
+
+    // 保存成功のトースト通知を表示
+    toast({
+      title: 'API設定を保存しました',
+      description: '変更がすぐに適用されました',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
     })
   }
 
@@ -1242,6 +1272,28 @@ function APIConfigEditor({
           保存
         </Button>
       </HStack>
+
+      {/* 確認ダイアログを追加 */}
+      <Modal isOpen={isSaveConfirmOpen} onClose={() => setIsSaveConfirmOpen(false)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>設定を保存</ModalHeader>
+          <ModalBody>
+            <Text>この設定変更を直接適用しますか？</Text>
+            <Text fontSize="sm" color="gray.600" mt={2}>
+              ※この変更はすぐに適用されます。元の設定画面で「保存」を押す必要はありません。
+            </Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button mr={3} onClick={() => setIsSaveConfirmOpen(false)}>
+              キャンセル
+            </Button>
+            <Button colorScheme="blue" onClick={handleConfirmDirectSave}>
+              保存して適用
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   )
 }
@@ -1250,12 +1302,14 @@ function APISettingsModal({
   isOpen,
   onClose,
   apiConfigs = [],
-  onSave
+  onSave,
+  directSave = false // 直接保存モードのフラグを追加
 }: {
   isOpen: boolean
   onClose: () => void
   apiConfigs: APIConfig[]
   onSave: (configs: APIConfig[]) => void
+  directSave?: boolean // 直接保存モードのフラグ
 }) {
   const toast = useToast()
   const [localConfigs, setLocalConfigs] = useState<APIConfig[]>([])
@@ -1290,17 +1344,50 @@ function APISettingsModal({
   }
 
   const handleSaveConfig = (config: APIConfig) => {
+    let updatedConfigs: APIConfig[]
+
     if (isAddingConfig) {
-      setLocalConfigs([...localConfigs, config])
+      updatedConfigs = [...localConfigs, config]
+      setLocalConfigs(updatedConfigs)
     } else {
-      setLocalConfigs(localConfigs.map((c) => (c.id === config.id ? config : c)))
+      updatedConfigs = localConfigs.map((c) => (c.id === config.id ? config : c))
+      setLocalConfigs(updatedConfigs)
     }
+
+    // 直接保存モードの場合は親コンポーネントの onSave を呼び出す
+    if (directSave) {
+      onSave(updatedConfigs)
+
+      // 直接保存時のトースト通知
+      toast({
+        title: 'API設定を保存しました',
+        description: '変更がすぐに適用されました',
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    }
+
     setCurrentEditConfig(null)
     setIsAddingConfig(false)
   }
 
   const handleDeleteConfig = (id: string) => {
-    setLocalConfigs(localConfigs.filter((c) => c.id !== id))
+    const updatedConfigs = localConfigs.filter((c) => c.id !== id)
+    setLocalConfigs(updatedConfigs)
+
+    // 直接保存モードの場合は削除時も親コンポーネントの onSave を呼び出す
+    if (directSave) {
+      onSave(updatedConfigs)
+
+      toast({
+        title: 'API設定を削除しました',
+        description: '変更がすぐに適用されました',
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    }
   }
 
   const handleSaveAll = () => {
@@ -1357,6 +1444,7 @@ function APISettingsModal({
                     setCurrentEditConfig(null)
                     setIsAddingConfig(false)
                   }}
+                  applyDirectly={directSave} // 直接保存フラグを渡す
                 />
               </Box>
             ) : (
@@ -3541,6 +3629,36 @@ export const FinalRefinedElectronAppMockup = () => {
     })
     setIsPromptModalOpen(false)
   }
+
+  // APISettingsModalのdirectSaveフラグを追加
+  ;<APISettingsModal
+    isOpen={isAPISettingsOpen}
+    onClose={() => setIsAPISettingsOpen(false)}
+    apiConfigs={editingAPIConfigs}
+    onSave={(configs) => {
+      setEditingAPIConfigs(configs)
+      // 直接保存モードの場合は即時にアシスタント設定を保存
+      if (configs !== editingAPIConfigs) {
+        // 必要に応じてここでデータベースに保存する処理を追加することも可能
+        window.electronAPI
+          .saveAgents(
+            chats.map((chat) => {
+              if (chat.id === selectedChatId) {
+                return {
+                  ...chat,
+                  apiConfigs: configs,
+                  enableAPICall: enableAPICall
+                }
+              }
+
+              return chat
+            })
+          )
+          .catch(console.error)
+      }
+    }}
+    directSave={true} // 直接保存モードを有効化
+  />
 
   function handleCopySystemPrompt() {
     navigator.clipboard.writeText(editingSystemPrompt).then(() => {
