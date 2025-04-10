@@ -4172,19 +4172,33 @@ export const FinalRefinedElectronAppMockup = () => {
                           className="markdown"
                           components={{
                             pre: ({ node, ...props }) => (
-                              <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                                <pre {...props} />
+                              <div
+                                style={{
+                                  overflow: 'auto',
+                                  maxWidth: '100%',
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word'
+                                }}
+                              >
+                                <pre
+                                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                  {...props}
+                                />
                               </div>
                             ),
                             code: ({ node, ...props }) => (
                               <code
-                                style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                                style={{
+                                  overflowWrap: 'break-word',
+                                  wordBreak: 'break-word',
+                                  maxWidth: '100%'
+                                }}
                                 {...props}
                               />
                             ),
                             table: ({ node, ...props }) => (
                               <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                                <table {...props} />
+                                <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
                               </div>
                             )
                           }}
@@ -4256,19 +4270,33 @@ export const FinalRefinedElectronAppMockup = () => {
                         className="markdown"
                         components={{
                           pre: ({ node, ...props }) => (
-                            <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                              <pre {...props} />
+                            <div
+                              style={{
+                                overflow: 'auto',
+                                maxWidth: '100%',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word'
+                              }}
+                            >
+                              <pre
+                                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                {...props}
+                              />
                             </div>
                           ),
                           code: ({ node, ...props }) => (
                             <code
-                              style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                              style={{
+                                overflowWrap: 'break-word',
+                                wordBreak: 'break-word',
+                                maxWidth: '100%'
+                              }}
                               {...props}
                             />
                           ),
                           table: ({ node, ...props }) => (
                             <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                              <table {...props} />
+                              <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
                             </div>
                           )
                         }}
