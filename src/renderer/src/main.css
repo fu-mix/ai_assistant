@@ -31,9 +31,3 @@ code {
   margin-left: 1.5em;
   padding: 0;
 }
-
-.markdown ul,
-.markdown ol {
-  white-space: normal;
-  line-height: 1.8;
-}
