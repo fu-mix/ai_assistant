@@ -810,15 +810,20 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
 
     if (debugFlag) {
       console.log('\n=== API Error ===')
+      // @ts-ignore
       console.log('Message:', error.message)
+      // @ts-ignore
       console.log('Status:', error.response?.status)
+      // @ts-ignore
       console.log('Data:', error.response?.data)
       console.log('================\n')
     }
 
     return {
       success: false,
+      // @ts-ignore
       error: error.message,
+      // @ts-ignore
       status: error.response?.status || 500
     }
   }

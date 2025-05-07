@@ -3076,6 +3076,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
             // オリジナルのメッセージと異なる場合、API処理が行われたと判断
             if (processedUserContent !== inputMessage) {
+              // @ts-ignore
               apiProcessingResult = {
                 originalMessage: inputMessage,
                 processedMessage: processedUserContent
@@ -3085,8 +3086,10 @@ export const FinalRefinedElectronAppMockup = () => {
             console.error('API処理中にエラー:', apiErr)
             // エラー時は元のメッセージを使用
             processedUserContent = inputMessage
+            // @ts-ignore
             apiProcessingResult = {
               originalMessage: inputMessage,
+              // @ts-ignore
               error: apiErr.message || '不明なエラー'
             }
           }
@@ -3249,6 +3252,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
           // オリジナルのメッセージと異なる場合、API処理が行われたと判断
           if (processedUserContent !== inputMessage) {
+            // @ts-ignore
             apiProcessingResult = {
               originalMessage: inputMessage,
               processedMessage: processedUserContent
@@ -3258,8 +3262,10 @@ export const FinalRefinedElectronAppMockup = () => {
           console.error('API処理中にエラー:', apiErr)
           // エラー時は元のメッセージを使用
           processedUserContent = inputMessage
+          // @ts-ignore
           apiProcessingResult = {
             originalMessage: inputMessage,
+            // @ts-ignore
             error: apiErr.message || '不明なエラー'
           }
         }
