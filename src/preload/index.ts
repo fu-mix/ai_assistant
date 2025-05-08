@@ -72,6 +72,15 @@ if (process.contextIsolated) {
       // 外部API呼び出し
       callExternalAPI: async (apiConfig: any, params: any) => {
         return await ipcRenderer.invoke('callExternalAPI', apiConfig, params)
+      },
+      // 画像保存用の関数を追加
+      saveImageToFile: async (base64Data: string) => {
+        return await ipcRenderer.invoke('save-image-to-file', base64Data)
+      },
+
+      // 画像読み込み用の関数を追加
+      loadImage: async (imagePath: string) => {
+        return await ipcRenderer.invoke('load-image', imagePath)
       }
     })
   } catch (error) {

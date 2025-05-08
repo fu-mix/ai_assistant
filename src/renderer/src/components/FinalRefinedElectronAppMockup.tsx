@@ -41,7 +41,9 @@ import {
   Divider,
   Badge,
   InputRightElement,
-  InputGroup
+  InputGroup,
+  Spinner,
+  Image
 } from '@chakra-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -50,7 +52,7 @@ import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
 import { MdOutlineContentCopy } from 'react-icons/md'
 import { FiEdit } from 'react-icons/fi'
-import { HamburgerIcon } from '@chakra-ui/icons'
+import { HamburgerIcon, DownloadIcon } from '@chakra-ui/icons'
 
 /**
  * Electron API interface
@@ -85,6 +87,12 @@ interface ElectronAPI {
     error?: string
     status?: number
   }>
+
+  // 画像保存用の関数
+  saveImageToFile: (base64Data: string) => Promise<string>
+
+  // 画像読み込み用の関数
+  loadImage: (imagePath: string) => Promise<string | null>
 }
 
 declare global {
@@ -126,6 +134,7 @@ export type Messages = {
 type Message = {
   type: 'user' | 'ai'
   content: string
+  imagePath?: string // 画像ファイルへのパス
 }
 
 /**
@@ -191,6 +200,8 @@ type APIConfig = {
     paramName: string
     description: string
   }[]
+  responseType?: 'text' | 'image'
+  imageDataPath?: string
 }
 
 /* ------------------------------------------------
@@ -862,6 +873,11 @@ function APIConfigEditor({
   const [showBearerToken, setShowBearerToken] = useState<boolean>(false)
   const [showPassword, setShowPassword] = useState<boolean>(false)
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState<boolean>(false)
+
+  const [responseType, setResponseType] = useState<'text' | 'image'>(config.responseType || 'text')
+  const [imageDataPath, setImageDataPath] = useState<string>(
+    config.imageDataPath || 'data[0].b64_json'
+  )
   const toast = useToast()
 
   const handleChange = (field: keyof APIConfig, value: any) => {
@@ -924,7 +940,9 @@ function APIConfigEditor({
   const handleSaveConfig = () => {
     const updatedConfig = {
       ...localConfig,
-      triggers
+      triggers,
+      responseType,
+      imageDataPath: responseType === 'image' ? imageDataPath : undefined
     }
 
     if (applyDirectly) {
@@ -1167,6 +1185,33 @@ function APIConfigEditor({
         />
         <FormHelperText>responseObj 変数でAPIレスポンスにアクセスできます</FormHelperText>
       </FormControl>
+
+      <FormControl mt={4}>
+        <FormLabel>レスポンスタイプ</FormLabel>
+        <RadioGroup
+          value={responseType}
+          onChange={(val) => setResponseType(val as 'text' | 'image')}
+        >
+          <HStack spacing={5}>
+            <Radio value="text">テキスト</Radio>
+            <Radio value="image">画像</Radio>
+          </HStack>
+        </RadioGroup>
+      </FormControl>
+
+      {responseType === 'image' && (
+        <FormControl mt={4}>
+          <FormLabel>画像データパス</FormLabel>
+          <Input
+            value={imageDataPath}
+            onChange={(e) => setImageDataPath(e.target.value)}
+            placeholder="例: data[0].b64_json"
+          />
+          <FormHelperText>
+            レスポンスJSON内の画像データ（Base64）の場所を指定します。例: data[0].b64_json
+          </FormHelperText>
+        </FormControl>
+      )}
 
       <Divider my={6} />
 
@@ -1589,7 +1634,16 @@ async function processAPITriggers(
   apiConfigs: APIConfig[],
   apiKey: string,
   selectedChat?: ChatInfo | null
-): Promise<string> {
+): Promise<{
+  processedMessage: string
+  imageResponse?: { base64Data: string; prompt: string } | null
+}> {
+  const isExternalApiEnabled = `${import.meta.env.VITE_ENABLE_EXTERNAL_API}`
+
+  // 外部API機能が無効の場合は処理しない
+  if (!isExternalApiEnabled) {
+    return { processedMessage: userMessage }
+  }
   const triggeredAPIs = await detectTriggeredAPIs(userMessage, apiConfigs)
 
   if (triggeredAPIs.length === 0) {
@@ -1597,6 +1651,7 @@ async function processAPITriggers(
   }
 
   let processedMessage = userMessage
+  let imageResponse = null
 
   for (const apiConfig of triggeredAPIs) {
     try {
@@ -1636,6 +1691,16 @@ async function processAPITriggers(
       // API呼び出し実行
       const apiResponse = await window.electronAPI.callExternalAPI(apiConfig, params)
 
+      // 画像レスポンスの場合
+      if (apiResponse.success && apiResponse.type === 'image' && apiResponse.data) {
+        imageResponse = {
+          base64Data: apiResponse.data,
+          prompt: userMessage
+        }
+        // 画像APIの場合は文字列追加しない（画像として処理するため）
+        continue
+      }
+
       // 結果テキスト生成
       let resultText = ''
       if (apiResponse.success) {
@@ -1655,7 +1720,7 @@ async function processAPITriggers(
     }
   }
 
-  return processedMessage
+  return { processedMessage, imageResponse }
 }
 
 async function extractParametersWithLLM(
@@ -1814,6 +1879,8 @@ ${apiResultInfo}
  * メインコンポーネント
  * ------------------------------------------------ */
 export const FinalRefinedElectronAppMockup = () => {
+  // 環境変数から外部API機能の有効/無効状態を確認
+  const isExternalApiEnabled = `${import.meta.env.VITE_ENABLE_EXTERNAL_API}`
   const toast = useToast()
 
   // ▼ リサイズ用stateを追加（左カラム幅）
@@ -3057,26 +3124,33 @@ export const FinalRefinedElectronAppMockup = () => {
           return
         }
 
+        // 環境変数を参照して外部API機能が有効かチェック
+        const isExternalApiEnabled = `${import.meta.env.VITE_ENABLE_EXTERNAL_API}`
+
         // API処理を追加（選択されたチャットにAPI設定があり、かつ有効な場合）
         let processedUserContent = inputMessage
         let apiProcessingResult = null
+        let imageResponse = null
 
         if (
+          isExternalApiEnabled && // 環境変数チェック追加
           newSelectedChat.apiConfigs &&
           newSelectedChat.apiConfigs.length > 0 &&
           newSelectedChat.enableAPICall !== false
         ) {
           try {
-            processedUserContent = await processAPITriggers(
+            const result = await processAPITriggers(
               inputMessage,
               newSelectedChat.apiConfigs,
               apiKey,
               selectedChat
             )
 
+            processedUserContent = result.processedMessage
+            imageResponse = result.imageResponse
+
             // オリジナルのメッセージと異なる場合、API処理が行われたと判断
             if (processedUserContent !== inputMessage) {
-              // @ts-ignore
               apiProcessingResult = {
                 originalMessage: inputMessage,
                 processedMessage: processedUserContent
@@ -3086,16 +3160,60 @@ export const FinalRefinedElectronAppMockup = () => {
             console.error('API処理中にエラー:', apiErr)
             // エラー時は元のメッセージを使用
             processedUserContent = inputMessage
-            // @ts-ignore
             apiProcessingResult = {
               originalMessage: inputMessage,
-              // @ts-ignore
               error: apiErr.message || '不明なエラー'
             }
           }
         }
 
-        // 再実行
+        // 画像レスポンスがある場合、画像として処理
+        if (imageResponse) {
+          try {
+            // 画像をファイルに保存
+            const imagePath = await window.electronAPI.saveImageToFile(imageResponse.base64Data)
+
+            // AIメッセージを作成（画像付き）
+            const aiMsg: Message = {
+              type: 'ai',
+              content: `画像を生成しました（プロンプト: "${imageResponse.prompt}"）`,
+              imagePath: imagePath
+            }
+
+            // チャット状態を更新
+            const finalUpdated = updatedChats.map((chat) => {
+              if (chat.id === selectedChatId) {
+                return {
+                  ...chat,
+                  messages: [...chat.messages, aiMsg],
+                  postMessages: [
+                    ...chat.postMessages,
+                    { role: 'model', parts: [{ text: aiMsg.content }] }
+                  ]
+                }
+              }
+
+              return chat
+            })
+
+            // 状態更新と保存
+            setChats(finalUpdated)
+            await window.electronAPI.saveAgents(finalUpdated)
+
+            // 入力をクリアして処理終了
+            setEditIndex(null)
+            setInputMessage('')
+            setTempFiles([])
+            setIsLoading(false)
+
+            return // 画像処理の場合は、ここで終了
+          } catch (imgErr) {
+            console.error('画像保存中にエラー:', imgErr)
+            // エラー時は通常テキスト処理に戻る
+          }
+        }
+
+        // 再実行 (通常のテキスト処理)
         const ephemeralMsg: Messages = {
           role: 'user',
           parts: [{ text: processedUserContent }]
@@ -3156,6 +3274,7 @@ export const FinalRefinedElectronAppMockup = () => {
         // システムプロンプトも強化
         let enhancedSystemPrompt = newSelectedChat.systemPrompt
         if (
+          isExternalApiEnabled && // 環境変数チェック追加
           newSelectedChat.apiConfigs &&
           newSelectedChat.apiConfigs.length > 0 &&
           newSelectedChat.enableAPICall !== false
@@ -3214,6 +3333,9 @@ export const FinalRefinedElectronAppMockup = () => {
     // (通常) 新規メッセージ
     setIsLoading(true)
     try {
+      // 環境変数を参照して外部API機能が有効かチェック
+      const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API === 'true'
+
       // ユーザー表示用のメッセージ
       const userMsg: Message = { type: 'user', content: inputMessage }
 
@@ -3237,22 +3359,27 @@ export const FinalRefinedElectronAppMockup = () => {
       // API処理を追加（選択されたチャットにAPI設定があり、かつ有効な場合）
       let processedUserContent = inputMessage
       let apiProcessingResult = null
+      let imageResponse = null
 
       if (
+        isExternalApiEnabled && // 環境変数チェック追加
         selectedChat.apiConfigs &&
         selectedChat.apiConfigs.length > 0 &&
         selectedChat.enableAPICall !== false
       ) {
         try {
-          processedUserContent = await processAPITriggers(
+          const result = await processAPITriggers(
             inputMessage,
             selectedChat.apiConfigs,
-            apiKey
+            apiKey,
+            selectedChat
           )
+
+          processedUserContent = result.processedMessage
+          imageResponse = result.imageResponse
 
           // オリジナルのメッセージと異なる場合、API処理が行われたと判断
           if (processedUserContent !== inputMessage) {
-            // @ts-ignore
             apiProcessingResult = {
               originalMessage: inputMessage,
               processedMessage: processedUserContent
@@ -3262,16 +3389,75 @@ export const FinalRefinedElectronAppMockup = () => {
           console.error('API処理中にエラー:', apiErr)
           // エラー時は元のメッセージを使用
           processedUserContent = inputMessage
-          // @ts-ignore
           apiProcessingResult = {
             originalMessage: inputMessage,
-            // @ts-ignore
             error: apiErr.message || '不明なエラー'
           }
         }
       }
 
-      // APIへ送信するメッセージはAPI処理結果を使用
+      // postMessagesの更新を含めた完全な状態更新
+      const fullUpdatedChats = chats.map((chat) => {
+        if (chat.id === selectedChatId) {
+          return {
+            ...chat,
+            messages: [...chat.messages, userMsg],
+            postMessages: [...chat.postMessages, { role: 'user', parts: [{ text: inputMessage }] }],
+            inputMessage: ''
+          }
+        }
+
+        return chat
+      })
+
+      // 状態を更新し、保存
+      setChats(fullUpdatedChats)
+      await window.electronAPI.saveAgents(fullUpdatedChats)
+
+      setTempFiles([])
+
+      // 画像レスポンスがある場合、画像として処理
+      if (imageResponse) {
+        try {
+          // 画像をファイルに保存
+          const imagePath = await window.electronAPI.saveImageToFile(imageResponse.base64Data)
+
+          // AIメッセージを作成（画像付き）
+          const aiMsg: Message = {
+            type: 'ai',
+            content: `画像を生成しました（プロンプト: "${imageResponse.prompt}"）`,
+            imagePath: imagePath
+          }
+
+          // チャット状態を更新
+          const finalUpdated = fullUpdatedChats.map((chat) => {
+            if (chat.id === selectedChatId) {
+              return {
+                ...chat,
+                messages: [...chat.messages, aiMsg],
+                postMessages: [
+                  ...chat.postMessages,
+                  { role: 'model', parts: [{ text: aiMsg.content }] }
+                ]
+              }
+            }
+
+            return chat
+          })
+
+          // 状態更新と保存
+          setChats(finalUpdated)
+          await window.electronAPI.saveAgents(finalUpdated)
+          setIsLoading(false)
+
+          return // 画像処理の場合は、ここで終了
+        } catch (imgErr) {
+          console.error('画像保存中にエラー:', imgErr)
+          // エラー時は通常テキスト処理に戻る
+        }
+      }
+
+      // APIへ送信するメッセージはAPI処理結果を使用 (通常のテキスト処理)
       const ephemeralMsg: Messages = {
         role: 'user',
         parts: [{ text: processedUserContent }]
@@ -3325,31 +3511,12 @@ export const FinalRefinedElectronAppMockup = () => {
         }
       }
 
-      // postMessagesの更新を含めた完全な状態更新
-      const fullUpdatedChats = chats.map((chat) => {
-        if (chat.id === selectedChatId) {
-          return {
-            ...chat,
-            messages: [...chat.messages, userMsg],
-            postMessages: [...chat.postMessages, { role: 'user', parts: [{ text: inputMessage }] }],
-            inputMessage: ''
-          }
-        }
-
-        return chat
-      })
-
-      // 状態を更新し、保存
-      setChats(fullUpdatedChats)
-      await window.electronAPI.saveAgents(fullUpdatedChats)
-
-      setTempFiles([])
-
       const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
 
       // システムプロンプトも強化
       let enhancedSystemPrompt = selectedChat.systemPrompt
       if (
+        isExternalApiEnabled && // 環境変数チェック追加
         selectedChat.apiConfigs &&
         selectedChat.apiConfigs.length > 0 &&
         selectedChat.enableAPICall !== false
@@ -3888,6 +4055,82 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
+  // 画像の遅延読み込み用コンポーネント
+  function ImageWithLazyLoading({ imagePath }: { imagePath: string }) {
+    const [imageData, setImageData] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+      async function loadImage() {
+        if (!imagePath) return
+
+        try {
+          setIsLoading(true)
+          const base64Data = await window.electronAPI.loadImage(imagePath)
+          if (base64Data) {
+            setImageData(`data:image/png;base64,${base64Data}`)
+          }
+        } catch (err) {
+          console.error('画像の読み込みに失敗:', err)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      loadImage()
+    }, [imagePath])
+
+    // 画像ダウンロード処理
+    const handleDownload = () => {
+      if (!imageData) return
+
+      // data URLからBlobを作成
+      const byteString = atob(imageData.split(',')[1])
+      const mimeType = 'image/png'
+      const ab = new ArrayBuffer(byteString.length)
+      const ia = new Uint8Array(ab)
+
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
+      }
+
+      const blob = new Blob([ab], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+
+      // ダウンロードリンクを作成
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `generated_image_${Date.now()}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+
+    if (isLoading) {
+      return <Spinner size="md" />
+    }
+
+    return imageData ? (
+      <Box position="relative">
+        <Image src={imageData} alt="生成された画像" maxWidth="100%" borderRadius="md" />
+        <Button
+          position="absolute"
+          bottom="8px"
+          right="8px"
+          size="sm"
+          colorScheme="blue"
+          leftIcon={<DownloadIcon />}
+          onClick={handleDownload}
+        >
+          ダウンロード
+        </Button>
+      </Box>
+    ) : (
+      <Text color="red.500">画像を読み込めませんでした</Text>
+    )
+  }
+
   // --------------------------------
   // JSX
   // --------------------------------
@@ -4173,44 +4416,55 @@ export const FinalRefinedElectronAppMockup = () => {
                       {msg.type === 'user' ? (
                         msg.content
                       ) : (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          className="markdown"
-                          components={{
-                            pre: ({ node, ...props }) => (
-                              <div
-                                style={{
-                                  overflow: 'auto',
-                                  maxWidth: '100%',
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word'
-                                }}
-                              >
-                                <pre
-                                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                        <>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            className="markdown"
+                            components={{
+                              pre: ({ node, ...props }) => (
+                                <div
+                                  style={{
+                                    overflow: 'auto',
+                                    maxWidth: '100%',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word'
+                                  }}
+                                >
+                                  <pre
+                                    style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                    {...props}
+                                  />
+                                </div>
+                              ),
+                              code: ({ node, ...props }) => (
+                                <code
+                                  style={{
+                                    overflowWrap: 'break-word',
+                                    wordBreak: 'break-word',
+                                    maxWidth: '100%'
+                                  }}
                                   {...props}
                                 />
-                              </div>
-                            ),
-                            code: ({ node, ...props }) => (
-                              <code
-                                style={{
-                                  overflowWrap: 'break-word',
-                                  wordBreak: 'break-word',
-                                  maxWidth: '100%'
-                                }}
-                                {...props}
-                              />
-                            ),
-                            table: ({ node, ...props }) => (
-                              <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                                <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
-                              </div>
-                            )
-                          }}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
+                              ),
+                              table: ({ node, ...props }) => (
+                                <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                                  <table
+                                    style={{ tableLayout: 'fixed', width: '100%' }}
+                                    {...props}
+                                  />
+                                </div>
+                              )
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                          {/* 画像がある場合に表示 */}
+                          {msg.imagePath && (
+                            <Box mt={3}>
+                              <ImageWithLazyLoading imagePath={msg.imagePath} />
+                            </Box>
+                          )}
+                        </>
                       )}
                     </div>
                     {hoveredMessageIndex === idx && (
@@ -4271,44 +4525,52 @@ export const FinalRefinedElectronAppMockup = () => {
                     {msg.type === 'user' ? (
                       msg.content
                     ) : (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        className="markdown"
-                        components={{
-                          pre: ({ node, ...props }) => (
-                            <div
-                              style={{
-                                overflow: 'auto',
-                                maxWidth: '100%',
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word'
-                              }}
-                            >
-                              <pre
-                                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                      <>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          className="markdown"
+                          components={{
+                            pre: ({ node, ...props }) => (
+                              <div
+                                style={{
+                                  overflow: 'auto',
+                                  maxWidth: '100%',
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word'
+                                }}
+                              >
+                                <pre
+                                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                  {...props}
+                                />
+                              </div>
+                            ),
+                            code: ({ node, ...props }) => (
+                              <code
+                                style={{
+                                  overflowWrap: 'break-word',
+                                  wordBreak: 'break-word',
+                                  maxWidth: '100%'
+                                }}
                                 {...props}
                               />
-                            </div>
-                          ),
-                          code: ({ node, ...props }) => (
-                            <code
-                              style={{
-                                overflowWrap: 'break-word',
-                                wordBreak: 'break-word',
-                                maxWidth: '100%'
-                              }}
-                              {...props}
-                            />
-                          ),
-                          table: ({ node, ...props }) => (
-                            <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                              <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
-                            </div>
-                          )
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                            ),
+                            table: ({ node, ...props }) => (
+                              <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                                <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
+                              </div>
+                            )
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                        {/* 画像がある場合に表示 */}
+                        {msg.imagePath && (
+                          <Box mt={3}>
+                            <ImageWithLazyLoading imagePath={msg.imagePath} />
+                          </Box>
+                        )}
+                      </>
                     )}
                   </div>
                   {hoveredMessageIndex === idx && (
@@ -4534,27 +4796,31 @@ export const FinalRefinedElectronAppMockup = () => {
                 </Box>
               )}
             </FormControl>
-            <FormControl mt={4} mb={4} display="flex" alignItems="center">
-              <FormLabel htmlFor="create-api-call-enabled" mb="0">
-                外部API呼び出しを有効にする
-              </FormLabel>
-              <Switch
-                id="create-api-call-enabled"
-                isChecked={modalEnableAPICall}
-                onChange={(e) => setModalEnableAPICall(e.target.checked)}
-              />
-            </FormControl>
+            {isExternalApiEnabled && (
+              <>
+                <FormControl mt={4} mb={4} display="flex" alignItems="center">
+                  <FormLabel htmlFor="create-api-call-enabled" mb="0">
+                    外部API呼び出しを有効にする
+                  </FormLabel>
+                  <Switch
+                    id="create-api-call-enabled"
+                    isChecked={modalEnableAPICall}
+                    onChange={(e) => setModalEnableAPICall(e.target.checked)}
+                  />
+                </FormControl>
 
-            <FormControl mt={4} mb={4}>
-              <Button
-                onClick={() => setIsCreateAPISettingsOpen(true)}
-                colorScheme="teal"
-                isDisabled={!modalEnableAPICall}
-              >
-                外部API設定
-              </Button>
-              <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
-            </FormControl>
+                <FormControl mt={4} mb={4}>
+                  <Button
+                    onClick={() => setIsCreateAPISettingsOpen(true)}
+                    colorScheme="teal"
+                    isDisabled={!modalEnableAPICall}
+                  >
+                    外部API設定
+                  </Button>
+                  <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
+                </FormControl>
+              </>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeCustomChatModal}>

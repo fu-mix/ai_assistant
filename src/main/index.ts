@@ -671,6 +671,7 @@ ipcMain.handle('append-local-history-config', async (_event, newContent: string)
 // 外部API呼び出し用のIPC通信ハンドラを追加
 ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) => {
   const debugFlag = `${import.meta.env.MAIN_VITE_DEBUG}`
+
   try {
     const { endpoint, method, headers, bodyTemplate, queryParamsTemplate, authType, authConfig } =
       apiConfig
@@ -682,7 +683,7 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
       console.log('Headers:', JSON.stringify(headers, null, 2))
       console.log('Parameters:', JSON.stringify(params, null, 2))
 
-      // 認証情報は機密なのでマスク処理
+      // 認証情報のマスク処理（既存のコード）
       let authInfo = 'None'
       if (authType === 'bearer') authInfo = 'Bearer Token: ********'
       else if (authType === 'apiKey')
@@ -691,13 +692,12 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
       console.log('Authentication:', authInfo)
     }
 
-    // 認証情報の処理
+    // 既存の認証情報処理（変更なし）
     const finalHeaders = { ...headers }
     if (authType === 'bearer' && authConfig?.token) {
-      // テンプレート文字列を実際の値に置換
       let token = authConfig.token
       if (token.includes('${params.apiKey}') && params.apiKey) {
-        token = params.apiKey // 直接apiKeyパラメータを使用
+        token = params.apiKey
       }
       finalHeaders['Authorization'] = `Bearer ${token}`
     } else if (authType === 'basic' && authConfig?.username && authConfig?.password) {
@@ -709,21 +709,17 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
       }
     }
 
-    // リクエストボディとクエリパラメータの処理
+    // 既存のリクエストボディとクエリパラメータの処理（変更なし）
     let url = endpoint
     let requestData = null
 
     if (queryParamsTemplate) {
       try {
-        const paramsObj = params || {} // パラメーターがnullまたはundefinedの場合に空オブジェクトを使用
-
-        // テンプレートからクエリパラメータを生成する際にparamsを渡す
+        const paramsObj = params || {}
         const templateFn = new Function(
           'params',
           'return `' + queryParamsTemplate.replace(/`/g, '\\`') + '`'
         )
-
-        // paramsを引数として渡す
         const queryParamsJson = templateFn(paramsObj)
         const queryParams = JSON.parse(queryParamsJson)
 
@@ -742,15 +738,11 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
 
     if (bodyTemplate && (method === 'POST' || method === 'PUT')) {
       try {
-        const paramsObj = params || {} // パラメーターがnullまたはundefinedの場合に空オブジェクトを使用
-
-        // テンプレートからリクエストボディを生成する際にparamsを渡す
+        const paramsObj = params || {}
         const templateFn = new Function(
           'params',
           'return `' + bodyTemplate.replace(/`/g, '\\`') + '`'
         )
-
-        // paramsを引数として渡す
         const bodyJson = templateFn(paramsObj)
         requestData = JSON.parse(bodyJson)
         if (debugFlag) {
@@ -772,7 +764,9 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
       headers: finalHeaders,
       data: requestData,
       httpsAgent: new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`),
-      proxy: false
+      proxy: false,
+      // 画像の場合はJSONレスポンスを期待
+      responseType: 'json'
     })
 
     if (debugFlag) {
@@ -783,17 +777,56 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
       console.log('====================\n')
     }
 
-    // レスポンスの処理
+    // 画像生成APIの場合の特別処理
+    if (apiConfig.responseType === 'image') {
+      try {
+        // imageDataPathからデータを抽出（例: 'data[0].b64_json'）
+        let base64Data = response.data
+
+        if (apiConfig.imageDataPath) {
+          // ドット記法でネストされたプロパティにアクセス
+          const pathParts = apiConfig.imageDataPath.split('.')
+          let current = response.data
+
+          // 配列表記（例: data[0]）も処理
+          for (const part of pathParts) {
+            const arrayMatch = part.match(/^([^\[]+)\[(\d+)\]$/)
+            if (arrayMatch) {
+              // 配列要素へのアクセス
+              const [_, arrayName, index] = arrayMatch
+              current = current[arrayName][parseInt(index)]
+            } else {
+              // 通常のプロパティアクセス
+              current = current[part]
+            }
+          }
+
+          base64Data = current
+        }
+
+        // ここでbase64Dataが実際の画像データになっているはず
+        if (base64Data) {
+          // 画像データをレンダラープロセスに返す
+          return {
+            success: true,
+            type: 'image',
+            data: base64Data,
+            status: response.status
+          }
+        }
+      } catch (err) {
+        console.error('Error processing image response:', err)
+      }
+    }
+
+    // 既存のレスポンス処理
     let formattedResponse = response.data
     if (apiConfig.responseTemplate) {
       try {
-        // evalを使わない、より安全なアプローチ
         const templateFn = new Function(
           'responseObj',
           'return `' + apiConfig.responseTemplate.replace(/`/g, '\\`') + '`'
         )
-
-        // responseObjを実際に使用
         formattedResponse = templateFn(response.data)
       } catch (err) {
         console.error('Error formatting response:', err)
@@ -826,5 +859,50 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
       // @ts-ignore
       status: error.response?.status || 500
     }
+  }
+})
+// 画像保存用IPCハンドラー
+ipcMain.handle('save-image-to-file', async (_event, base64Data: string) => {
+  const imageId = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+  const userDataDir = app.getPath('userData')
+  const imagesDir = path.join(userDataDir, 'images')
+
+  // imagesディレクトリの作成
+  if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir, { recursive: true })
+  }
+
+  const filePath = path.join(imagesDir, `${imageId}.png`)
+
+  try {
+    // Base64データをデコードして保存
+    const imageBuffer = Buffer.from(base64Data, 'base64')
+    fs.writeFileSync(filePath, imageBuffer)
+
+    // 相対パスを返す
+    return `images/${imageId}.png`
+  } catch (err) {
+    console.error('Failed to save image:', err)
+    throw err
+  }
+})
+
+// 画像読み込み用IPCハンドラー
+ipcMain.handle('load-image', async (_event, imagePath: string) => {
+  try {
+    const userDataDir = app.getPath('userData')
+    const fullPath = path.join(userDataDir, imagePath)
+
+    if (fs.existsSync(fullPath)) {
+      const data = fs.readFileSync(fullPath)
+
+      return data.toString('base64')
+    }
+
+    return null
+  } catch (err) {
+    console.error('Failed to load image:', err)
+
+    return null
   }
 })
