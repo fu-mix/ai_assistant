@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect, memo } from 'react'
 import {
   Box,
   Flex,
@@ -1875,6 +1875,408 @@ ${apiResultInfo}
 `
 }
 
+const ImageWithLazyLoading = memo(
+  ({
+    imagePath,
+    chatHistoryRef
+  }: {
+    imagePath: string
+    chatHistoryRef: React.RefObject<HTMLDivElement>
+  }) => {
+    const [imageData, setImageData] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+      async function loadImage() {
+        if (!imagePath) return
+
+        try {
+          setIsLoading(true)
+          const base64Data = await window.electronAPI.loadImage(imagePath)
+          if (base64Data) {
+            setImageData(`data:image/png;base64,${base64Data}`)
+          }
+        } catch (err) {
+          console.error('画像の読み込みに失敗:', err)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      loadImage()
+    }, [imagePath])
+
+    // 画像ロード完了時のハンドラー
+    const handleImageLoaded = useCallback(() => {
+      if (chatHistoryRef?.current) {
+        setTimeout(() => {
+          chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
+        }, 50)
+      }
+    }, [chatHistoryRef])
+
+    // 画像ダウンロード処理
+    const handleDownload = useCallback(() => {
+      if (!imageData) return
+
+      // data URLからBlobを作成
+      const byteString = atob(imageData.split(',')[1])
+      const mimeType = 'image/png'
+      const ab = new ArrayBuffer(byteString.length)
+      const ia = new Uint8Array(ab)
+
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
+      }
+
+      const blob = new Blob([ab], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+
+      // ダウンロードリンクを作成
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `generated_image_${Date.now()}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }, [imageData])
+
+    if (isLoading) {
+      return <Spinner size="md" />
+    }
+
+    return imageData ? (
+      <Box
+        position="relative"
+        display="flex"
+        justifyContent="center"
+        width="100%"
+        mt={2}
+        mb={2}
+        onMouseEnter={(e) => e.stopPropagation()}
+        onMouseOver={(e) => e.stopPropagation()}
+        onMouseMove={(e) => e.stopPropagation()}
+      >
+        <Image
+          src={imageData}
+          alt="生成された画像"
+          maxWidth="500px"
+          maxHeight="400px"
+          borderRadius="md"
+          objectFit="contain"
+          onLoad={handleImageLoaded}
+        />
+        <Button
+          position="absolute"
+          bottom="8px"
+          right="8px"
+          size="sm"
+          colorScheme="blue"
+          leftIcon={<DownloadIcon />}
+          onClick={handleDownload}
+        >
+          ダウンロード
+        </Button>
+      </Box>
+    ) : (
+      <Text color="red.500">画像を読み込めませんでした</Text>
+    )
+  }
+)
+
+// メッセージ表示用のコンポーネントを分離
+const MessageItem = memo(
+  ({
+    message,
+    index,
+    onCopy,
+    onEdit,
+    chatHistoryRef
+  }: {
+    message: Message
+    index: number
+    onCopy: (content: string) => void
+    onEdit: (index: number, content: string) => void
+    chatHistoryRef: React.RefObject<HTMLDivElement>
+  }) => {
+    const [isHovered, setIsHovered] = useState(false)
+
+    return (
+      <Box
+        mb={4}
+        p={3}
+        rounded="lg"
+        bg={message.type === 'user' ? 'gray.300' : 'gray.50'}
+        position="relative"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          maxWidth: '100%',
+          overflow: 'hidden'
+        }}
+      >
+        <div>
+          {message.type === 'user' ? (
+            message.content
+          ) : (
+            <>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                className="markdown"
+                components={{
+                  pre: ({ node, ...props }) => (
+                    <div
+                      style={{
+                        overflow: 'auto',
+                        maxWidth: '100%',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word'
+                      }}
+                    >
+                      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} {...props} />
+                    </div>
+                  ),
+                  code: ({ node, ...props }) => (
+                    <code
+                      style={{
+                        overflowWrap: 'break-word',
+                        wordBreak: 'break-word',
+                        maxWidth: '100%'
+                      }}
+                      {...props}
+                    />
+                  ),
+                  table: ({ node, ...props }) => (
+                    <div style={{ overflow: 'auto', maxWidth: '100%' }}>
+                      <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
+                    </div>
+                  )
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {/* 画像がある場合に表示 - chatHistoryRefを渡す */}
+              {message.imagePath && (
+                <Box mt={3}>
+                  <ImageWithLazyLoading
+                    imagePath={message.imagePath}
+                    chatHistoryRef={chatHistoryRef}
+                  />
+                </Box>
+              )}
+            </>
+          )}
+        </div>
+        {isHovered && (
+          <Box position="absolute" top="4px" right="6px">
+            <HStack spacing={1}>
+              <IconButton
+                icon={<MdOutlineContentCopy />}
+                aria-label="コピー"
+                size="sm"
+                variant="ghost"
+                colorScheme="blue"
+                onClick={() => onCopy(message.content)}
+              />
+              {message.type === 'user' && (
+                <IconButton
+                  icon={<FiEdit />}
+                  aria-label="編集"
+                  size="sm"
+                  variant="ghost"
+                  colorScheme="blue"
+                  onClick={() => onEdit(index, message.content)}
+                />
+              )}
+            </HStack>
+          </Box>
+        )}
+      </Box>
+    )
+  }
+)
+
+// メッセージリスト全体を管理するコンポーネント
+const MessageList = memo(
+  ({
+    messages,
+    onCopy,
+    onEdit,
+    chatHistoryRef
+  }: {
+    messages: Message[]
+    onCopy: (content: string) => void
+    onEdit: (index: number, content: string) => void
+    chatHistoryRef: React.RefObject<HTMLDivElement>
+  }) => {
+    return (
+      <>
+        {messages.map((msg, idx) => (
+          <MessageItem
+            key={idx}
+            message={msg}
+            index={idx}
+            onCopy={onCopy}
+            onEdit={onEdit}
+            chatHistoryRef={chatHistoryRef}
+          />
+        ))}
+      </>
+    )
+  }
+)
+// 入力フォームコンポーネント
+const ChatInputForm = memo(
+  ({
+    inputMessage,
+    onInputChange,
+    onKeyPress,
+    onDrop,
+    onDragOver,
+    onSendMessage,
+    onFileSelect,
+    useAgentFile,
+    onUseAgentFileChange,
+    agentMode,
+    onAgentModeChange,
+    isLoading,
+    disabled,
+    selectedChatId,
+    chatInputRef,
+    fileInputRef
+  }: {
+    inputMessage: string
+    onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+    onKeyPress: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+    onDrop: (e: React.DragEvent<HTMLTextAreaElement>) => void
+    onDragOver: (e: React.DragEvent<HTMLTextAreaElement>) => void
+    onSendMessage: () => void
+    onFileSelect: () => void
+    useAgentFile: boolean
+    onUseAgentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+    agentMode: boolean
+    onAgentModeChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+    isLoading: boolean
+    disabled: boolean
+    selectedChatId: number | null | 'autoAssist'
+    chatInputRef: React.RefObject<HTMLTextAreaElement>
+    fileInputRef: React.RefObject<HTMLInputElement>
+  }) => {
+    return (
+      <Flex p={4} borderTop="1px" borderColor="gray.200" align="end">
+        <HStack spacing={3} w="100%">
+          <Textarea
+            ref={chatInputRef}
+            value={inputMessage}
+            onChange={onInputChange}
+            onKeyPress={onKeyPress}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            placeholder={
+              selectedChatId === 'autoAssist'
+                ? 'オートアシストに依頼する...'
+                : 'メッセージを入力...'
+            }
+            resize="vertical"
+            flex="1"
+            isDisabled={disabled}
+          />
+
+          {typeof selectedChatId === 'number' && (
+            <Checkbox
+              isChecked={useAgentFile}
+              onChange={onUseAgentFileChange}
+              isDisabled={isLoading || disabled}
+            >
+              ナレッジを使用する
+            </Checkbox>
+          )}
+          {selectedChatId === 'autoAssist' && (
+            <HStack align="center">
+              <Text fontSize="sm">エージェントモード</Text>
+              <Switch
+                isChecked={agentMode}
+                onChange={onAgentModeChange}
+                colorScheme="teal"
+                isDisabled={isLoading || disabled}
+              />
+            </HStack>
+          )}
+
+          <IconButton
+            icon={<LuPaperclip />}
+            aria-label="ファイル添付"
+            onClick={onFileSelect}
+            isDisabled={disabled}
+          />
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
+            multiple
+            onChange={() => {}} // 親から渡された関数が実行されるため空関数
+            display="none"
+          />
+
+          <IconButton
+            icon={<IoSend />}
+            aria-label="送信"
+            onClick={onSendMessage}
+            isLoading={isLoading}
+            isDisabled={disabled || inputMessage.length === 0}
+          />
+        </HStack>
+      </Flex>
+    )
+  }
+)
+
+// 添付ファイル表示コンポーネント
+const AttachmentList = memo(
+  ({
+    files,
+    onDelete
+  }: {
+    files: { name: string; data: string; mimeType: string }[]
+    onDelete: (name: string) => void
+  }) => {
+    if (files.length === 0) return null
+
+    return (
+      <Box p={4} borderTop="1px" borderColor="gray.200">
+        <Text fontSize="sm" color="gray.600" mb={2}>
+          選択ファイル:
+        </Text>
+        {files.map((file) => (
+          <Flex
+            key={file.name}
+            align="center"
+            justify="space-between"
+            mb={2}
+            p={2}
+            bg="gray.50"
+            borderRadius="md"
+          >
+            <Text fontSize="sm" color="gray.800" mr={4}>
+              {file.name}
+            </Text>
+            <IconButton
+              icon={<AiOutlineDelete />}
+              aria-label="ファイル削除"
+              colorScheme="red"
+              size="sm"
+              onClick={() => onDelete(file.name)}
+            />
+          </Flex>
+        ))}
+      </Box>
+    )
+  }
+)
+
 /* ------------------------------------------------
  * メインコンポーネント
  * ------------------------------------------------ */
@@ -2076,24 +2478,32 @@ export const FinalRefinedElectronAppMockup = () => {
   }, [])
 
   // チャット欄スクロール制御
-  useEffect(() => {
-    let currentMsgCount = 0
-    if (selectedChatId === 'autoAssist') {
-      currentMsgCount = autoAssistMessages.length
-    } else if (typeof selectedChatId === 'number') {
-      const found = chats.find((c) => c.id === selectedChatId)
-      if (found) {
-        currentMsgCount = found.messages.length
-      }
-    }
+  useLayoutEffect(() => {
+    // 現在のメッセージ配列を特定
+    const currentMessages =
+      selectedChatId === 'autoAssist'
+        ? autoAssistMessages
+        : typeof selectedChatId === 'number'
+          ? chats.find((c) => c.id === selectedChatId)?.messages || []
+          : []
 
-    if (currentMsgCount > prevMessageCountRef.current) {
-      if (chatHistoryRef.current) {
+    // メッセージ配列の長さを取得
+    const currentMsgCount = currentMessages.length
+
+    // 新しいメッセージが追加された場合やチャットが切り替わった場合にスクロール
+    if (chatHistoryRef.current) {
+      // 現在のスクロール位置がほぼ最下部にあるか、新しいメッセージが追加された場合
+      const isAtBottom =
+        chatHistoryRef.current.scrollTop + chatHistoryRef.current.clientHeight >=
+        chatHistoryRef.current.scrollHeight - 100
+
+      if (isAtBottom || currentMsgCount > prevMessageCountRef.current) {
         chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
       }
     }
+
     prevMessageCountRef.current = currentMsgCount
-  }, [chats, selectedChatId, autoAssistMessages])
+  }, [selectedChatId, autoAssistMessages, chats])
 
   // ヘッダー背景画像の base64化
   useEffect(() => {
@@ -2129,7 +2539,7 @@ export const FinalRefinedElectronAppMockup = () => {
   // --------------------------------
   // ファイル添付(チャット用)
   // --------------------------------
-  const handleTempFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTempFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
@@ -2167,9 +2577,21 @@ export const FinalRefinedElectronAppMockup = () => {
       reader.readAsDataURL(file)
     }
     e.target.value = ''
-  }
+  }, [])
 
-  const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
+  const handleUseAgentFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setUseAgentFile(e.target.checked)
+  }, [])
+
+  const handleAgentModeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setAgentMode(e.target.checked)
+  }, [])
+
+  const memoizedSendMessage = useMemo(() => {
+    return () => sendMessage()
+  }, [sendMessage])
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -2207,40 +2629,50 @@ export const FinalRefinedElectronAppMockup = () => {
       }
       reader.readAsDataURL(file)
     }
-  }
+  }, [])
 
-  const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
-  }
+  }, [])
 
-  const handleTempFileDelete = (targetName: string) => {
+  const handleTempFileDelete = useCallback((targetName: string) => {
     setTempFiles((prev) => prev.filter((f) => f.name !== targetName))
-  }
+  }, [])
+
+  const handleFileSelection = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
 
   // --------------------------------
   // 入力フォーム
   // --------------------------------
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value
-    setInputMessage(val)
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const val = e.target.value
+      setInputMessage(val)
 
-    if (typeof selectedChatId === 'number') {
-      setChats((prev) =>
-        prev.map((chat) => (chat.id === selectedChatId ? { ...chat, inputMessage: val } : chat))
-      )
-    }
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (!inputMessage.trim() || isLoading) {
-        return
+      if (typeof selectedChatId === 'number') {
+        setChats((prev) =>
+          prev.map((chat) => (chat.id === selectedChatId ? { ...chat, inputMessage: val } : chat))
+        )
       }
-      sendMessage()
-    }
-  }
+    },
+    [selectedChatId]
+  )
+
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        if (!inputMessage.trim() || isLoading) {
+          return
+        }
+        sendMessage()
+      }
+    },
+    [inputMessage, isLoading, sendMessage]
+  )
 
   const handleSelectChat = (id: number) => {
     setSelectedChatId(id)
@@ -3913,13 +4345,27 @@ export const FinalRefinedElectronAppMockup = () => {
     })
   }
 
+  const handleCopyMessage = useCallback(
+    (content: string) => {
+      navigator.clipboard.writeText(content).then(() => {
+        toast({
+          title: 'メッセージをコピーしました',
+          status: 'info',
+          duration: 1000,
+          isClosable: true
+        })
+      })
+    },
+    [toast]
+  )
+
   // --------------------------------
   // ユーザーメッセージ編集
   // --------------------------------
-  const handleEditMessage = (msgIndex: number, oldContent: string) => {
+  const handleEditMessage = useCallback((msgIndex: number, oldContent: string) => {
     setEditIndex(msgIndex)
     setInputMessage(oldContent)
-  }
+  }, [])
 
   // --------------------------------
   // エクスポート
@@ -4395,219 +4841,20 @@ export const FinalRefinedElectronAppMockup = () => {
                 <Text fontWeight="bold" color="gray.600" mb={3}>
                   オートアシストモード
                 </Text>
-                {autoAssistMessages.map((msg, idx) => (
-                  <Box
-                    key={idx}
-                    mb={4}
-                    p={3}
-                    rounded="lg"
-                    bg={msg.type === 'user' ? 'gray.300' : 'gray.50'}
-                    position="relative"
-                    onMouseEnter={() => setHoveredMessageIndex(idx)}
-                    onMouseLeave={() => setHoveredMessageIndex(null)}
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      maxWidth: '100%',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    <div>
-                      {msg.type === 'user' ? (
-                        msg.content
-                      ) : (
-                        <>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            className="markdown"
-                            components={{
-                              pre: ({ node, ...props }) => (
-                                <div
-                                  style={{
-                                    overflow: 'auto',
-                                    maxWidth: '100%',
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-word'
-                                  }}
-                                >
-                                  <pre
-                                    style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                                    {...props}
-                                  />
-                                </div>
-                              ),
-                              code: ({ node, ...props }) => (
-                                <code
-                                  style={{
-                                    overflowWrap: 'break-word',
-                                    wordBreak: 'break-word',
-                                    maxWidth: '100%'
-                                  }}
-                                  {...props}
-                                />
-                              ),
-                              table: ({ node, ...props }) => (
-                                <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                                  <table
-                                    style={{ tableLayout: 'fixed', width: '100%' }}
-                                    {...props}
-                                  />
-                                </div>
-                              )
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                          {/* 画像がある場合に表示 */}
-                          {msg.imagePath && (
-                            <Box mt={3}>
-                              <ImageWithLazyLoading imagePath={msg.imagePath} />
-                            </Box>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {hoveredMessageIndex === idx && (
-                      <Box position="absolute" top="4px" right="6px">
-                        <HStack spacing={1}>
-                          <IconButton
-                            icon={<MdOutlineContentCopy />}
-                            aria-label="コピー"
-                            size="sm"
-                            variant="ghost"
-                            colorScheme="blue"
-                            onClick={() => {
-                              navigator.clipboard.writeText(msg.content).then(() => {
-                                toast({
-                                  title: 'メッセージをコピーしました',
-                                  status: 'info',
-                                  duration: 1000,
-                                  isClosable: true
-                                })
-                              })
-                            }}
-                          />
-                          {msg.type === 'user' && (
-                            <IconButton
-                              icon={<FiEdit />}
-                              aria-label="編集"
-                              size="sm"
-                              variant="ghost"
-                              colorScheme="blue"
-                              onClick={() => handleEditMessage(idx, msg.content)}
-                            />
-                          )}
-                        </HStack>
-                      </Box>
-                    )}
-                  </Box>
-                ))}
+                <MessageList
+                  messages={autoAssistMessages}
+                  onCopy={handleCopyMessage}
+                  onEdit={handleEditMessage}
+                  chatHistoryRef={chatHistoryRef}
+                />
               </>
             ) : selectedChatObj ? (
-              selectedChatObj.messages.map((msg, idx) => (
-                <Box
-                  key={idx}
-                  mb={4}
-                  p={3}
-                  rounded="lg"
-                  bg={msg.type === 'user' ? 'gray.300' : 'gray.50'}
-                  position="relative"
-                  onMouseEnter={() => setHoveredMessageIndex(idx)}
-                  onMouseLeave={() => setHoveredMessageIndex(null)}
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    maxWidth: '100%',
-                    overflow: 'hidden'
-                  }}
-                >
-                  <div>
-                    {msg.type === 'user' ? (
-                      msg.content
-                    ) : (
-                      <>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          className="markdown"
-                          components={{
-                            pre: ({ node, ...props }) => (
-                              <div
-                                style={{
-                                  overflow: 'auto',
-                                  maxWidth: '100%',
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word'
-                                }}
-                              >
-                                <pre
-                                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                                  {...props}
-                                />
-                              </div>
-                            ),
-                            code: ({ node, ...props }) => (
-                              <code
-                                style={{
-                                  overflowWrap: 'break-word',
-                                  wordBreak: 'break-word',
-                                  maxWidth: '100%'
-                                }}
-                                {...props}
-                              />
-                            ),
-                            table: ({ node, ...props }) => (
-                              <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                                <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
-                              </div>
-                            )
-                          }}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                        {/* 画像がある場合に表示 */}
-                        {msg.imagePath && (
-                          <Box mt={3}>
-                            <ImageWithLazyLoading imagePath={msg.imagePath} />
-                          </Box>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  {hoveredMessageIndex === idx && (
-                    <Box position="absolute" top="4px" right="6px">
-                      <HStack spacing={1}>
-                        <IconButton
-                          icon={<MdOutlineContentCopy />}
-                          aria-label="コピー"
-                          size="sm"
-                          variant="ghost"
-                          colorScheme="blue"
-                          onClick={() => {
-                            navigator.clipboard.writeText(msg.content).then(() => {
-                              toast({
-                                title: 'メッセージをコピーしました',
-                                status: 'info',
-                                duration: 1000,
-                                isClosable: true
-                              })
-                            })
-                          }}
-                        />
-                        {msg.type === 'user' && (
-                          <IconButton
-                            icon={<FiEdit />}
-                            aria-label="編集"
-                            size="sm"
-                            variant="ghost"
-                            colorScheme="blue"
-                            onClick={() => handleEditMessage(idx, msg.content)}
-                          />
-                        )}
-                      </HStack>
-                    </Box>
-                  )}
-                </Box>
-              ))
+              <MessageList
+                messages={selectedChatObj.messages}
+                onCopy={handleCopyMessage}
+                onEdit={handleEditMessage}
+                chatHistoryRef={chatHistoryRef}
+              />
             ) : (
               <Text fontWeight="bold" color="gray.500">
                 アシスタントを作成・選択して開始してください
@@ -4616,103 +4863,27 @@ export const FinalRefinedElectronAppMockup = () => {
           </Box>
 
           {/* 入力フォーム */}
-          <Flex p={4} borderTop="1px" borderColor="gray.200" align="end">
-            <HStack spacing={3} w="100%">
-              <Textarea
-                ref={chatInputRef}
-                value={inputMessage}
-                onChange={handleInputChange}
-                onKeyPress={handleKeyPress}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                placeholder={
-                  selectedChatId === 'autoAssist'
-                    ? 'オートアシストに依頼する...'
-                    : 'メッセージを入力...'
-                }
-                resize="vertical"
-                flex="1"
-                isDisabled={apiKey.length === 0 || isExpired}
-              />
-
-              {typeof selectedChatId === 'number' && (
-                <Checkbox
-                  isChecked={useAgentFile}
-                  onChange={(e) => setUseAgentFile(e.target.checked)}
-                  isDisabled={isLoading || isExpired}
-                >
-                  ナレッジを使用する
-                </Checkbox>
-              )}
-              {selectedChatId === 'autoAssist' && (
-                <HStack align="center">
-                  <Text fontSize="sm">エージェントモード</Text>
-                  <Switch
-                    isChecked={agentMode}
-                    onChange={(e) => setAgentMode(e.target.checked)}
-                    colorScheme="teal"
-                    isDisabled={isLoading || isExpired}
-                  />
-                </HStack>
-              )}
-
-              <IconButton
-                icon={<LuPaperclip />}
-                aria-label="ファイル添付"
-                onClick={() => fileInputRef.current?.click()}
-                isDisabled={apiKey.length === 0 || isExpired}
-              />
-              <Input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
-                multiple
-                onChange={handleTempFileChange}
-                display="none"
-              />
-
-              <IconButton
-                icon={<IoSend />}
-                aria-label="送信"
-                onClick={sendMessage}
-                isLoading={isLoading}
-                isDisabled={
-                  apiKey.length === 0 || isLoading || inputMessage.length === 0 || isExpired
-                }
-              />
-            </HStack>
-          </Flex>
+          <ChatInputForm
+            inputMessage={inputMessage}
+            onInputChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onSendMessage={memoizedSendMessage}
+            onFileSelect={handleFileSelection}
+            useAgentFile={useAgentFile}
+            onUseAgentFileChange={handleUseAgentFileChange}
+            agentMode={agentMode}
+            onAgentModeChange={handleAgentModeChange}
+            isLoading={isLoading}
+            disabled={apiKey.length === 0 || isExpired}
+            selectedChatId={selectedChatId}
+            chatInputRef={chatInputRef}
+            fileInputRef={fileInputRef}
+          />
 
           {/* 添付ファイル一覧 */}
-          {tempFiles.length > 0 && (
-            <Box p={4} borderTop="1px" borderColor="gray.200">
-              <Text fontSize="sm" color="gray.600" mb={2}>
-                選択ファイル:
-              </Text>
-              {tempFiles.map((file) => (
-                <Flex
-                  key={file.name}
-                  align="center"
-                  justify="space-between"
-                  mb={2}
-                  p={2}
-                  bg="gray.50"
-                  borderRadius="md"
-                >
-                  <Text fontSize="sm" color="gray.800" mr={4}>
-                    {file.name}
-                  </Text>
-                  <IconButton
-                    icon={<AiOutlineDelete />}
-                    aria-label="ファイル削除"
-                    colorScheme="red"
-                    size="sm"
-                    onClick={() => handleTempFileDelete(file.name)}
-                  />
-                </Flex>
-              ))}
-            </Box>
-          )}
+          <AttachmentList files={tempFiles} onDelete={handleTempFileDelete} />
         </Box>
       </Flex>
 
