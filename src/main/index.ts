@@ -906,3 +906,75 @@ ipcMain.handle('load-image', async (_event, imagePath: string) => {
     return null
   }
 })
+
+ipcMain.handle('direct-delete-file', (_event, filePath: string) => {
+  if (!filePath) return false
+  console.log(`[direct-delete-file] 削除試行: ${filePath}`)
+
+  try {
+    // 絶対パスとして試行
+    if (path.isAbsolute(filePath)) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        console.log(`[direct-delete-file] 絶対パスで削除成功: ${filePath}`)
+
+        return true
+      }
+    }
+
+    // 相対パスの場合または絶対パスでの削除に失敗した場合
+    // ユーザーデータディレクトリと結合して試行
+    const userDataDir = app.getPath('userData')
+
+    // パターン1: userDataDir直下
+    let combinedPath = path.join(userDataDir, filePath)
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] ユーザーデータ直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    // パターン2: userDataDir/files直下
+    combinedPath = path.join(userDataDir, 'files', filePath.replace(/^files[/\\]?/, ''))
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] files直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    // パターン3: userDataDir/images直下
+    combinedPath = path.join(userDataDir, 'images', path.basename(filePath))
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] images直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    // パターン4: userDataDir/files/images直下
+    combinedPath = path.join(userDataDir, 'files', 'images', path.basename(filePath))
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] files/images直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    console.log(`[direct-delete-file] 該当ファイルが見つかりませんでした: ${filePath}`)
+
+    return false
+  } catch (err) {
+    console.error(`[direct-delete-file] 削除エラー: ${filePath}`, err)
+
+    return false
+  }
+})
+
+// ----------------------
+// get-user-data-path
+// ----------------------
+ipcMain.handle('get-user-data-path', () => {
+  return app.getPath('userData')
+})

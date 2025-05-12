@@ -81,6 +81,12 @@ if (process.contextIsolated) {
       // 画像読み込み用の関数を追加
       loadImage: async (imagePath: string) => {
         return await ipcRenderer.invoke('load-image', imagePath)
+      },
+      directDeleteFile: async (filePath: string) => {
+        return await ipcRenderer.invoke('direct-delete-file', filePath)
+      },
+      getUserDataPath: async () => {
+        return await ipcRenderer.invoke('get-user-data-path')
       }
     })
   } catch (error) {

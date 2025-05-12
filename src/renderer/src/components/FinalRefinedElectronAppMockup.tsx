@@ -2591,6 +2591,48 @@ export const FinalRefinedElectronAppMockup = () => {
     return () => sendMessage()
   }, [sendMessage])
 
+  const deleteImageFiles = async (messages: Message[]): Promise<void> => {
+    // 画像パスを持つメッセージを特定
+    const imageMessages = messages.filter((msg) => msg.imagePath && msg.imagePath.trim() !== '')
+
+    if (imageMessages.length === 0) {
+      console.log('削除対象の画像ファイルはありません')
+
+      return
+    }
+
+    console.log(`画像ファイル削除対象: ${imageMessages.length}件`)
+
+    // 直接削除APIが利用可能か確認
+    const hasDirectDeleteAPI = !!window.electronAPI.directDeleteFile
+
+    if (!hasDirectDeleteAPI) {
+      console.warn('directDeleteFile APIが利用できません。削除処理をスキップします。')
+
+      return
+    }
+
+    // 画像ファイルを削除
+    for (const msg of imageMessages) {
+      if (msg.imagePath) {
+        try {
+          console.log(`処理対象画像パス: ${msg.imagePath}`)
+
+          // 直接削除APIを使用
+          const result = await window.electronAPI.directDeleteFile(msg.imagePath)
+
+          if (result) {
+            console.log(`✓ 画像ファイル削除成功: ${msg.imagePath}`)
+          } else {
+            console.warn(`✗ 画像ファイル削除失敗: ${msg.imagePath}`)
+          }
+        } catch (err) {
+          console.error(`✗ 画像ファイル削除エラー: ${msg.imagePath}`, err)
+        }
+      }
+    }
+  }
+
   const handleDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
     e.stopPropagation()
@@ -3523,6 +3565,13 @@ export const FinalRefinedElectronAppMockup = () => {
     if (editIndex != null) {
       setIsLoading(true)
       try {
+        // 編集で削除される可能性のあるメッセージを特定
+        const messagesToBeRemoved =
+          chats.find((c) => c.id === selectedChatId)?.messages.slice(editIndex + 1) || []
+
+        // 削除予定メッセージから画像ファイルを削除
+        await deleteImageFiles(messagesToBeRemoved)
+
         const updatedChats = chats.map((chat) => {
           if (chat.id === selectedChatId) {
             const cloned = [...chat.messages]
@@ -4132,6 +4181,9 @@ export const FinalRefinedElectronAppMockup = () => {
       }
     }
 
+    // 追加: 会話中の画像ファイルも削除
+    await deleteImageFiles(target.messages || [])
+
     const updated = chats.filter((c) => c.id !== chatId)
     setChats(updated)
     window.electronAPI.saveAgents(updated).catch(console.error)
@@ -4286,6 +4338,9 @@ export const FinalRefinedElectronAppMockup = () => {
   async function handleResetConversation() {
     closeResetConfirm()
     if (selectedChatId === 'autoAssist') {
+      // 画像ファイルを削除
+      await deleteImageFiles(autoAssistMessages)
+
       setAutoAssistMessages([])
       const updated = chats.map((c) => {
         if (c.id === AUTO_ASSIST_ID) {
@@ -4303,6 +4358,10 @@ export const FinalRefinedElectronAppMockup = () => {
         isClosable: true
       })
     } else if (typeof selectedChatId === 'number') {
+      const selectedChatMessages = chats.find((c) => c.id === selectedChatId)?.messages || []
+      // 画像ファイルを削除
+      await deleteImageFiles(selectedChatMessages)
+
       const updated = chats.map((c) => {
         if (c.id === selectedChatId) {
           return { ...c, messages: [], postMessages: [], inputMessage: '' }
@@ -4327,6 +4386,10 @@ export const FinalRefinedElectronAppMockup = () => {
 
   async function handleResetAutoAssistFromModal() {
     setIsResetAutoAssistConfirm(false)
+
+    // 画像ファイルを削除
+    await deleteImageFiles(autoAssistMessages)
+
     setAutoAssistMessages([])
     const updated = chats.map((c) => {
       if (c.id === AUTO_ASSIST_ID) {
