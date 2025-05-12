@@ -739,11 +739,31 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
     if (bodyTemplate && (method === 'POST' || method === 'PUT')) {
       try {
         const paramsObj = params || {}
+
+        // プロンプトなどの文字列パラメータの改行を適切に処理
+        const sanitizedParams = { ...paramsObj }
+
+        // 画像生成用のプロンプトなど、文字列型パラメータの改行を処理
+        Object.keys(sanitizedParams).forEach((key) => {
+          if (typeof sanitizedParams[key] === 'string') {
+            // 改行を空白に置換して1行にする
+            sanitizedParams[key] = sanitizedParams[key].replace(/\r?\n/g, ' ')
+          }
+        })
+
+        // テンプレートからリクエストボディを生成する際にsanitizedParamsを渡す
         const templateFn = new Function(
           'params',
           'return `' + bodyTemplate.replace(/`/g, '\\`') + '`'
         )
-        const bodyJson = templateFn(paramsObj)
+
+        // sanitizedParamsを引数として渡す
+        const bodyJson = templateFn(sanitizedParams)
+        // const templateFn = new Function(
+        //   'params',
+        //   'return `' + bodyTemplate.replace(/`/g, '\\`') + '`'
+        // )
+        // const bodyJson = templateFn(paramsObj)
         requestData = JSON.parse(bodyJson)
         if (debugFlag) {
           console.log('Request Body:', JSON.stringify(requestData, null, 2))
