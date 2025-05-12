@@ -1637,6 +1637,7 @@ async function processAPITriggers(
 ): Promise<{
   processedMessage: string
   imageResponse?: { base64Data: string; prompt: string } | null
+  isImageOnly?: boolean // 追加
 }> {
   const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
@@ -1644,14 +1645,17 @@ async function processAPITriggers(
   if (!isExternalApiEnabled) {
     return { processedMessage: userMessage }
   }
+
+  // トリガーされたAPIを検出
   const triggeredAPIs = await detectTriggeredAPIs(userMessage, apiConfigs)
 
   if (triggeredAPIs.length === 0) {
-    return userMessage // APIトリガーなし
+    return { processedMessage: userMessage } // APIトリガーなし
   }
 
   let processedMessage = userMessage
   let imageResponse = null
+  let isImageOnly = false // デフォルトは画像のみではない
 
   for (const apiConfig of triggeredAPIs) {
     try {
@@ -1692,11 +1696,48 @@ async function processAPITriggers(
       const apiResponse = await window.electronAPI.callExternalAPI(apiConfig, params)
 
       // 画像レスポンスの場合
-      if (apiResponse.success && apiResponse.type === 'image' && apiResponse.data) {
+      if (apiResponse.success && apiConfig.responseType === 'image' && apiResponse.data) {
         imageResponse = {
           base64Data: apiResponse.data,
           prompt: userMessage
         }
+
+        // レスポンスタイプが「画像」のAPIの場合、そのトリガーに一致したかどうかで判断
+        // 固定のキーワードリストではなく、APIの設定自体をチェック
+        const isImageGenerationTrigger =
+          // レスポンスタイプが明示的に「image」に設定されているかチェック
+          apiConfig.responseType === 'image' &&
+          // 現在のメッセージがこのAPIのトリガーのいずれかに一致したかを確認
+          apiConfig.triggers.some((trigger) => {
+            if (trigger.type === 'keyword') {
+              // キーワードタイプのトリガー
+              const keywords = trigger.value.split(',').map((k) => k.trim().toLowerCase())
+
+              // ユーザーメッセージ内にいずれかのキーワードが含まれているか
+              return keywords.some((keyword) =>
+                userMessage.toLowerCase().includes(keyword.toLowerCase())
+              )
+            } else if (trigger.type === 'pattern') {
+              // パターン（正規表現）タイプのトリガー
+              try {
+                const regex = new RegExp(trigger.value, 'i')
+
+                return regex.test(userMessage)
+              } catch (err) {
+                console.error(`無効な正規表現パターン: ${trigger.value}`, err)
+
+                return false
+              }
+            }
+
+            return false
+          })
+
+        // 画像生成に特化したトリガーであれば、isImageOnlyをtrueに設定
+        if (isImageGenerationTrigger) {
+          isImageOnly = true
+        }
+
         // 画像APIの場合は文字列追加しない（画像として処理するため）
         continue
       }
@@ -1720,7 +1761,7 @@ async function processAPITriggers(
     }
   }
 
-  return { processedMessage, imageResponse }
+  return { processedMessage, imageResponse, isImageOnly }
 }
 
 async function extractParametersWithLLM(
@@ -3616,6 +3657,7 @@ export const FinalRefinedElectronAppMockup = () => {
         let processedUserContent = inputMessage
         let apiProcessingResult = null
         let imageResponse = null
+        let isImageOnly = false
 
         if (
           isExternalApiEnabled && // 環境変数チェック追加
@@ -3633,6 +3675,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
             processedUserContent = result.processedMessage
             imageResponse = result.imageResponse
+            isImageOnly = result.isImageOnly || false
 
             // オリジナルのメッセージと異なる場合、API処理が行われたと判断
             if (processedUserContent !== inputMessage) {
@@ -3666,7 +3709,7 @@ export const FinalRefinedElectronAppMockup = () => {
             }
 
             // チャット状態を更新
-            const finalUpdated = updatedChats.map((chat) => {
+            const imageUpdatedChats = updatedChats.map((chat) => {
               if (chat.id === selectedChatId) {
                 return {
                   ...chat,
@@ -3682,16 +3725,27 @@ export const FinalRefinedElectronAppMockup = () => {
             })
 
             // 状態更新と保存
-            setChats(finalUpdated)
-            await window.electronAPI.saveAgents(finalUpdated)
+            setChats(imageUpdatedChats)
+            await window.electronAPI.saveAgents(imageUpdatedChats)
 
-            // 入力をクリアして処理終了
-            setEditIndex(null)
-            setInputMessage('')
-            setTempFiles([])
-            setIsLoading(false)
+            // 画像のみのリクエストの場合は処理を終了
+            if (isImageOnly) {
+              setIsLoading(false)
+              setEditIndex(null)
+              setInputMessage('')
+              setTempFiles([])
 
-            return // 画像処理の場合は、ここで終了
+              return // 画像のみの処理の場合はここで終了
+            }
+
+            // 画像+テキストの場合は、以降の通常テキストチャットも実行する
+            // この場合、最新のチャット状態を使用
+            const latestChats = await window.electronAPI.loadAgents()
+            const latestSelectedChat = latestChats.find((c) => c.id === selectedChatId)
+
+            if (!latestSelectedChat) {
+              throw new Error('選択されたチャットが見つかりません')
+            }
           } catch (imgErr) {
             console.error('画像保存中にエラー:', imgErr)
             // エラー時は通常テキスト処理に戻る
@@ -3845,6 +3899,7 @@ export const FinalRefinedElectronAppMockup = () => {
       let processedUserContent = inputMessage
       let apiProcessingResult = null
       let imageResponse = null
+      let isImageOnly = false
 
       if (
         isExternalApiEnabled && // 環境変数チェック追加
@@ -3862,6 +3917,7 @@ export const FinalRefinedElectronAppMockup = () => {
 
           processedUserContent = result.processedMessage
           imageResponse = result.imageResponse
+          isImageOnly = result.isImageOnly || false
 
           // オリジナルのメッセージと異なる場合、API処理が行われたと判断
           if (processedUserContent !== inputMessage) {
@@ -3915,7 +3971,7 @@ export const FinalRefinedElectronAppMockup = () => {
           }
 
           // チャット状態を更新
-          const finalUpdated = fullUpdatedChats.map((chat) => {
+          const imageUpdatedChats = fullUpdatedChats.map((chat) => {
             if (chat.id === selectedChatId) {
               return {
                 ...chat,
@@ -3931,17 +3987,29 @@ export const FinalRefinedElectronAppMockup = () => {
           })
 
           // 状態更新と保存
-          setChats(finalUpdated)
-          await window.electronAPI.saveAgents(finalUpdated)
-          setIsLoading(false)
+          setChats(imageUpdatedChats)
+          await window.electronAPI.saveAgents(imageUpdatedChats)
 
-          return // 画像処理の場合は、ここで終了
+          // 画像のみのリクエストの場合は処理を終了
+          if (isImageOnly) {
+            setIsLoading(false)
+
+            return // 画像のみの処理の場合はここで終了
+          }
+
+          // 画像+テキストの場合は、以降の通常テキストチャットも実行する
+          // この場合、最新のチャット状態を使用
+          const latestChats = await window.electronAPI.loadAgents()
+          const latestSelectedChat = latestChats.find((c) => c.id === selectedChatId)
+
+          if (!latestSelectedChat) {
+            throw new Error('選択されたチャットが見つかりません')
+          }
         } catch (imgErr) {
           console.error('画像保存中にエラー:', imgErr)
           // エラー時は通常テキスト処理に戻る
         }
       }
-
       // APIへ送信するメッセージはAPI処理結果を使用 (通常のテキスト処理)
       const ephemeralMsg: Messages = {
         role: 'user',
@@ -3996,10 +4064,23 @@ export const FinalRefinedElectronAppMockup = () => {
         }
       }
 
-      const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
+      // const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
 
-      // システムプロンプトも強化
-      let enhancedSystemPrompt = selectedChat.systemPrompt
+      // // システムプロンプトも強化
+      // let enhancedSystemPrompt = selectedChat.systemPrompt
+
+      // 画像処理が行われた後は、チャット状態が変わっている可能性があるため最新状態を取得
+      const currentChats = await window.electronAPI.loadAgents()
+      const currentSelectedChat = currentChats.find((c) => c.id === selectedChatId)
+
+      if (!currentSelectedChat) {
+        throw new Error('選択されたチャットが見つかりません')
+      }
+
+      // 最新のポストメッセージに基づいて処理を続行
+      const ephemeralAll = [...currentSelectedChat.postMessages, ephemeralMsg]
+      let enhancedSystemPrompt = currentSelectedChat.systemPrompt
+
       if (
         isExternalApiEnabled && // 環境変数チェック追加
         selectedChat.apiConfigs &&
@@ -4017,7 +4098,8 @@ export const FinalRefinedElectronAppMockup = () => {
 
       const aiMsg: Message = { type: 'ai', content: resp }
 
-      const finalUpdated = fullUpdatedChats.map((chat) => {
+      // 最新のチャット状態を取得して更新
+      const finalUpdated = currentChats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
             ...chat,
@@ -4028,8 +4110,22 @@ export const FinalRefinedElectronAppMockup = () => {
 
         return chat
       })
+
       setChats(finalUpdated)
       await window.electronAPI.saveAgents(finalUpdated)
+      // const finalUpdated = fullUpdatedChats.map((chat) => {
+      //   if (chat.id === selectedChatId) {
+      //     return {
+      //       ...chat,
+      //       messages: [...chat.messages, aiMsg],
+      //       postMessages: [...chat.postMessages, { role: 'model', parts: [{ text: resp }] }]
+      //     }
+      //   }
+
+      //   return chat
+      // })
+      // setChats(finalUpdated)
+      // await window.electronAPI.saveAgents(finalUpdated)
     } catch (err) {
       console.error('sendMessageエラー:', err)
       toast({
