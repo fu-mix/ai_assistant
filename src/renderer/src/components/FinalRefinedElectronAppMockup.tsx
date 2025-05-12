@@ -1638,7 +1638,7 @@ async function processAPITriggers(
   processedMessage: string
   imageResponse?: { base64Data: string; prompt: string } | null
 }> {
-  const isExternalApiEnabled = `${import.meta.env.VITE_ENABLE_EXTERNAL_API}`
+  const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
   // 外部API機能が無効の場合は処理しない
   if (!isExternalApiEnabled) {
@@ -2282,7 +2282,11 @@ const AttachmentList = memo(
  * ------------------------------------------------ */
 export const FinalRefinedElectronAppMockup = () => {
   // 環境変数から外部API機能の有効/無効状態を確認
-  const isExternalApiEnabled = `${import.meta.env.VITE_ENABLE_EXTERNAL_API}`
+  const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
+
+  if (isExternalApiEnabled) {
+    console.log('true!!')
+  }
   const toast = useToast()
 
   // ▼ リサイズ用stateを追加（左カラム幅）
@@ -3606,7 +3610,7 @@ export const FinalRefinedElectronAppMockup = () => {
         }
 
         // 環境変数を参照して外部API機能が有効かチェック
-        const isExternalApiEnabled = `${import.meta.env.VITE_ENABLE_EXTERNAL_API}`
+        const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
         // API処理を追加（選択されたチャットにAPI設定があり、かつ有効な場合）
         let processedUserContent = inputMessage
@@ -3815,7 +3819,7 @@ export const FinalRefinedElectronAppMockup = () => {
     setIsLoading(true)
     try {
       // 環境変数を参照して外部API機能が有効かチェック
-      const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API === 'true'
+      const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
       // ユーザー表示用のメッセージ
       const userMsg: Message = { type: 'user', content: inputMessage }
@@ -5154,28 +5158,31 @@ export const FinalRefinedElectronAppMockup = () => {
                 会話履歴リセット
               </Button>
             </FormControl>
+            {isExternalApiEnabled && (
+              <>
+                <FormControl mt={5} mb={4} display="flex" alignItems="center">
+                  <FormLabel htmlFor="api-call-enabled" mb="0">
+                    外部API呼び出しを有効にする
+                  </FormLabel>
+                  <Switch
+                    id="api-call-enabled"
+                    isChecked={enableAPICall}
+                    onChange={(e) => setEnableAPICall(e.target.checked)}
+                  />
+                </FormControl>
 
-            <FormControl mt={5} mb={4} display="flex" alignItems="center">
-              <FormLabel htmlFor="api-call-enabled" mb="0">
-                外部API呼び出しを有効にする
-              </FormLabel>
-              <Switch
-                id="api-call-enabled"
-                isChecked={enableAPICall}
-                onChange={(e) => setEnableAPICall(e.target.checked)}
-              />
-            </FormControl>
-
-            <FormControl mt={4} mb={4}>
-              <Button
-                onClick={() => setIsAPISettingsOpen(true)}
-                colorScheme="teal"
-                isDisabled={!enableAPICall}
-              >
-                外部API設定
-              </Button>
-              <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
-            </FormControl>
+                <FormControl mt={4} mb={4}>
+                  <Button
+                    onClick={() => setIsAPISettingsOpen(true)}
+                    colorScheme="teal"
+                    isDisabled={!enableAPICall}
+                  >
+                    外部API設定
+                  </Button>
+                  <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
+                </FormControl>
+              </>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
