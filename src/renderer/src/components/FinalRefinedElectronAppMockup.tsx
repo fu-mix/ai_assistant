@@ -3672,8 +3672,7 @@ export const FinalRefinedElectronAppMockup = () => {
             // AIメッセージを作成（画像付き）
             const aiMsg: Message = {
               type: 'ai',
-              // @ts-ignore
-              content: `画像を生成しました（プロンプト: "${imageResponse.prompt}"）`,
+              content: '',
               imagePath: imagePath
             }
 
@@ -3940,8 +3939,7 @@ export const FinalRefinedElectronAppMockup = () => {
           // AIメッセージを作成（画像付き）
           const aiMsg: Message = {
             type: 'ai',
-            // @ts-ignore
-            content: `画像を生成しました（プロンプト: "${imageResponse.prompt}"）`,
+            content: '',
             imagePath: imagePath
           }
 
