@@ -63,6 +63,9 @@ type TitleSettings = {
 import { createRequire } from 'module'
 let store: any = null
 
+// APIキー用ストア変数
+let apiKeyStore: any = null
+
 async function initStore() {
   const myRequire = createRequire(import.meta.url)
   const storeModule = myRequire('electron-store')
@@ -80,6 +83,30 @@ async function initStore() {
   })
 
   return storeInstance
+}
+
+// APIキー専用ストアの初期化関数を分離
+async function initApiKeyStore() {
+  const myRequire = createRequire(import.meta.url)
+  const storeModule = myRequire('electron-store')
+  const ElectronStore = storeModule.default
+
+  const userDataPath = app.getPath('userData')
+  const secureDir = path.join(userDataPath, 'secure')
+
+  // マシン固有情報から暗号化キーを生成
+  const machineId = os.hostname() + os.userInfo().username
+  const encryptionKey = Buffer.from(machineId).toString('hex').slice(0, 32)
+
+  // APIキー専用の暗号化ストアを別ファイルで作成
+  const apiKeyStoreInstance = new ElectronStore({
+    name: 'api-keys', // 別のファイル名を使用
+    cwd: secureDir,
+    encryptionKey, // 暗号化キーを設定
+    clearInvalidConfig: true
+  })
+
+  return apiKeyStoreInstance
 }
 
 function createWindow(): void {
@@ -120,6 +147,9 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   try {
     store = await initStore()
+
+    // APIキー専用ストアを別途初期化
+    apiKeyStore = await initApiKeyStore()
   } catch (err) {
     console.error('Error init store:', err)
   }
@@ -997,4 +1027,48 @@ ipcMain.handle('direct-delete-file', (_event, filePath: string) => {
 // ----------------------
 ipcMain.handle('get-user-data-path', () => {
   return app.getPath('userData')
+})
+
+// APIキー保存用のIPCハンドラを追加
+ipcMain.handle('save-api-key', (_event, apiKey: string) => {
+  try {
+    if (!apiKeyStore) {
+      console.error('API Key Store not initialized')
+
+      return false
+    }
+
+    // 空のキーなら削除
+    if (!apiKey || apiKey.trim() === '') {
+      apiKeyStore.delete('apiKey')
+
+      return true
+    }
+
+    // APIキーを保存
+    apiKeyStore.set('apiKey', apiKey)
+
+    return true
+  } catch (err) {
+    console.error('Error saving API key:', err)
+
+    return false
+  }
+})
+
+// APIキー読み込み用のIPCハンドラを追加
+ipcMain.handle('load-api-key', () => {
+  try {
+    if (!apiKeyStore) {
+      console.error('API Key Store not initialized')
+
+      return ''
+    }
+
+    return apiKeyStore.get('apiKey', '')
+  } catch (err) {
+    console.error('Error loading API key:', err)
+
+    return ''
+  }
 })

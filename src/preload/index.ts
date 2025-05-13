@@ -87,6 +87,12 @@ if (process.contextIsolated) {
       },
       getUserDataPath: async () => {
         return await ipcRenderer.invoke('get-user-data-path')
+      },
+      saveApiKey: async (apiKey: string) => {
+        return await ipcRenderer.invoke('save-api-key', apiKey)
+      },
+      loadApiKey: async () => {
+        return await ipcRenderer.invoke('load-api-key')
       }
     })
   } catch (error) {

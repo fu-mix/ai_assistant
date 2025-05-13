@@ -97,6 +97,10 @@ interface ElectronAPI {
   directDeleteFile: (filePath: string) => Promise<boolean>
   // ユーザーデータパス取得用の関数を追加
   getUserDataPath: () => Promise<string>
+
+  //APIキー保存用/読み込み
+  saveApiKey: (apiKey: string) => Promise<boolean>
+  loadApiKey: () => Promise<string>
 }
 
 declare global {
@@ -2332,9 +2336,6 @@ export const FinalRefinedElectronAppMockup = () => {
   // 環境変数から外部API機能の有効/無効状態を確認
   const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
-  if (isExternalApiEnabled) {
-    console.log('true!!')
-  }
   const toast = useToast()
 
   // ▼ リサイズ用stateを追加（左カラム幅）
@@ -2475,6 +2476,12 @@ export const FinalRefinedElectronAppMockup = () => {
       return false
     }
   }
+
+  const [isLoadingApiKey, setIsLoadingApiKey] = useState(true)
+  const [showApiKey, setShowApiKey] = useState(false)
+
+  // APIキー設定モーダル用のstate
+  const [isApiKeySettingsOpen, setIsApiKeySettingsOpen] = useState(false)
 
   // --------------------------------
   // 初期ロード
@@ -4637,6 +4644,65 @@ export const FinalRefinedElectronAppMockup = () => {
     }
   }
 
+  // APIキー読み込み関数
+  const loadSavedApiKey = useCallback(async () => {
+    if (!window.electronAPI?.loadApiKey) return
+
+    try {
+      setIsLoadingApiKey(true)
+      const savedKey = await window.electronAPI.loadApiKey()
+      if (savedKey) {
+        setApiKey(savedKey)
+      }
+    } catch (err) {
+      console.error('Failed to load API key:', err)
+    } finally {
+      setIsLoadingApiKey(false)
+    }
+  }, [])
+
+  // APIキー保存関数 - 最小限のコード
+  const saveApiKey = useCallback(async (key: string) => {
+    if (!window.electronAPI?.saveApiKey) return
+
+    try {
+      await window.electronAPI.saveApiKey(key)
+    } catch (err) {
+      console.error('Failed to save API key:', err)
+    }
+  }, [])
+
+  // APIキー変更ハンドラ
+  const handleApiKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setApiKey(e.target.value)
+  }, [])
+
+  // フォーカスアウト時の処理 - シンプルに保存
+  const handleApiKeyBlur = useCallback(() => {
+    if (apiKey && apiKey.trim() !== '') {
+      saveApiKey(apiKey)
+    }
+  }, [apiKey, saveApiKey])
+
+  // 初回ロード時にAPIキーを読み込む
+  useEffect(() => {
+    loadSavedApiKey()
+  }, [loadSavedApiKey])
+
+  // APIキー設定モーダルを開く関数
+  const openApiKeySettings = useCallback(() => {
+    setIsApiKeySettingsOpen(true)
+  }, [])
+
+  // APIキー設定モーダルを閉じる関数
+  const closeApiKeySettings = useCallback(() => {
+    setIsApiKeySettingsOpen(false)
+  }, [])
+
+  const toggleApiKeyVisibility = useCallback(() => {
+    setShowApiKey((prev) => !prev)
+  }, [])
+
   // --------------------------------
   // JSX
   // --------------------------------
@@ -4698,16 +4764,6 @@ export const FinalRefinedElectronAppMockup = () => {
           </Box>
 
           <HStack spacing={4}>
-            <Input
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ChatAIのAPI Key"
-              type="password"
-              size="md"
-              isDisabled={isExpired}
-              bgColor="white"
-              w="200px"
-            />
             <Button
               onClick={openCustomChatModal}
               colorScheme="teal"
@@ -4727,10 +4783,47 @@ export const FinalRefinedElectronAppMockup = () => {
               <MenuList>
                 <MenuItem onClick={handleExportConfig}>データのエクスポート</MenuItem>
                 <MenuItem onClick={handleImportConfig}>データのインポート</MenuItem>
+                <MenuItem onClick={openApiKeySettings}>APIキー設定</MenuItem>
               </MenuList>
             </Menu>
           </HStack>
         </HStack>
+
+        {/* APIキー設定モーダル */}
+        <Modal isOpen={isApiKeySettingsOpen} onClose={closeApiKeySettings} isCentered>
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>APIキー設定</ModalHeader>
+            <ModalBody>
+              <FormControl>
+                <FormLabel htmlFor="api-key-input">APIキー</FormLabel>
+                <InputGroup size="md">
+                  <Input
+                    id="api-key-input"
+                    value={apiKey}
+                    onChange={handleApiKeyChange}
+                    onBlur={handleApiKeyBlur}
+                    placeholder="APIキーを入力"
+                    type={showApiKey ? 'text' : 'password'}
+                    pr="4.5rem"
+                    isDisabled={isLoadingApiKey}
+                  />
+                  <InputRightElement width="4.5rem">
+                    <Button h="1.75rem" size="sm" onClick={toggleApiKeyVisibility}>
+                      {showApiKey ? '隠す' : '表示'}
+                    </Button>
+                  </InputRightElement>
+                </InputGroup>
+                <FormHelperText>入力されたAPIキーは暗号化されて保存されます</FormHelperText>
+              </FormControl>
+            </ModalBody>
+            <ModalFooter>
+              <Button colorScheme="blue" onClick={closeApiKeySettings}>
+                閉じる
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </Flex>
 
       {/* メイン (左=アシスタント一覧, ドラッグハンドル, 右=チャット表示) */}
