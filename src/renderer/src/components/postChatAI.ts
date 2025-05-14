@@ -6,8 +6,7 @@ export const postChatAI = async (
   apiKey: string,
   systemPrompt: string
 ): Promise<string> => {
-  const API_ENDPOINT =
-    'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
+  const API_ENDPOINT = `${import.meta.env.VITE_AI_API_ENDPOINT}`
 
   try {
     const response = await axios.post(
