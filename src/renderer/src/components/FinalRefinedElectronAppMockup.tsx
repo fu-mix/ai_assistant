@@ -3595,7 +3595,10 @@ export const FinalRefinedElectronAppMockup = () => {
               content: inputMessage
             })
             const clonedPost = [...chat.postMessages]
-            clonedPost.splice(editIndex, clonedPost.length - editIndex)
+            clonedPost.splice(editIndex, clonedPost.length - editIndex, {
+              role: 'user',
+              parts: [{ text: inputMessage }]
+            })
 
             return {
               ...chat,
@@ -3679,7 +3682,7 @@ export const FinalRefinedElectronAppMockup = () => {
             // AIメッセージを作成（画像付き）
             const aiMsg: Message = {
               type: 'ai',
-              content: '',
+              content: '画像を生成しました。', // 空文字から変更
               imagePath: imagePath
             }
 
@@ -3727,63 +3730,28 @@ export const FinalRefinedElectronAppMockup = () => {
           }
         }
 
-        // 再実行 (通常のテキスト処理)
-        const ephemeralMsg: Messages = {
-          role: 'user',
-          parts: [{ text: processedUserContent }]
-        }
-        for (const f of tempFiles) {
-          if (f.mimeType === 'text/csv') {
-            try {
-              const csvString = window.atob(f.data)
-              const jsonStr = csvToJson(csvString)
-              ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
-            } catch {
-              ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
-            }
-          }
-          ephemeralMsg.parts.push({
-            inlineData: { mimeType: f.mimeType, data: f.data }
-          })
+        // 最新のチャット状態を取得して処理する
+        const currentChats = await window.electronAPI.loadAgents()
+        const currentSelectedChat = currentChats.find((c) => c.id === selectedChatId)
+
+        if (!currentSelectedChat) {
+          throw new Error('選択されたチャットが見つかりません')
         }
 
-        if (useAgentFile && newSelectedChat.agentFilePaths) {
-          for (const p of newSelectedChat.agentFilePaths) {
-            try {
-              const fileBase64 = await window.electronAPI.readFileByPath(p)
-              if (fileBase64) {
-                const lower = p.toLowerCase()
-                let derivedMime = 'application/octet-stream'
-                if (lower.endsWith('.pdf')) derivedMime = 'application/pdf'
-                else if (lower.endsWith('.txt')) derivedMime = 'text/plain'
-                else if (lower.endsWith('.png')) derivedMime = 'image/png'
-                else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg'))
-                  derivedMime = 'image/jpeg'
-                else if (lower.endsWith('.gif')) derivedMime = 'image/gif'
-                else if (lower.endsWith('.csv')) {
-                  try {
-                    const csvString = window.atob(fileBase64)
-                    const jsonStr = csvToJson(csvString)
-                    ephemeralMsg.parts[0].text += `\nナレッジCSV→JSON:\n${jsonStr}`
-                  } catch {
-                    ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
-                  }
-                  ephemeralMsg.parts.push({
-                    inlineData: { mimeType: 'text/csv', data: fileBase64 }
-                  })
-                  continue
-                }
-                ephemeralMsg.parts.push({
-                  inlineData: { mimeType: derivedMime, data: fileBase64 }
-                })
-              }
-            } catch (err) {
-              console.error('readFileByPath error:', err)
+        // 最新のポストメッセージに基づいて処理を続行
+        const currentMessages = [...currentSelectedChat.postMessages]
+
+        // 編集モードの修正: API処理結果があれば反映
+        if (processedUserContent !== inputMessage && currentMessages.length > 0) {
+          // 最後のメッセージがユーザーのものである場合、内容を更新
+          const lastIndex = currentMessages.length - 1
+          if (currentMessages[lastIndex].role === 'user') {
+            currentMessages[lastIndex] = {
+              role: 'user',
+              parts: [{ text: processedUserContent }]
             }
           }
         }
-
-        const ephemeralAll = [...newSelectedChat.postMessages, ephemeralMsg]
 
         // システムプロンプトも強化
         let enhancedSystemPrompt = newSelectedChat.systemPrompt
@@ -3791,7 +3759,8 @@ export const FinalRefinedElectronAppMockup = () => {
           isExternalApiEnabled && // 環境変数チェック追加
           newSelectedChat.apiConfigs &&
           newSelectedChat.apiConfigs.length > 0 &&
-          newSelectedChat.enableAPICall !== false
+          newSelectedChat.enableAPICall !== false &&
+          apiProcessingResult !== null // APIが実際に処理を行った場合のみ
         ) {
           enhancedSystemPrompt = enhanceSystemPromptWithAPIContext(
             newSelectedChat.systemPrompt,
@@ -3800,11 +3769,16 @@ export const FinalRefinedElectronAppMockup = () => {
           )
         }
 
-        const resp = await window.electronAPI.postChatAI(ephemeralAll, apiKey, enhancedSystemPrompt)
+        const resp = await window.electronAPI.postChatAI(
+          currentMessages,
+          apiKey,
+          enhancedSystemPrompt
+        )
 
         const aiMsg: Message = { type: 'ai', content: resp }
 
-        const finalUpdated = updatedChats.map((chat) => {
+        // 最新のチャット状態を更新
+        const finalUpdated = currentChats.map((chat) => {
           if (chat.id === selectedChatId) {
             return {
               ...chat,
@@ -3853,12 +3827,13 @@ export const FinalRefinedElectronAppMockup = () => {
       // ユーザー表示用のメッセージ
       const userMsg: Message = { type: 'user', content: inputMessage }
 
-      // UIに先に表示する
-      const immediateUpdatedChats = chats.map((chat) => {
+      // 修正1: UI表示と状態更新を一元化（一度だけ更新）
+      const updatedChats = chats.map((chat) => {
         if (chat.id === selectedChatId) {
           return {
             ...chat,
             messages: [...chat.messages, userMsg],
+            postMessages: [...chat.postMessages, { role: 'user', parts: [{ text: inputMessage }] }],
             inputMessage: ''
           }
         }
@@ -3866,9 +3841,10 @@ export const FinalRefinedElectronAppMockup = () => {
         return chat
       })
 
-      // UIを更新（メッセージを表示）
-      setChats(immediateUpdatedChats)
+      // UIを更新し、状態も保存
+      setChats(updatedChats)
       setInputMessage('')
+      await window.electronAPI.saveAgents(updatedChats)
 
       // API処理を追加（選択されたチャットにAPI設定があり、かつ有効な場合）
       let processedUserContent = inputMessage
@@ -3916,24 +3892,6 @@ export const FinalRefinedElectronAppMockup = () => {
         }
       }
 
-      // postMessagesの更新を含めた完全な状態更新
-      const fullUpdatedChats = chats.map((chat) => {
-        if (chat.id === selectedChatId) {
-          return {
-            ...chat,
-            messages: [...chat.messages, userMsg],
-            postMessages: [...chat.postMessages, { role: 'user', parts: [{ text: inputMessage }] }],
-            inputMessage: ''
-          }
-        }
-
-        return chat
-      })
-
-      // 状態を更新し、保存
-      setChats(fullUpdatedChats)
-      await window.electronAPI.saveAgents(fullUpdatedChats)
-
       setTempFiles([])
 
       // 画像レスポンスがある場合、画像として処理
@@ -3946,12 +3904,12 @@ export const FinalRefinedElectronAppMockup = () => {
           // AIメッセージを作成（画像付き）
           const aiMsg: Message = {
             type: 'ai',
-            content: '',
+            content: '画像を生成しました。', // 空文字から変更
             imagePath: imagePath
           }
 
-          // チャット状態を更新
-          const imageUpdatedChats = fullUpdatedChats.map((chat) => {
+          // 修正2: チャット状態を更新（updatedChatsを使用）
+          const imageUpdatedChats = updatedChats.map((chat) => {
             if (chat.id === selectedChatId) {
               return {
                 ...chat,
@@ -3990,66 +3948,9 @@ export const FinalRefinedElectronAppMockup = () => {
           // エラー時は通常テキスト処理に戻る
         }
       }
-      // APIへ送信するメッセージはAPI処理結果を使用 (通常のテキスト処理)
-      const ephemeralMsg: Messages = {
-        role: 'user',
-        parts: [{ text: processedUserContent }]
-      }
 
-      for (const f of tempFiles) {
-        if (f.mimeType === 'text/csv') {
-          try {
-            const csvString = window.atob(f.data)
-            const jsonStr = csvToJson(csvString)
-            ephemeralMsg.parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
-          } catch {
-            ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
-          }
-        }
-        ephemeralMsg.parts.push({
-          inlineData: { mimeType: f.mimeType, data: f.data }
-        })
-      }
-
-      if (useAgentFile && selectedChat.agentFilePaths) {
-        for (const p of selectedChat.agentFilePaths) {
-          try {
-            const fileBase64 = await window.electronAPI.readFileByPath(p)
-            if (fileBase64) {
-              const lower = p.toLowerCase()
-              let derivedMime = 'application/octet-stream'
-              if (lower.endsWith('.pdf')) derivedMime = 'application/pdf'
-              else if (lower.endsWith('.txt')) derivedMime = 'text/plain'
-              else if (lower.endsWith('.png')) derivedMime = 'image/png'
-              else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) derivedMime = 'image/jpeg'
-              else if (lower.endsWith('.gif')) derivedMime = 'image/gif'
-              else if (lower.endsWith('.csv')) {
-                try {
-                  const csvString = window.atob(fileBase64)
-                  const jsonStr = csvToJson(csvString)
-                  ephemeralMsg.parts[0].text += `\nナレッジCSV→JSON:\n${jsonStr}`
-                } catch {
-                  ephemeralMsg.parts[0].text += '\n(CSV→JSON失敗)'
-                }
-                ephemeralMsg.parts.push({ inlineData: { mimeType: 'text/csv', data: fileBase64 } })
-                continue
-              }
-              ephemeralMsg.parts.push({
-                inlineData: { mimeType: derivedMime, data: fileBase64 }
-              })
-            }
-          } catch (err) {
-            console.error('readFileByPath error:', err)
-          }
-        }
-      }
-
-      // const ephemeralAll = [...selectedChat.postMessages, ephemeralMsg]
-
-      // // システムプロンプトも強化
-      // let enhancedSystemPrompt = selectedChat.systemPrompt
-
-      // 画像処理が行われた後は、チャット状態が変わっている可能性があるため最新状態を取得
+      // 修正3: 重要な変更 - ユーザーメッセージの再追加を防止
+      // 最新のチャット状態を取得
       const currentChats = await window.electronAPI.loadAgents()
       const currentSelectedChat = currentChats.find((c) => c.id === selectedChatId)
 
@@ -4057,15 +3958,29 @@ export const FinalRefinedElectronAppMockup = () => {
         throw new Error('選択されたチャットが見つかりません')
       }
 
-      // 最新のポストメッセージに基づいて処理を続行
-      const ephemeralAll = [...currentSelectedChat.postMessages, ephemeralMsg]
-      let enhancedSystemPrompt = currentSelectedChat.systemPrompt
+      // 修正4: 既存の会話履歴をそのまま使用し、新たなユーザーメッセージを追加しない
+      const currentMessages = [...currentSelectedChat.postMessages]
 
+      // API処理結果が異なる場合のみ、最後のユーザーメッセージを更新
+      if (processedUserContent !== inputMessage && currentMessages.length > 0) {
+        // 最後のメッセージがユーザーのものである場合、内容を更新
+        const lastIndex = currentMessages.length - 1
+        if (currentMessages[lastIndex].role === 'user') {
+          currentMessages[lastIndex] = {
+            role: 'user',
+            parts: [{ text: processedUserContent }]
+          }
+        }
+      }
+
+      // 修正5: システムプロンプトの条件付け - APIが実際に処理を行った場合のみ
+      let enhancedSystemPrompt = currentSelectedChat.systemPrompt
       if (
-        isExternalApiEnabled && // 環境変数チェック追加
+        isExternalApiEnabled &&
         selectedChat.apiConfigs &&
         selectedChat.apiConfigs.length > 0 &&
-        selectedChat.enableAPICall !== false
+        selectedChat.enableAPICall !== false &&
+        apiProcessingResult !== null // APIが実際に処理を行った場合のみ
       ) {
         enhancedSystemPrompt = enhanceSystemPromptWithAPIContext(
           selectedChat.systemPrompt,
@@ -4074,7 +3989,12 @@ export const FinalRefinedElectronAppMockup = () => {
         )
       }
 
-      const resp = await window.electronAPI.postChatAI(ephemeralAll, apiKey, enhancedSystemPrompt)
+      // 修正6: 改良された会話履歴を使用
+      const resp = await window.electronAPI.postChatAI(
+        currentMessages,
+        apiKey,
+        enhancedSystemPrompt
+      )
 
       const aiMsg: Message = { type: 'ai', content: resp }
 
@@ -4093,19 +4013,6 @@ export const FinalRefinedElectronAppMockup = () => {
 
       setChats(finalUpdated)
       await window.electronAPI.saveAgents(finalUpdated)
-      // const finalUpdated = fullUpdatedChats.map((chat) => {
-      //   if (chat.id === selectedChatId) {
-      //     return {
-      //       ...chat,
-      //       messages: [...chat.messages, aiMsg],
-      //       postMessages: [...chat.postMessages, { role: 'model', parts: [{ text: resp }] }]
-      //     }
-      //   }
-
-      //   return chat
-      // })
-      // setChats(finalUpdated)
-      // await window.electronAPI.saveAgents(finalUpdated)
     } catch (err) {
       console.error('sendMessageエラー:', err)
       toast({
