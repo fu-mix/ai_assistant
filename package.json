@@ -19,7 +19,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
-    "dev:claude": "cross-env CUSTOM_ENV_PATH=C:/dev/work/mock/DesAIn_Assistant_env electron-vite dev"
+    "dev:custom": "cross-env CUSTOM_ENV_PATH=C:/dev/work/mock/DesAIn_Assistant_env electron-vite dev"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.1.1",
