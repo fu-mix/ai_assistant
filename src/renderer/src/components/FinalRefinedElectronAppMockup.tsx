@@ -856,6 +856,58 @@ function csvToJson(csv: string): string {
   return JSON.stringify(result, null, 2)
 }
 
+function buildUserParts(
+  text: string,
+  files: { name: string; data: string; mimeType: string }[]
+): { text?: string; inlineData?: { mimeType: string; data: string } }[] {
+  const parts: Messages['parts'] = [{ text }]
+  for (const f of files) {
+    // CSV → JSON 変換は AutoAssist と同じロジック
+    if (f.mimeType === 'text/csv') {
+      try {
+        const csvStr = atob(f.data)
+        const jsonStr = csvToJson(csvStr)
+        parts[0].text += `\n---\nCSV→JSON:\n${jsonStr}`
+      } catch {
+        parts[0].text += '\n(CSV→JSON失敗)'
+      }
+    }
+    parts.push({ inlineData: { mimeType: f.mimeType, data: f.data } })
+  }
+
+  return parts
+}
+
+/** agentFilePaths に保存されているファイルを tempFiles と同じ形に読み込む */
+async function readAgentFiles(
+  paths: string[]
+): Promise<{ name: string; data: string; mimeType: string }[]> {
+  const out: { name: string; data: string; mimeType: string }[] = []
+
+  for (const p of paths) {
+    // ユーザーデータ領域に置いたファイルを base64 で読む
+    const base64 = await window.electronAPI.readFileByPath(p)
+    if (!base64) continue
+
+    // 拡張子→ MIME 判定（buildUserParts と同じノリ）
+    const lower = p.toLowerCase()
+    let mime = 'application/octet-stream'
+    if (lower.endsWith('.pdf')) mime = 'application/pdf'
+    else if (lower.endsWith('.txt')) mime = 'text/plain'
+    else if (lower.endsWith('.png')) mime = 'image/png'
+    else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
+    else if (lower.endsWith('.gif')) mime = 'image/gif'
+    else if (lower.endsWith('.csv')) mime = 'text/csv'
+
+    // ファイル名だけ抽出
+    const name = p.split(/[/\\]/).pop() || p
+
+    out.push({ name, data: base64, mimeType: mime })
+  }
+
+  return out
+}
+
 function APIConfigEditor({
   config,
   onSave,
@@ -2190,6 +2242,7 @@ const ChatInputForm = memo(
     onDragOver,
     onSendMessage,
     onFileSelect,
+    onFileChange,
     useAgentFile,
     onUseAgentFileChange,
     agentMode,
@@ -2207,6 +2260,7 @@ const ChatInputForm = memo(
     onDragOver: (e: React.DragEvent<HTMLTextAreaElement>) => void
     onSendMessage: () => void
     onFileSelect: () => void
+    onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
     useAgentFile: boolean
     onUseAgentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
     agentMode: boolean
@@ -2269,7 +2323,7 @@ const ChatInputForm = memo(
             type="file"
             accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
             multiple
-            onChange={() => {}} // 親から渡された関数が実行されるため空関数
+            onChange={onFileChange}
             display="none"
           />
 
@@ -2774,6 +2828,29 @@ export const FinalRefinedElectronAppMockup = () => {
     setDragStartIndex(null)
     setDragOverIndex(null)
   }
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const readers: Promise<{ name: string; data: string; mimeType: string }>[] = []
+    for (const file of Array.from(files)) {
+      readers.push(
+        new Promise((res) => {
+          const r = new FileReader()
+          r.onload = () => {
+            const base64 = r.result!.toString().split(',')[1]
+            const mime = file.type || 'application/octet-stream'
+            res({ name: file.name, data: base64, mimeType: mime })
+          }
+          r.readAsDataURL(file)
+        })
+      )
+    }
+    Promise.all(readers).then((newFiles) => setTempFiles((prev) => [...prev, ...newFiles]))
+    // 選択し直せるように value をリセット
+    e.target.value = ''
+  }, [])
 
   // --------------------------------
   // オートアシストのタスク分割 & 実行
@@ -3332,6 +3409,18 @@ export const FinalRefinedElectronAppMockup = () => {
   // --------------------------------
 
   async function sendMessage() {
+    let agentFiles: { name: string; data: string; mimeType: string }[] = []
+    if (
+      useAgentFile && // チェックが ON
+      typeof selectedChatId === 'number' && // オートアシスト以外
+      selectedChatObj?.agentFilePaths?.length
+    ) {
+      agentFiles = await readAgentFiles(selectedChatObj.agentFilePaths)
+    }
+
+    // tempFiles は常に送る。最終的に buildUserParts に渡す配列
+    const filesForParts = [...tempFiles, ...agentFiles]
+
     // 1) オートアシスト + 編集モード
     if (selectedChatId === 'autoAssist' && editIndex != null) {
       setIsLoading(true)
@@ -3597,7 +3686,7 @@ export const FinalRefinedElectronAppMockup = () => {
             const clonedPost = [...chat.postMessages]
             clonedPost.splice(editIndex, clonedPost.length - editIndex, {
               role: 'user',
-              parts: [{ text: inputMessage }]
+              parts: buildUserParts(inputMessage, filesForParts)
             })
 
             return {
@@ -3833,7 +3922,10 @@ export const FinalRefinedElectronAppMockup = () => {
           return {
             ...chat,
             messages: [...chat.messages, userMsg],
-            postMessages: [...chat.postMessages, { role: 'user', parts: [{ text: inputMessage }] }],
+            postMessages: [
+              ...chat.postMessages,
+              { role: 'user', parts: buildUserParts(inputMessage, filesForParts) }
+            ],
             inputMessage: ''
           }
         }
@@ -4931,6 +5023,7 @@ export const FinalRefinedElectronAppMockup = () => {
             onDragOver={handleDragOver}
             onSendMessage={memoizedSendMessage}
             onFileSelect={handleFileSelection}
+            onFileChange={handleFileInputChange}
             useAgentFile={useAgentFile}
             onUseAgentFileChange={handleUseAgentFileChange}
             agentMode={agentMode}
