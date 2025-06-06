@@ -45,6 +45,9 @@ import {
   Spinner,
   Image
 } from '@chakra-ui/react'
+import { MessageList } from './MessageList'
+import { ChatInputForm } from './ChatInputForm'
+import { AttachmentList } from './AttachmentList'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { IoSend } from 'react-icons/io5'
@@ -1978,411 +1981,6 @@ ${apiResultInfo}
 `
 }
 
-const ImageWithLazyLoading = memo(
-  ({
-    imagePath,
-    chatHistoryRef
-  }: {
-    imagePath: string
-    chatHistoryRef: React.RefObject<HTMLDivElement>
-  }) => {
-    const [imageData, setImageData] = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-
-    useEffect(() => {
-      async function loadImage() {
-        if (!imagePath) return
-
-        try {
-          setIsLoading(true)
-          const base64Data = await window.electronAPI.loadImage(imagePath)
-          if (base64Data) {
-            setImageData(`data:image/png;base64,${base64Data}`)
-          }
-        } catch (err) {
-          console.error('画像の読み込みに失敗:', err)
-        } finally {
-          setIsLoading(false)
-        }
-      }
-
-      loadImage()
-    }, [imagePath])
-
-    // 画像ロード完了時のハンドラー
-    const handleImageLoaded = useCallback(() => {
-      if (chatHistoryRef?.current) {
-        setTimeout(() => {
-          // @ts-ignore
-          chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight
-        }, 50)
-      }
-    }, [chatHistoryRef])
-
-    // 画像ダウンロード処理
-    const handleDownload = useCallback(() => {
-      if (!imageData) return
-
-      // data URLからBlobを作成
-      const byteString = atob(imageData.split(',')[1])
-      const mimeType = 'image/png'
-      const ab = new ArrayBuffer(byteString.length)
-      const ia = new Uint8Array(ab)
-
-      for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i)
-      }
-
-      const blob = new Blob([ab], { type: mimeType })
-      const url = URL.createObjectURL(blob)
-
-      // ダウンロードリンクを作成
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `generated_image_${Date.now()}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    }, [imageData])
-
-    if (isLoading) {
-      return <Spinner size="md" />
-    }
-
-    return imageData ? (
-      <Box
-        position="relative"
-        display="flex"
-        justifyContent="center"
-        width="100%"
-        mt={2}
-        mb={2}
-        onMouseEnter={(e) => e.stopPropagation()}
-        onMouseOver={(e) => e.stopPropagation()}
-        onMouseMove={(e) => e.stopPropagation()}
-      >
-        <Image
-          src={imageData}
-          alt="生成された画像"
-          maxWidth="500px"
-          maxHeight="400px"
-          borderRadius="md"
-          objectFit="contain"
-          onLoad={handleImageLoaded}
-        />
-        <Button
-          position="absolute"
-          bottom="8px"
-          right="8px"
-          size="sm"
-          colorScheme="blue"
-          leftIcon={<DownloadIcon />}
-          onClick={handleDownload}
-        >
-          ダウンロード
-        </Button>
-      </Box>
-    ) : (
-      <Text color="red.500">画像を読み込めませんでした</Text>
-    )
-  }
-)
-
-// メッセージ表示用のコンポーネントを分離
-const MessageItem = memo(
-  ({
-    message,
-    index,
-    onCopy,
-    onEdit,
-    chatHistoryRef
-  }: {
-    message: Message
-    index: number
-    onCopy: (content: string) => void
-    onEdit: (index: number, content: string) => void
-    chatHistoryRef: React.RefObject<HTMLDivElement>
-  }) => {
-    const [isHovered, setIsHovered] = useState(false)
-
-    return (
-      <Box
-        mb={4}
-        p={3}
-        rounded="lg"
-        bg={message.type === 'user' ? 'gray.300' : 'gray.50'}
-        position="relative"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        style={{
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          maxWidth: '100%',
-          overflow: 'hidden'
-        }}
-      >
-        <div>
-          {message.type === 'user' ? (
-            message.content
-          ) : (
-            <>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                className="markdown"
-                components={{
-                  pre: ({ node, ...props }) => (
-                    <div
-                      style={{
-                        overflow: 'auto',
-                        maxWidth: '100%',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word'
-                      }}
-                    >
-                      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} {...props} />
-                    </div>
-                  ),
-                  code: ({ node, ...props }) => (
-                    <code
-                      style={{
-                        overflowWrap: 'break-word',
-                        wordBreak: 'break-word',
-                        maxWidth: '100%'
-                      }}
-                      {...props}
-                    />
-                  ),
-                  table: ({ node, ...props }) => (
-                    <div style={{ overflow: 'auto', maxWidth: '100%' }}>
-                      <table style={{ tableLayout: 'fixed', width: '100%' }} {...props} />
-                    </div>
-                  )
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
-              {/* 画像がある場合に表示 - chatHistoryRefを渡す */}
-              {message.imagePath && (
-                <Box mt={3}>
-                  <ImageWithLazyLoading
-                    imagePath={message.imagePath}
-                    chatHistoryRef={chatHistoryRef}
-                  />
-                </Box>
-              )}
-            </>
-          )}
-        </div>
-        {isHovered && (
-          <Box position="absolute" top="4px" right="6px">
-            <HStack spacing={1}>
-              <IconButton
-                icon={<MdOutlineContentCopy />}
-                aria-label="コピー"
-                size="sm"
-                variant="ghost"
-                colorScheme="blue"
-                onClick={() => onCopy(message.content)}
-              />
-              {message.type === 'user' && (
-                <IconButton
-                  icon={<FiEdit />}
-                  aria-label="編集"
-                  size="sm"
-                  variant="ghost"
-                  colorScheme="blue"
-                  onClick={() => onEdit(index, message.content)}
-                />
-              )}
-            </HStack>
-          </Box>
-        )}
-      </Box>
-    )
-  }
-)
-
-// メッセージリスト全体を管理するコンポーネント
-const MessageList = memo(
-  ({
-    messages,
-    onCopy,
-    onEdit,
-    chatHistoryRef
-  }: {
-    messages: Message[]
-    onCopy: (content: string) => void
-    onEdit: (index: number, content: string) => void
-    chatHistoryRef: React.RefObject<HTMLDivElement>
-  }) => {
-    return (
-      <>
-        {messages.map((msg, idx) => (
-          <MessageItem
-            key={idx}
-            message={msg}
-            index={idx}
-            onCopy={onCopy}
-            onEdit={onEdit}
-            chatHistoryRef={chatHistoryRef}
-          />
-        ))}
-      </>
-    )
-  }
-)
-// 入力フォームコンポーネント
-const ChatInputForm = memo(
-  ({
-    inputMessage,
-    onInputChange,
-    onKeyPress,
-    onDrop,
-    onDragOver,
-    onSendMessage,
-    onFileSelect,
-    onFileChange,
-    useAgentFile,
-    onUseAgentFileChange,
-    agentMode,
-    onAgentModeChange,
-    isLoading,
-    disabled,
-    selectedChatId,
-    chatInputRef,
-    fileInputRef
-  }: {
-    inputMessage: string
-    onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
-    onKeyPress: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
-    onDrop: (e: React.DragEvent<HTMLTextAreaElement>) => void
-    onDragOver: (e: React.DragEvent<HTMLTextAreaElement>) => void
-    onSendMessage: () => void
-    onFileSelect: () => void
-    onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    useAgentFile: boolean
-    onUseAgentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    agentMode: boolean
-    onAgentModeChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    isLoading: boolean
-    disabled: boolean
-    selectedChatId: number | null | 'autoAssist'
-    chatInputRef: React.RefObject<HTMLTextAreaElement>
-    fileInputRef: React.RefObject<HTMLInputElement>
-  }) => {
-    return (
-      <Flex p={4} borderTop="1px" borderColor="gray.200" align="end">
-        <HStack spacing={3} w="100%">
-          <Textarea
-            ref={chatInputRef}
-            value={inputMessage}
-            onChange={onInputChange}
-            onKeyPress={onKeyPress}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            placeholder={
-              selectedChatId === 'autoAssist'
-                ? 'オートアシストに依頼する...'
-                : 'メッセージを入力...'
-            }
-            resize="vertical"
-            flex="1"
-            isDisabled={disabled}
-          />
-
-          {typeof selectedChatId === 'number' && (
-            <Checkbox
-              isChecked={useAgentFile}
-              onChange={onUseAgentFileChange}
-              isDisabled={isLoading || disabled}
-            >
-              ナレッジを使用する
-            </Checkbox>
-          )}
-          {selectedChatId === 'autoAssist' && (
-            <HStack align="center">
-              <Text fontSize="sm">エージェントモード</Text>
-              <Switch
-                isChecked={agentMode}
-                onChange={onAgentModeChange}
-                colorScheme="teal"
-                isDisabled={isLoading || disabled}
-              />
-            </HStack>
-          )}
-
-          <IconButton
-            icon={<LuPaperclip />}
-            aria-label="ファイル添付"
-            onClick={onFileSelect}
-            isDisabled={disabled}
-          />
-          <Input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
-            multiple
-            onChange={onFileChange}
-            display="none"
-          />
-
-          <IconButton
-            icon={<IoSend />}
-            aria-label="送信"
-            onClick={onSendMessage}
-            isLoading={isLoading}
-            isDisabled={disabled || inputMessage.length === 0}
-          />
-        </HStack>
-      </Flex>
-    )
-  }
-)
-
-// 添付ファイル表示コンポーネント
-const AttachmentList = memo(
-  ({
-    files,
-    onDelete
-  }: {
-    files: { name: string; data: string; mimeType: string }[]
-    onDelete: (name: string) => void
-  }) => {
-    if (files.length === 0) return null
-
-    return (
-      <Box p={4} borderTop="1px" borderColor="gray.200">
-        <Text fontSize="sm" color="gray.600" mb={2}>
-          選択ファイル:
-        </Text>
-        {files.map((file) => (
-          <Flex
-            key={file.name}
-            align="center"
-            justify="space-between"
-            mb={2}
-            p={2}
-            bg="gray.50"
-            borderRadius="md"
-          >
-            <Text fontSize="sm" color="gray.800" mr={4}>
-              {file.name}
-            </Text>
-            <IconButton
-              icon={<AiOutlineDelete />}
-              aria-label="ファイル削除"
-              colorScheme="red"
-              size="sm"
-              onClick={() => onDelete(file.name)}
-            />
-          </Flex>
-        ))}
-      </Box>
-    )
-  }
-)
-
 /* ------------------------------------------------
  * メインコンポーネント
  * ------------------------------------------------ */
@@ -2541,6 +2139,23 @@ export const FinalRefinedElectronAppMockup = () => {
   // 初期ロード
   // --------------------------------
   useEffect(() => {
+    // APIキーの読み込み
+    const loadApiKey = async () => {
+      try {
+        setIsLoadingApiKey(true)
+        const savedApiKey = await window.electronAPI.loadApiKey()
+        if (savedApiKey) {
+          setApiKey(savedApiKey)
+        }
+      } catch (err) {
+        console.error('Failed to load API key:', err)
+      } finally {
+        setIsLoadingApiKey(false)
+      }
+    }
+
+    loadApiKey()
+
     window.electronAPI.loadAgents().then((stored) => {
       if (Array.isArray(stored)) {
         const reformed = stored.map((c) => ({
@@ -2749,6 +2364,27 @@ export const FinalRefinedElectronAppMockup = () => {
 
   const handleTempFileDelete = useCallback((targetName: string) => {
     setTempFiles((prev) => prev.filter((f) => f.name !== targetName))
+  }, [])
+
+  // メッセージコピー処理のメモ化
+  const handleMessageCopy = useCallback(
+    (content: string) => {
+      navigator.clipboard.writeText(content)
+      toast({
+        title: 'コピーしました',
+        status: 'success',
+        duration: 1000,
+        isClosable: true
+      })
+    },
+    [toast]
+  )
+
+  // メッセージ編集処理のメモ化
+  const handleMessageEdit = useCallback((index: number, content: string) => {
+    setEditIndex(index)
+    setInputMessage(content)
+    chatInputRef.current?.focus()
   }, [])
 
   const handleFileSelection = useCallback(() => {
