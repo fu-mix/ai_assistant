@@ -48,6 +48,7 @@ import {
 import { MessageList } from './MessageList'
 import { ChatInputForm } from './ChatInputForm'
 import { AttachmentList } from './AttachmentList'
+import { ChatSidebar, ChatHeader, AutoAssistPanel, SettingsPanel } from './panels'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { IoSend } from 'react-icons/io5'
@@ -3040,6 +3041,27 @@ export const FinalRefinedElectronAppMockup = () => {
       setAutoAssistState('idle')
     }
   }
+  // 選択されたチャットオブジェクトをメモ化
+  const selectedChatObj = useMemo(() => {
+    if (typeof selectedChatId === 'number') {
+      return chats.find((c) => c.id === selectedChatId) || null
+    }
+
+    return null
+  }, [chats, selectedChatId])
+
+  // 現在表示するメッセージをメモ化
+  const currentMessages = useMemo(() => {
+    if (selectedChatId === 'autoAssist') {
+      return autoAssistMessages
+    }
+    if (typeof selectedChatId === 'number') {
+      return selectedChatObj?.messages || []
+    }
+
+    return []
+  }, [selectedChatId, autoAssistMessages, selectedChatObj?.messages])
+
   // --------------------------------
   // sendMessage本体
   // --------------------------------
@@ -4341,8 +4363,6 @@ export const FinalRefinedElectronAppMockup = () => {
   // --------------------------------
   // JSX
   // --------------------------------
-  const selectedChatObj =
-    typeof selectedChatId === 'number' ? chats.find((c) => c.id === selectedChatId) : null
 
   return (
     <Flex direction="column" h="100vh" bg="gray.100">
