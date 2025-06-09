@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DesAIn Assistant - Professional AI Desktop Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #e2e8f0;
+            background: #0f172a;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid #1e293b;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .nav-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #06b6d4;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #06b6d4;
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(124, 58, 237, 0.1) 0%, transparent 50%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 800px;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #06b6d4, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: slideInUp 1s ease-out;
+            letter-spacing: -0.02em;
+        }
+
+        .hero-subtitle {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            color: #94a3b8;
+            font-weight: 300;
+            animation: slideInUp 1s ease-out 0.2s both;
+        }
+
+        .hero-description {
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            color: #cbd5e1;
+            line-height: 1.8;
+            animation: slideInUp 1s ease-out 0.4s both;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            animation: slideInUp 1s ease-out 0.6s both;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            color: white;
+            box-shadow: 0 10px 25px rgba(6, 182, 212, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(6, 182, 212, 0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid #334155;
+        }
+
+        .btn-secondary:hover {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-color: #475569;
+        }
+
+        /* Use Cases Section */
+        .use-cases {
+            padding: 6rem 0;
+            background: #0f172a;
+            position: relative;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            margin-bottom: 4rem;
+            color: #94a3b8;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .use-cases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .use-case-card {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            padding: 2.5rem;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .use-case-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(124, 58, 237, 0.1));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .use-case-card:hover {
+            transform: translateY(-5px);
+            border-color: #06b6d4;
+        }
+
+        .use-case-card:hover::before {
+            opacity: 1;
+        }
+
+        .use-case-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .use-case-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #06b6d4, #7c3aed);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .use-case-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+
+        .use-case-description {
+            color: #94a3b8;
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+        }
+
+        .use-case-example {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 3px solid #06b6d4;
+            font-style: italic;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 6rem 0;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: rgba(30, 41, 59, 0.5);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .feature-card:hover {
+            border-color: #06b6d4;
+            background: rgba(30, 41, 59, 0.8);
+        }
+
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+            color: white;
+        }
+
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+
+        .feature-description {
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+
+        /* Tech Stack Section */
+        .tech-stack {
+            padding: 6rem 0;
+            background: #0f172a;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1.5rem;
+            text-align: center;
+        }
+
+        .tech-item {
+            padding: 2rem 1rem;
+            background: rgba(30, 41, 59, 0.3);
+            border-radius: 12px;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+        }
+
+        .tech-item:hover {
+            background: rgba(30, 41, 59, 0.6);
+            border-color: #06b6d4;
+            transform: translateY(-2px);
+        }
+
+        .tech-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .tech-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        /* How It Works Section */
+        .how-it-works {
+            padding: 6rem 0;
+            background: linear-gradient(135deg, #1e293b, #334155);
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 3rem;
+            margin-top: 3rem;
+        }
+
+        .step {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 12px;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: #06b6d4;
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #06b6d4, #7c3aed);
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 0 auto 1.5rem;
+        }
+
+        .step-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+
+        .step-description {
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+
+        /* Final CTA Section */
+        .final-cta {
+            padding: 6rem 0;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            text-align: center;
+            border-top: 1px solid #334155;
+        }
+
+        .cta-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+
+        .cta-description {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            color: #94a3b8;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            .hero {
+                padding-top: 80px;
+            }
+            
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero-subtitle {
+                font-size: 1.2rem;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .section-title {
+                font-size: 2rem;
+            }
+            
+            .use-cases-grid,
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s ease-out;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Scroll progress indicator */
+        .scroll-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(51, 65, 85, 0.3);
+            z-index: 1001;
+        }
+
+        .scroll-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #06b6d4, #7c3aed);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+
+        /* Particle effect */
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #06b6d4;
+            border-radius: 50%;
+            animation: float 10s linear infinite;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(100vh) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100px) translateX(100px);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="scroll-progress">
+        <div class="scroll-progress-bar"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">DesAIn Assistant</div>
+                <ul class="nav-links">
+                    <li><a href="#features">機能</a></li>
+                    <li><a href="#use-cases">利用シーン</a></li>
+                    <li><a href="#tech">技術</a></li>
+                    <li><a href="#how-it-works">使い方</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="particles"></div>
+        <div class="container">
+            <div class="hero-content">
+                <h1>DesAIn Assistant</h1>
+                <p class="hero-subtitle">業務特化AIアシスタント・プラットフォーム</p>
+                <p class="hero-description">
+                    従来のChatAIに都度複雑なプロンプトを書く煩わしさから解放。
+                    あなたの業務に完全特化したプロフェッショナル・アシスタントが、
+                    豊富な専門知識と経験を活かして、即座に高品質な成果物を提供します。
+                </p>
+                <div class="cta-buttons">
+                    <a href="#features" class="btn btn-primary">主要機能を見る</a>
+                    <a href="#use-cases" class="btn btn-secondary">利用シーン</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title fade-in">主要機能</h2>
+            <p class="section-subtitle fade-in">プロフェッショナルワークを革新する高度な機能群</p>
+            
+            <div class="features-grid">
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">👥</div>
+                    <h3 class="feature-title">業務特化アシスタントの作成</h3>
+                    <p class="feature-description">
+                        ロール指示で専門職の人格を付与。ナレッジを事前搭載して知識を拡張。
+                        様々なアシスタントの作成が可能です。
+                    </p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">💬</div>
+                    <h3 class="feature-title">ナレッジアーカイブ</h3>
+                    <p class="feature-description">
+                        重要な会話履歴を自動保存。過去の知見や成果物を効率的に管理し、
+                        いつでも参照・活用できます。
+                    </p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">オートアシスト</h3>
+                    <p class="feature-description">
+                        複雑なタスクを自動分解し、最適なアシスタントを選択。
+                        ワークフローの自動化で生産性を飛躍的に向上させます。
+                    </p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">📁</div>
+                    <h3 class="feature-title">マルチファイル統合処理</h3>
+                    <p class="feature-description">
+                        PDF、CSV、画像、各種ドキュメントをドラッグ&ドロップで即座に処理。
+                        ファイル内容を理解した高度な分析が可能です。
+                    </p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">🎨</div>
+                    <h3 class="feature-title">パーソナライゼーション</h3>
+                    <p class="feature-description">
+                        アプリ名やヘッダー画像を自由にカスタマイズ。
+                        あなただけのオリジナルアシスタント環境で、愛着と親しみやすさを演出できます。
+                    </p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">💾</div>
+                    <h3 class="feature-title">データ管理・共有</h3>
+                    <p class="feature-description">
+                        会話履歴の詳細管理、エクスポート・インポート機能。
+                        アシスタント設定の共有で、チーム全体の知識とベストプラクティスを蓄積・活用できます。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases Section -->
+    <section id="use-cases" class="use-cases">
+        <div class="container">
+            <h2 class="section-title fade-in">利用シーン</h2>
+            <p class="section-subtitle fade-in">
+                プロンプト作成不要。即戦力のAIアシスタントが、あなたの専門業務を強力にサポート
+            </p>
+            
+            <div class="use-cases-grid">
+                <div class="use-case-card fade-in">
+                    <div class="use-case-content">
+                        <div class="use-case-icon">📊</div>
+                        <h3 class="use-case-title">プレゼン草案作成アシスタント</h3>
+                        <p class="use-case-description">
+                            企画書・提案書のストーリー構成から、スライド構造、キーメッセージまで自動生成。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="use-case-card fade-in">
+                    <div class="use-case-content">
+                        <div class="use-case-icon">💻</div>
+                        <h3 class="use-case-title">コードレビューアシスタント</h3>
+                        <p class="use-case-description">
+                            セキュリティ、パフォーマンス、保守性の観点から包括的なコード分析を実施。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="use-case-card fade-in">
+                    <div class="use-case-content">
+                        <div class="use-case-icon">💡</div>
+                        <h3 class="use-case-title">ビジネスアイディア創発アシスタント</h3>
+                        <p class="use-case-description">
+                            市場分析とイノベーション手法を組み合わせた新規事業アイディアを創出。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="use-case-card fade-in">
+                    <div class="use-case-content">
+                        <div class="use-case-icon">📝</div>
+                        <h3 class="use-case-title">記事作成アシスタント</h3>
+                        <p class="use-case-description">
+                            SEO最適化、読者エンゲージメント、専門性を兼ね備えた高品質記事を自動生成。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="use-case-card fade-in">
+                    <div class="use-case-content">
+                        <div class="use-case-icon">📋</div>
+                        <h3 class="use-case-title">議事録作成アシスタント</h3>
+                        <p class="use-case-description">
+                            会議のテキストから要点抽出、アクションアイテム整理を自動化。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="use-case-card fade-in">
+                    <div class="use-case-content">
+                        <div class="use-case-icon">🎨</div>
+                        <h3 class="use-case-title">グラフィックレコーディングアシスタント</h3>
+                        <p class="use-case-description">
+                            複雑な会議やワークショップの内容を視覚的に整理・構造化。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack Section -->
+    <section id="tech" class="tech-stack">
+        <div class="container">
+            <h2 class="section-title fade-in">技術基盤</h2>
+            <p class="section-subtitle fade-in">エンタープライズグレードの信頼性と最新技術の融合</p>
+            
+            <div class="tech-grid">
+                <div class="tech-item fade-in">
+                    <div class="tech-icon">⚛️</div>
+                    <div class="tech-name">React + TypeScript</div>
+                </div>
+                <div class="tech-item fade-in">
+                    <div class="tech-icon">🖥️</div>
+                    <div class="tech-name">Electron</div>
+                </div>
+                <div class="tech-item fade-in">
+                    <div class="tech-icon">🎨</div>
+                    <div class="tech-name">Chakra UI</div>
+                </div>
+                <div class="tech-item fade-in">
+                    <div class="tech-icon">🤖</div>
+                    <div class="tech-name">Google AI (Gemini)</div>
+                </div>
+                <div class="tech-item fade-in">
+                    <div class="tech-icon">⚡</div>
+                    <div class="tech-name">Electron Vite</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works" class="how-it-works">
+        <div class="container">
+            <h2 class="section-title fade-in">導入ガイド</h2>
+            <p class="section-subtitle fade-in">3つのステップで業務特化アシスタントを即座に活用開始</p>
+            
+            <div class="steps">
+                <div class="step fade-in">
+                    <div class="step-number">1</div>
+                    <h3 class="step-title">アプリのダウンロード</h3>
+                    <p class="step-description">
+                        インストール不要のアプリをダウンロード。
+                        Google AI APIキーを設定して、即座に利用開始できます。
+                    </p>
+                </div>
+                
+                <div class="step fade-in">
+                    <div class="step-number">2</div>
+                    <h3 class="step-title">アシスタントの作成</h3>
+                    <p class="step-description">
+                        あなたの業務に合わせたアシスタントを作成。
+                        ロール設定とナレッジ追加で、専門性の高いアシスタントを構築できます。
+                    </p>
+                </div>
+                
+                <div class="step fade-in">
+                    <div class="step-number">3</div>
+                    <h3 class="step-title">業務活用</h3>
+                    <p class="step-description">
+                        業務特化アシスタントで、あなたの専門性を最大化。
+                        複雑な作業も効率的に処理できます。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA Section -->
+    <section class="final-cta">
+        <div class="container">
+            <div class="cta-buttons fade-in">
+                <a href="https://fujitsu.sharepoint.com/:f:/r/sites/jp-dc0001/Shared%20Documents/10_Project%EF%BC%88%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%EF%BC%89/Virtual%20Designer%20PJ/04_%E9%96%8B%E7%99%BA%E5%85%B1%E9%80%9A%E3%82%A2%E3%82%BB%E3%83%83%E3%83%88/02_%E3%83%A9%E3%83%94%E3%83%83%E3%83%89%E3%83%97%E3%83%AD%E3%83%88%E5%88%B6%E4%BD%9C%E7%94%A8%E3%83%84%E3%83%BC%E3%83%AB?csf=1&web=1&e=FrgyD4" class="btn btn-primary">今すぐダウンロード</a>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Create floating particles
+        function createParticles() {
+            const particlesContainer = document.querySelector('.particles');
+            const particleCount = 50;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 10 + 's';
+                particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // Scroll progress indicator
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.pageYOffset;
+            const docHeight = document.body.offsetHeight - window.innerHeight;
+            const scrollPercent = (scrollTop / docHeight) * 100;
+            document.querySelector('.scroll-progress-bar').style.width = scrollPercent + '%';
+        });
+
+        // Navigation background opacity on scroll
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('.nav');
+            const scrolled = window.pageYOffset > 100;
+            
+            if (scrolled) {
+                nav.style.background = 'rgba(15, 23, 42, 0.95)';
+            } else {
+                nav.style.background = 'rgba(15, 23, 42, 0.9)';
+            }
+        });
+
+        // Fade in animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.fade-in').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    const offsetTop = target.offsetTop - 80; // Account for fixed nav
+                    window.scrollTo({
+                        top: offsetTop,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // Enhanced hover effects for cards
+        document.querySelectorAll('.use-case-card, .feature-card, .step').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-8px) scale(1.02)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+
+        // Parallax effect for hero section
+        window.addEventListener('scroll', () => {
+            const scrolled = window.pageYOffset;
+            const parallaxElements = document.querySelectorAll('.hero::before');
+            const speed = scrolled * 0.5;
+            
+            parallaxElements.forEach(element => {
+                element.style.transform = `translateY(${speed}px)`;
+            });
+        });
+
+        // Initialize particles
+        createParticles();
+
+        // Add typing effect to hero title
+        function typeWriter(element, text, speed = 100) {
+            let i = 0;
+            element.innerHTML = '';
+            
+            function typing() {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i);
+                    i++;
+                    setTimeout(typing, speed);
+                }
+            }
+            typing();
+        }
+
+        // Initialize typing effect after page load
+        window.addEventListener('load', () => {
+            const heroTitle = document.querySelector('.hero h1');
+            if (heroTitle) {
+                const originalText = heroTitle.textContent;
+                typeWriter(heroTitle, originalText, 80);
+            }
+        });
+
+        // Add glitch effect on hover for hero title
+        const heroTitle = document.querySelector('.hero h1');
+        if (heroTitle) {
+            heroTitle.addEventListener('mouseenter', function() {
+                this.style.textShadow = `
+                    2px 0 #06b6d4,
+                    -2px 0 #7c3aed,
+                    0 2px #06b6d4,
+                    0 -2px #7c3aed
+                `;
+            });
+            
+            heroTitle.addEventListener('mouseleave', function() {
+                this.style.textShadow = 'none';
+            });
+        }
+    </script>
+</body>
+</html>

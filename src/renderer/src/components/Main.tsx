@@ -12,7 +12,6 @@ import {
   List,
   ListItem,
   Button,
-  Checkbox,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -21,45 +20,26 @@ import {
   ModalFooter,
   FormControl,
   FormLabel,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Switch,
   Tooltip,
-  Select,
   Menu,
   MenuButton,
   MenuList,
   MenuItem,
-  Radio,
-  RadioGroup,
-  VStack,
   FormHelperText,
-  Divider,
-  Badge,
   InputRightElement,
-  InputGroup,
-  Spinner,
-  Image
+  InputGroup
 } from '@chakra-ui/react'
 import { MessageList } from './MessageList'
 import { ChatInputForm } from './ChatInputForm'
 import { AttachmentList } from './AttachmentList'
-import { ChatSidebar, ChatHeader, AutoAssistPanel, SettingsPanel } from './panels'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { IoSend } from 'react-icons/io5'
 import { LuPaperclip, LuSettings } from 'react-icons/lu'
 import { AiOutlineDelete } from 'react-icons/ai'
-import { MdOutlineContentCopy } from 'react-icons/md'
+
 import { FiEdit } from 'react-icons/fi'
 import { HamburgerIcon, DownloadIcon } from '@chakra-ui/icons'
 
 import {
-  APIConfigEditor,
   APISettingsModal,
   AutoAssistSettingsModal,
   ExportModal,
@@ -224,22 +204,6 @@ type APIConfig = {
   imageDataPath?: string
 }
 
-/* ------------------------------------------------
- * タイトル編集モーダル
- * ------------------------------------------------ */
-
-/* ------------------------------------------------
- * オートアシスト設定モーダル
- * ------------------------------------------------ */
-
-/* ------------------------------------------------
- * ExportModal: 一部 or 全部 のエクスポート
- *    ※「会話履歴を含める」チェックボックスを追加
- * ------------------------------------------------ */
-
-/* ------------------------------------------------
- * ImportModeModal: "全部置き換え" or "追加" 選択
- * ------------------------------------------------ */
 /* ------------------------------------------------
  * CSV→JSONの単純変換ユーティリティ
  * ------------------------------------------------ */
@@ -664,7 +628,7 @@ ${apiResultInfo}
 /* ------------------------------------------------
  * メインコンポーネント
  * ------------------------------------------------ */
-export const FinalRefinedElectronAppMockup = () => {
+export const Main = () => {
   // 環境変数から外部API機能の有効/無効状態を確認
   const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 

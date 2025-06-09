@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Messages } from './FinalRefinedElectronAppMockup'
+import type { Messages } from './Main'
 
 export const postChatAI = async (
   message: Messages[],

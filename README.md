@@ -2,7 +2,7 @@
 
 ## プロジェクト構成
 
-DesAIn_Assistantは、Electron-Viteを使用したデスクトップアプリケーションで、React、TypeScript、Chakra-UIを使用して構築されています。Google AI (Gemini)のAPIを活用したチャットアシスタント機能を提供します。
+DesAIn_Assistantは、Electron-Viteを使用したデスクトップアプリケーションで、React、TypeScript、Chakra-UI、Tailwind CSSを使用して構築されています。Google AI (Gemini)のAPIを活用したチャットアシスタント機能を提供します。
 
 ### 主要ディレクトリ・ファイル構成
 
@@ -16,24 +16,63 @@ DesAIn_Assistant/
 ├── resources/          - リソースファイル
 ├── src/                - ソースコード
 │   ├── main/           - Electronメインプロセス
+│   │   ├── env.d.ts    - 環境変数型定義
+│   │   └── index.ts    - メインプロセスエントリーポイント
 │   ├── preload/        - Electronプリロードスクリプト
 │   └── renderer/       - フロントエンドコード
 │       ├── src/        - Reactアプリケーション
 │       │   ├── assets/ - 画像などのアセット
 │       │   ├── components/ - Reactコンポーネント
-│       │   │   ├── FinalRefinedElectronAppMockup.tsx - メインコンポーネント
+│       │   │   ├── modals/ - モーダルコンポーネント群
+│       │   │   │   ├── APIConfigEditor.tsx - API設定エディター
+│       │   │   │   ├── APISettingsModal.tsx - API設定モーダル
+│       │   │   │   ├── AutoAssistSettingsModal.tsx - オートアシスト設定
+│       │   │   │   ├── ExportModal.tsx - エクスポートモーダル
+│       │   │   │   ├── ImportModeModal.tsx - インポートモーダル
+│       │   │   │   ├── TitleEditModal.tsx - タイトル編集モーダル
+│       │   │   │   └── index.ts - モーダル群のインデックス
+│       │   │   ├── panels/ - パネルコンポーネント群
+│       │   │   ├── types/ - TypeScript型定義
+│       │   │   ├── temp/ - 一時ファイル
+│       │   │   ├── backup/ - バックアップファイル
+│       │   │   ├── AttachmentList.tsx - ファイル添付リスト
+│       │   │   ├── AutoAssistPanel.tsx - オートアシストパネル
+│       │   │   ├── ChatHeader.tsx - チャットヘッダー
+│       │   │   ├── ChatInputForm.tsx - チャット入力フォーム
+│       │   │   ├── ChatSidebar.tsx - チャットサイドバー
+│       │   │   ├── MessageItem.tsx - メッセージアイテム
+│       │   │   ├── MessageList.tsx - メッセージリスト
+│       │   │   ├── SettingsPanel.tsx - 設定パネル
+│       │   │   ├── Main.tsx - メインコンポーネント
+│       │   │   ├── Main_updated.tsx - 更新版メインコンポーネント
 │       │   │   ├── postChatAI.ts - Gemini API通信モジュール
 │       │   │   ├── promptTemplate.ts - プロンプトテンプレート
 │       │   │   └── Versions.tsx - バージョン表示コンポーネント
+│       │   ├── types/ - TypeScript型定義ファイル
+│       │   ├── utils/ - ユーティリティ関数
 │       │   ├── App.tsx - アプリケーションルート
 │       │   ├── main.css - スタイルシート
-│       │   └── main.tsx - エントリーポイント
+│       │   ├── main.tsx - エントリーポイント
+│       │   └── env.d.ts - 環境変数型定義
 │       └── index.html  - HTMLテンプレート
+├── .editorconfig      - エディター設定
 ├── .env                - 環境変数設定
+├── .env.local         - ローカル環境変数
+├── .eslintignore      - ESLint除外設定
+├── .eslintrc.cjs      - ESLint設定
+├── .gitignore         - Git除外設定
+├── .npmrc             - npm設定
+├── .prettierignore    - Prettier除外設定
+├── .prettierrc.yaml   - Prettier設定
+├── dev-app-update.yml - 開発用アップデート設定
 ├── electron-builder.yml - Electron Builder設定
 ├── electron.vite.config.ts - Electron Vite設定
 ├── package.json       - npm設定・依存関係
+├── postcss.config.js  - PostCSS設定
+├── tailwind.config.js - Tailwind CSS設定
 ├── tsconfig.json      - TypeScript設定
+├── tsconfig.node.json - Node.js用TypeScript設定
+├── tsconfig.web.json  - Web用TypeScript設定
 └── README.md          - プロジェクト説明
 ```
 
@@ -43,51 +82,101 @@ DesAIn_Assistant/
    - ユーザーとAIアシスタントとの対話機能
    - マークダウン表示対応
    - メッセージのコピー、編集機能
+   - 画像生成・表示機能
 
 2. **アシスタント管理**
    - 複数のアシスタント作成・管理
    - カスタムシステムプロンプト設定
    - アシスタントの並び替え（ドラッグ＆ドロップ）
+   - アシスタント削除機能
 
 3. **オートアシスト機能**
    - タスク分解と最適なアシスタント自動選択
    - 複数アシスタントの連携処理
+   - エージェントモード（自動実行）
+   - Yes/No確認機能
 
 4. **ファイル添付機能**
    - PDFやCSVなどのファイル添付・読み込み
    - ドラッグ＆ドロップ対応
+   - CSV→JSON自動変換
+   - 画像ファイル対応
 
 5. **外部API連携**
    - トリガーワードによる外部API自動呼び出し
    - 画像生成API対応
+   - カスタムAPI設定機能
+   - APIレスポンス統合
 
 6. **データ管理**
    - 会話履歴の保存・エクスポート・インポート
    - タイトル設定のカスタマイズ
+   - APIキーの暗号化保存
+   - 画像ファイルの自動管理
+
+7. **UI/UX機能**
+   - レスポンシブサイドバー（リサイズ対応）
+   - カスタマイズ可能なタイトル表示
+   - 背景画像設定
+   - ダークモード対応（Chakra-UI経由）
 
 ## 技術スタック
 
 - **フレームワーク**: Electron (electron-vite)
 - **フロントエンド**: React, TypeScript
-- **UIライブラリ**: Chakra-UI
+- **UIライブラリ**: 
+  - Chakra-UI（メインUIコンポーネント）
+  - Tailwind CSS（カスタムスタイリング）
+- **アイコン**: React Icons, Lucide React
 - **主要ライブラリ**:
   - axios: APIリクエスト
   - react-markdown: マークダウンレンダリング
+  - remark-gfm: GitHub Flavored Markdown対応
   - electron-store: データ永続化
   - electron-updater: アプリ更新
+  - framer-motion: アニメーション
+  - mammoth: Wordファイル読み込み
+  - adm-zip: ZIP圧縮解凍
+  - https-proxy-agent: プロキシ対応
 
 ## 主要コンポーネント
 
-### FinalRefinedElectronAppMockup.tsx
+### Main.tsx
 
 アプリケーションのメインコンポーネントで、以下の機能を提供します：
 
-- チャットインターフェース
-- アシスタント管理（作成・編集・削除）
-- ファイル添付処理
-- オートアシスト機能
-- 外部API連携
+- チャットインターフェース（チャット履歴表示、メッセージ送信）
+- アシスタント管理（作成・編集・削除・並び替え）
+- オートアシスト機能（タスク分解・実行）
+- ファイル添付処理（ドラッグ&ドロップ対応）
+- 外部API連携（トリガー検知・実行）
 - データのエクスポート/インポート
+- リサイズ可能なサイドバー
+
+### ChatInputForm.tsx
+
+チャット入力用のフォームコンポーネント：
+- メッセージ入力フィールド
+- ファイル添付ボタン
+- 送信ボタン
+- エージェントファイル使用切り替え
+- オートアシストモード切り替え
+
+### MessageList.tsx & MessageItem.tsx
+
+メッセージ表示用のコンポーネント群：
+- メッセージの表示（ユーザー/AI別）
+- マークダウンレンダリング
+- メッセージコピー・編集機能
+- 画像表示機能
+
+### モーダルコンポーネント群 (modals/)
+
+- **APISettingsModal.tsx**: 外部API設定用モーダル
+- **AutoAssistSettingsModal.tsx**: オートアシスト設定用モーダル
+- **ExportModal.tsx**: データエクスポート用モーダル
+- **ImportModeModal.tsx**: データインポート用モーダル
+- **TitleEditModal.tsx**: タイトル編集用モーダル
 
 ### postChatAI.ts
 
@@ -104,15 +193,36 @@ Google AI (Gemini)のAPIとの通信を担当するモジュールです。メ�
 - `VITE_AI_API_ENDPOINT`: Google AI APIのエンドポイント
 - `VITE_ENABLE_EXTERNAL_API`: 外部API機能の有効/無効設定
 - `VITE_EXPIRY_DATE`: アプリケーションの有効期限
+- `MAIN_VITE_PROXY`: プロキシ設定
+- `MAIN_VITE_API_ENDPOINT`: メインプロセス用APIエンドポイント
+- `MAIN_VITE_DEBUG`: デバッグモード設定
 
 ## 実行方法
 
 ```bash
+# 依存関係のインストール
+npm install
+
 # 開発モード
 npm run dev
 
+# カスタム環境変数パスでの開発モード
+npm run dev:custom
+
+# TypeScriptチェック
+npm run typecheck
+
+# コードフォーマット
+npm run format
+
+# リンティング
+npm run lint
+
 # ビルド
 npm run build
+
+# 配布可能パッケージのビルド（展開版）
+npm run build:unpack
 
 # Windows用パッケージング
 npm run build:win
@@ -128,16 +238,65 @@ npm run build:linux
 
 アプリケーションは以下の方法でAPIキーを管理します：
 
-1. アプリケーション内でAPIキーを設定
-2. 永続化ストレージにAPIキーを保存
-3. アプリケーション再起動時に自動的にロード
+1. **APIキー設定モーダル**: ヘッダーメニューからアクセス可能
+2. **暗号化保存**: APIキーは暗号化されてローカルに保存
+3. **自動ロード**: アプリケーション再起動時に自動的にロード
+4. **表示/非表示切り替え**: セキュリティのため表示切り替え可能
+
+## 外部API連携機能
+
+- **トリガー設定**: キーワードやパターン（正規表現）でAPI呼び出しをトリガー
+- **パラメータ抽出**: LLMを使用してユーザーメッセージからパラメータを自動抽出
+- **レスポンス統合**: APIレスポンスをチャット内容に自動統合
+- **画像生成対応**: 画像APIのレスポンスを画像として表示
+- **エラーハンドリング**: API呼び出し失敗時の適切なエラー処理
+
+## データ管理機能
+
+### エクスポート機能
+- **全データエクスポート**: 全アシスタント情報と会話履歴をJSONで出力
+- **選択エクスポート**: 特定のアシスタントのみを選択してエクスポート
+- **設定含める/含めない**: タイトル設定の出力可否を選択可能
+
+### インポート機能
+- **置き換えインポート**: 既存データを完全に置き換え
+- **追加インポート**: 既存データに新しいデータを追加
+- **競合解決**: 同名アシスタントがある場合の自動リネーム
+
+## ファイル管理
+
+- **ユーザーデータディレクトリ**: 会話履歴、添付ファイル、画像を保存
+- **自動クリーンアップ**: アシスタント削除時の関連ファイル自動削除
+- **ファイル形式対応**: PDF、CSV、TXT、PNG、JPG、GIF等に対応
+- **画像表示**: 生成された画像や添付画像の直接表示
 
 ## 特記事項
 
-- アプリケーションはユーザーデータディレクトリに会話履歴やファイル添付を保存します
-- 外部API連携機能は環境変数で無効化できます
-- アプリケーションには有効期限が設定されており、期限後は使用できなくなります
+- **有効期限機能**: アプリケーションには設定可能な有効期限があり、期限後は使用不可
+- **リサイズ対応**: サイドバーは280px-600pxの範囲でリサイズ可能
+- **ドラッグ&ドロップ**: アシスタントの順序変更、ファイル添付に対応
+- **編集機能**: 過去のメッセージを編集して会話を分岐可能
+- **自動スクロール**: 新しいメッセージが追加された際の自動スクロール
 
-## 推奨IDE設定
+## 開発環境設定
 
+### 推奨IDE
 - [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+
+### コード品質管理
+- **ESLint**: コード品質とスタイルの統一
+- **Prettier**: コードフォーマットの自動化
+- **TypeScript**: 型安全性の確保
+- **EditorConfig**: エディター設定の統一
+
+### ビルド設定
+- **Electron Builder**: 各OS向けのパッケージング設定
+- **Vite**: 高速な開発サーバーとビルド
+- **PostCSS**: CSS処理とTailwind CSSの統合
+
+## セキュリティ
+
+- **APIキー暗号化**: 保存されるAPIキーは暗号化処理済み
+- **ファイル検証**: 添付ファイルの種類と内容の検証
+- **プロキシ対応**: 企業環境でのプロキシ設定に対応
+- **サンドボックス**: Electronのセキュリティベストプラクティスに準拠
