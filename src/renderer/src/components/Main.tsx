@@ -218,10 +218,6 @@ type APIConfig = {
     inHeader?: boolean
   }
   triggers: APITrigger[]
-  parameterExtraction?: {
-    paramName: string
-    description: string
-  }[]
   responseType?: 'text' | 'image'
   imageDataPath?: string
 }
@@ -364,7 +360,7 @@ async function detectTriggeredAPIs(
 async function processAPITriggers(
   userMessage: string,
   apiConfigs: APIConfig[],
-  apiKey: string,
+  //  apiKey: string,
   selectedChat?: ChatInfo | null
 ): Promise<{
   processedMessage: string
@@ -392,7 +388,7 @@ async function processAPITriggers(
   for (const apiConfig of triggeredAPIs) {
     try {
       // パラメータ抽出 - ここでapiKeyを渡す
-      const params = await extractParametersWithLLM(userMessage, apiConfig, apiKey)
+      const params = await extractParametersWithLLM(userMessage, apiConfig)
 
       // 会話履歴がある場合は適切な形式に変換
       if (selectedChat && selectedChat.messages && selectedChat.messages.length > 0) {
@@ -502,8 +498,8 @@ async function processAPITriggers(
 
 async function extractParametersWithLLM(
   userMessage: string,
-  apiConfig: APIConfig,
-  apiKey: string
+  apiConfig: APIConfig
+  //apiKey: string
 ): Promise<any> {
   // デフォルトパラメータの設定（最低限のフォールバック）
   const defaultParams: any = {}
@@ -528,64 +524,7 @@ async function extractParametersWithLLM(
     }
   }
 
-  // パラメータ抽出設定がない場合はデフォルトパラメータを返す
-  if (!apiConfig.parameterExtraction || apiConfig.parameterExtraction.length === 0) {
-    return defaultParams
-  }
-
-  // パラメータ抽出設定がある場合はLLMを使用して抽出
-  const extractionPrompt = `
-あなたはパラメータ抽出エンジンです。
-ユーザーのメッセージから必要なパラメータを抽出してください。
-
-ユーザーメッセージ:
-"${userMessage}"
-
-抽出すべきパラメータ:
-${apiConfig.parameterExtraction.map((p) => `- ${p.paramName}: ${p.description}`).join('\n')}
-
-結果は以下のJSON形式で返してください:
-{
-  "パラメータ名": "抽出値"
-}
-余計な説明は不要です。JSONだけを返してください。
-`
-
-  try {
-    // @ts-ignore
-    const extractionResponse = await window.electronAPI.postChatAI(
-      [{ role: 'user', parts: [{ text: extractionPrompt }] }],
-      apiKey,
-      'あなたはパラメータ抽出エンジンです。JSONだけを返してください。'
-    )
-
-    const jsonMatch = extractionResponse.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return defaultParams
-    }
-
-    try {
-      const extractedParams = JSON.parse(jsonMatch[0])
-
-      // APIキーの追加
-      if (apiConfig.authConfig?.token) {
-        extractedParams.apiKey = apiConfig.authConfig.token
-      }
-
-      // オリジナルのメッセージを保持するためにoriginalMessageパラメータを追加
-      extractedParams.originalMessage = userMessage
-
-      return extractedParams
-    } catch (parseError) {
-      console.error('パラメータJSON解析エラー:', parseError)
-
-      return defaultParams
-    }
-  } catch (err) {
-    console.error('パラメータ抽出中にエラー:', err)
-
-    return defaultParams
-  }
+  return defaultParams
 }
 
 // APIに渡すシステムプロンプトを強化する関数
@@ -2085,7 +2024,7 @@ export const Main = () => {
             const result = await processAPITriggers(
               inputMessage,
               newSelectedChat.apiConfigs,
-              apiKey,
+              //apiKey,
               selectedChat
             )
 
@@ -2314,7 +2253,7 @@ export const Main = () => {
           const result = await processAPITriggers(
             inputMessage,
             selectedChat.apiConfigs,
-            apiKey,
+            //apiKey,
             selectedChat
           )
 
