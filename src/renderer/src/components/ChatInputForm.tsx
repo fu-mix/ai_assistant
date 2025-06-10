@@ -1,14 +1,5 @@
-import { memo, useCallback } from 'react'
-import {
-  Flex,
-  HStack,
-  Textarea,
-  Checkbox,
-  Text,
-  Switch,
-  IconButton,
-  Input
-} from '@chakra-ui/react'
+import { memo } from 'react'
+import { Flex, HStack, Textarea, Checkbox, Text, Switch, IconButton, Input } from '@chakra-ui/react'
 import { IoSend } from 'react-icons/io5'
 import { LuPaperclip } from 'react-icons/lu'
 
@@ -60,9 +51,8 @@ export const ChatInputForm = memo<ChatInputFormProps>(
     const isSendDisabled = disabled || inputMessage.length === 0
 
     // プレースホルダーテキストをメモ化
-    const placeholderText = selectedChatId === 'autoAssist' 
-      ? 'オートアシストに依頼する...' 
-      : 'メッセージを入力...'
+    const placeholderText =
+      selectedChatId === 'autoAssist' ? 'オートアシストに依頼する...' : 'メッセージを入力...'
 
     // 条件付きレンダリング用のフラグをメモ化
     const showAgentFileCheckbox = typeof selectedChatId === 'number'
@@ -112,7 +102,7 @@ export const ChatInputForm = memo<ChatInputFormProps>(
             onClick={onFileSelect}
             isDisabled={disabled}
           />
-          
+
           <Input
             ref={fileInputRef}
             type="file"
