@@ -106,7 +106,7 @@ export const ChatInputForm = memo<ChatInputFormProps>(
           <Input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.csv"
+            accept=".pdf,.txt,.md,.markdown,.html,.htm,.png,.jpg,.jpeg,.gif,.csv"
             multiple
             onChange={onFileChange}
             display="none"

@@ -50,6 +50,22 @@ import {
   ImportModeModal,
   TitleEditModal
 } from './modals'
+
+function getMimeByExt(fileName: string): string | null {
+  const lower = fileName.toLowerCase()
+
+  if (lower.endsWith('.pdf')) return 'application/pdf'
+  if (lower.endsWith('.txt')) return 'text/plain'
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'text/markdown'
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html'
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  if (lower.endsWith('.csv')) return 'text/csv'
+
+  return null
+}
+
 /**
  * Electron API interface
  */
@@ -273,6 +289,8 @@ async function readAgentFiles(
     let mime = 'application/octet-stream'
     if (lower.endsWith('.pdf')) mime = 'application/pdf'
     else if (lower.endsWith('.txt')) mime = 'text/plain'
+    else if (lower.endsWith('.md') || lower.endsWith('.markdown')) mime = 'text/markdown'
+    else if (lower.endsWith('.html') || lower.endsWith('.htm')) mime = 'text/html'
     else if (lower.endsWith('.png')) mime = 'image/png'
     else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
     else if (lower.endsWith('.gif')) mime = 'image/gif'
@@ -980,45 +998,53 @@ export const Main = () => {
     }
   }
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLTextAreaElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    const files = e.dataTransfer.files
-    if (!files || files.length === 0) return
+      const files = e.dataTransfer.files
+      if (!files || files.length === 0) return
 
-    const newFiles: { name: string; data: string; mimeType: string }[] = []
-    let processed = 0
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const reader = new FileReader()
-      reader.onload = () => {
-        if (reader.result) {
-          const base64Data = reader.result.toString().split(',')[1]
-          const lower = file.name.toLowerCase()
+      const newFiles: { name: string; data: string; mimeType: string }[] = []
+      let processed = 0
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        const reader = new FileReader()
+        reader.onload = () => {
+          if (reader.result) {
+            const base64Data = reader.result.toString().split(',')[1]
+            const mime = getMimeByExt(file.name)
 
-          let mime = 'application/octet-stream'
-          if (lower.endsWith('.pdf')) mime = 'application/pdf'
-          else if (lower.endsWith('.txt')) mime = 'text/plain'
-          else if (lower.endsWith('.png')) mime = 'image/png'
-          else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg'
-          else if (lower.endsWith('.gif')) mime = 'image/gif'
-          else if (lower.endsWith('.csv')) mime = 'text/csv'
+            // ★ 未対応拡張子はブロックしてトースト表示
+            if (!mime) {
+              toast({
+                title: '未対応のファイル形式です',
+                description: `${file.name} はサポートされていません`,
+                status: 'error',
+                duration: 3000,
+                isClosable: true
+              })
 
-          newFiles.push({
-            name: file.name,
-            data: base64Data,
-            mimeType: mime
-          })
+              return
+            }
+
+            newFiles.push({
+              name: file.name,
+              data: base64Data,
+              mimeType: mime
+            })
+          }
+          processed++
+          if (processed === files.length) {
+            setTempFiles((prev) => [...prev, ...newFiles])
+          }
         }
-        processed++
-        if (processed === files.length) {
-          setTempFiles((prev) => [...prev, ...newFiles])
-        }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
-    }
-  }, [])
+    },
+    [toast]
+  )
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault()
@@ -1108,29 +1134,54 @@ export const Main = () => {
     setDragOverIndex(null)
   }
 
-  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files
+      if (!files || files.length === 0) return
 
-    const readers: Promise<{ name: string; data: string; mimeType: string }>[] = []
-    for (const file of Array.from(files)) {
-      readers.push(
-        new Promise((res) => {
-          const r = new FileReader()
-          r.onload = () => {
-            const base64 = r.result!.toString().split(',')[1]
-            const mime = file.type || 'application/octet-stream'
-            res({ name: file.name, data: base64, mimeType: mime })
-          }
-          r.readAsDataURL(file)
-        })
+      const readers: Promise<{ name: string; data: string; mimeType: string }>[] = []
+      for (const file of Array.from(files)) {
+        readers.push(
+          new Promise((res) => {
+            const r = new FileReader()
+            r.onload = () => {
+              const base64 = r.result!.toString().split(',')[1]
+              // ブラウザ MIME が空なら拡張子で判定
+              const mime =
+                file.type && file.type !== ''
+                  ? file.type
+                  : getMimeByExt(file.name) || 'application/octet-stream'
+
+              // ★ 未対応ならブロック
+              if (mime === 'application/octet-stream') {
+                toast({
+                  title: '未対応のファイル形式です',
+                  description: `${file.name} はサポートされていません`,
+                  status: 'error',
+                  duration: 3000,
+                  isClosable: true
+                })
+                // res() を呼ばずにスキップ
+                res(null as any) // Promise.all 併用のためダミー解決
+
+                return
+              }
+
+              res({ name: file.name, data: base64, mimeType: mime })
+            }
+            r.readAsDataURL(file)
+          })
+        )
+      }
+
+      Promise.all(readers).then((newFiles) =>
+        setTempFiles((prev) => [...prev, ...newFiles.filter(Boolean)])
       )
-    }
-    Promise.all(readers).then((newFiles) => setTempFiles((prev) => [...prev, ...newFiles]))
-    // 選択し直せるように value をリセット
-    e.target.value = ''
-  }, [])
-
+      // 選択し直せるように value をリセット
+      e.target.value = ''
+    },
+    [toast]
+  )
   // --------------------------------
   // オートアシストのタスク分割 & 実行
   // --------------------------------
