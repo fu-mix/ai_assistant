@@ -6,6 +6,13 @@ export default defineConfig(() => {
   // 環境変数CUSTOM_ENV_PATHが設定されていればそれを使い、なければデフォルトパスを使用
   const envDir = process.env.CUSTOM_ENV_PATH ? resolve(process.env.CUSTOM_ENV_PATH) : resolve('.') // プロジェクトルート
 
+  const ReactCompilerConfig = {
+    sources: (filename) => {
+      return filename.indexOf('src/renderer/src/components/') !== -1
+    },
+    target: '18'
+  }
+
   return {
     main: {
       plugins: [externalizeDepsPlugin()],
@@ -21,7 +28,13 @@ export default defineConfig(() => {
           '@renderer': resolve('src/renderer/src')
         }
       },
-      plugins: [react()],
+      plugins: [
+        react({
+          babel: {
+            plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]]
+          }
+        })
+      ],
       envDir: envDir // レンダラープロセス用の環境変数ディレクトリ
     }
   }
