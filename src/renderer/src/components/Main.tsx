@@ -2833,6 +2833,60 @@ export const Main = () => {
     setIsExportModalOpen(true)
   }
 
+  // 全データを書き出し
+  const handleExportAll = async () => {
+    const payload = { agents: chats }
+    try {
+      // Electron 側に専用 API があれば優先
+      // @ts-ignore
+      if (window.electronAPI?.exportAllAgents) {
+        // @ts-ignore
+        await window.electronAPI.exportAllAgents(payload)
+        // @ts-ignore
+      } else if (window.electronAPI?.showSaveDialog) {
+        // @ts-ignore
+        await window.electronAPI.showSaveDialog(JSON.stringify(payload, null, 2))
+      }
+      toast({
+        title: 'すべてエクスポートしました',
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    } catch (err) {
+      console.error('handleExportAll error', err)
+      toast({ title: 'エクスポート失敗', status: 'error', duration: 3000, isClosable: true })
+    }
+  }
+
+  // 選択データを書き出し
+  const handleExportSelected = async (ids: number[], includeHistory: boolean) => {
+    const selected = chats
+      .filter((c) => ids.includes(c.id))
+      .map((c) => (includeHistory ? c : { ...c, messages: [], postMessages: [] }))
+    const payload = { agents: selected }
+    try {
+      // @ts-ignore
+      if (window.electronAPI?.exportSelectedAgents) {
+        // @ts-ignore
+        await window.electronAPI.exportSelectedAgents({ selectedIds: ids, includeHistory })
+        // @ts-ignore
+      } else if (window.electronAPI?.showSaveDialog) {
+        // @ts-ignore
+        await window.electronAPI.showSaveDialog(JSON.stringify(payload, null, 2))
+      }
+      toast({
+        title: '選択チャットをエクスポートしました',
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    } catch (err) {
+      console.error('handleExportSelected error', err)
+      toast({ title: 'エクスポート失敗', status: 'error', duration: 3000, isClosable: true })
+    }
+  }
+
   // --------------------------------
   // インポート
   // --------------------------------
@@ -2877,6 +2931,34 @@ export const Main = () => {
       })
     }
   }
+  // ---------- インポート共通ユーティリティ ----------
+  /** 後方互換のため空プロパティを埋める */
+  function normalizeAgents(inAgents: ChatInfo[]): ChatInfo[] {
+    return inAgents.map((c) => ({
+      ...c,
+      agentFilePaths: c.agentFilePaths || [],
+      postMessages: c.postMessages || [],
+      enableAPICall: c.enableAPICall !== false
+    }))
+  }
+
+  /** 追加インポート時の ID 重複・AUTO_ASSIST_ID(999999) ガード */
+  function mergeWithoutDup(base: ChatInfo[], incoming: ChatInfo[]): ChatInfo[] {
+    const baseIds = new Set(base.map((c) => c.id))
+    const next: ChatInfo[] = []
+
+    for (const item of incoming) {
+      if (item.id === AUTO_ASSIST_ID) continue // AutoAssist は常に 1 つ
+      if (baseIds.has(item.id)) {
+        // 重複したらタイムスタンプで新 ID を振り直す
+        next.push({ ...item, id: Date.now() + Math.floor(Math.random() * 1000) })
+      } else {
+        next.push(item)
+      }
+    }
+
+    return [...base, ...next]
+  }
 
   async function doReplaceImport(raw: string) {
     try {
@@ -2898,7 +2980,7 @@ export const Main = () => {
 
       const newData = JSON.parse(raw) as { agents?: ChatInfo[]; titleSettings?: TitleSettings }
       if (newData.agents) {
-        setChats(newData.agents)
+        setChats(normalizeAgents(newData.agents))
       }
       if (newData.titleSettings) {
         setTitleSettings(newData.titleSettings)
@@ -2941,6 +3023,12 @@ export const Main = () => {
       // @ts-ignore
       const updatedChats = await window.electronAPI.loadAgents()
       setChats(updatedChats)
+      // @ts-ignore
+      const loaded = await window.electronAPI.loadAgents()
+      // 追加分をマージしつつ正規化
+      const normalized = normalizeAgents(loaded)
+      const merged = mergeWithoutDup(chats, normalized)
+      setChats(merged)
 
       // @ts-ignore
       if (window.electronAPI.loadTitleSettings) {
@@ -3703,8 +3791,9 @@ export const Main = () => {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         chats={chats}
+        onExportAll={handleExportAll}
+        onExportSelected={handleExportSelected}
       />
-
       {/* インポートのモード選択モーダル */}
       <ImportModeModal
         isOpen={isImportModeModalOpen}
