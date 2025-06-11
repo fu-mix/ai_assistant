@@ -3781,8 +3781,7 @@ export const Main = () => {
         isOpen={isTitleEditOpen}
         onClose={() => setIsTitleEditOpen(false)}
         titleSettings={titleSettings}
-        // @ts-ignore
-        setTitleSettings={setTitleSettings}
+        onSave={setTitleSettings}
       />
 
       {/* エクスポートモーダル */}
