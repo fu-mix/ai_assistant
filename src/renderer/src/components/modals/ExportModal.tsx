@@ -16,6 +16,7 @@ import {
   Checkbox,
   useToast
 } from '@chakra-ui/react'
+import { useTranslation } from 'react-i18next'
 import { ChatInfo } from '../types' // 型をインポート
 
 /**
@@ -39,6 +40,7 @@ export const ExportModal = memo<ExportModalProps>(({
   onExportAll,
   onExportSelected
 }) => {
+  const { t } = useTranslation()
   const toast = useToast()
   const [mode, setMode] = useState<'all' | 'partial'>('all')
   const [checkedIds, setCheckedIds] = useState<number[]>([])
@@ -63,7 +65,7 @@ export const ExportModal = memo<ExportModalProps>(({
       } else {
         if (checkedIds.length === 0) {
           toast({
-            title: 'アシスタントが選択されていません',
+            title: t('export.noAssistantSelected'),
             status: 'warning',
             duration: 2000,
             isClosable: true
@@ -74,7 +76,7 @@ export const ExportModal = memo<ExportModalProps>(({
       }
 
       toast({
-        title: 'エクスポート完了',
+        title: t('export.exportComplete'),
         status: 'success',
         duration: 2000,
         isClosable: true
@@ -83,8 +85,8 @@ export const ExportModal = memo<ExportModalProps>(({
     } catch (err) {
       console.error('Export error:', err)
       toast({
-        title: 'エラー',
-        description: 'エクスポート中にエラーが発生しました',
+        title: t('common.error'),
+        description: t('export.exportErrorDescription'),
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -99,14 +101,14 @@ export const ExportModal = memo<ExportModalProps>(({
     <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>データのエクスポート</ModalHeader>
+        <ModalHeader>{t('export.title')}</ModalHeader>
         <ModalBody>
           <FormControl mb={4}>
-            <FormLabel>エクスポート対象</FormLabel>
+            <FormLabel>{t('export.exportTarget')}</FormLabel>
             <RadioGroup value={mode} onChange={(val) => setMode(val as 'all' | 'partial')}>
               <HStack spacing={5}>
-                <Radio value="all">全て(全アシスタント、タイトル設定)</Radio>
-                <Radio value="partial">一部のアシスタント</Radio>
+                <Radio value="all">{t('export.exportAllDescription')}</Radio>
+                <Radio value="partial">{t('export.exportPartial')}</Radio>
               </HStack>
             </RadioGroup>
           </FormControl>
@@ -139,7 +141,7 @@ export const ExportModal = memo<ExportModalProps>(({
                   isChecked={includeHistory}
                   onChange={(e) => setIncludeHistory(e.target.checked)}
                 >
-                  会話履歴を含める
+                  {t('export.includeHistory')}
                 </Checkbox>
               </FormControl>
             </>
@@ -147,10 +149,10 @@ export const ExportModal = memo<ExportModalProps>(({
         </ModalBody>
         <ModalFooter>
           <Button mr={3} onClick={onClose}>
-            キャンセル
+            {t('common.cancel')}
           </Button>
           <Button colorScheme="blue" onClick={handleExport}>
-            エクスポート
+            {t('common.export')}
           </Button>
         </ModalFooter>
       </ModalContent>

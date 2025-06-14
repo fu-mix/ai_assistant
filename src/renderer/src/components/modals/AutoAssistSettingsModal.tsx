@@ -18,6 +18,7 @@ import {
   Textarea,
   useToast
 } from '@chakra-ui/react'
+import { useTranslation } from 'react-i18next'
 import { ChatInfo } from '../types'
 
 /**
@@ -41,6 +42,7 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
   onSave,
   onResetAutoAssist
 }) => {
+  const { t } = useTranslation()
   const toast = useToast()
   const [localChats, setLocalChats] = useState<ChatInfo[]>([])
 
@@ -62,7 +64,8 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
     try {
       onSave(localChats)
       toast({
-        title: '要約を保存しました',
+        title: t('common.success'),
+        description: t('assistant.updateSuccess'),
         status: 'success',
         duration: 2000,
         isClosable: true
@@ -71,14 +74,14 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
     } catch (err) {
       console.error('save agent summaries error:', err)
       toast({
-        title: 'エラー',
-        description: 'アシスタント要約の保存中にエラーが発生しました。',
+        title: t('common.error'),
+        description: t('errors.saveFailed'),
         status: 'error',
         duration: 3000,
         isClosable: true
       })
     }
-  }, [localChats, onSave, onClose, toast])
+  }, [localChats, onSave, onClose, toast, t])
 
   const handleResetConfirm = useCallback(() => {
     onResetAutoAssist()
@@ -91,10 +94,10 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
     <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>オートアシスト設定</ModalHeader>
+        <ModalHeader>{t('assistant.autoAssist')} {t('common.settings')}</ModalHeader>
         <ModalBody>
           <Text mb={4} fontSize="sm" color="gray.600">
-            各アシスタントの「得意分野要約」を確認・編集できます。
+            {t('assistant.autoAssistDescription')}
           </Text>
 
           <Box maxH="480px" overflowY="auto" mb={4}>
@@ -102,8 +105,8 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
               <Thead>
                 <Tr>
                   <Th>ID</Th>
-                  <Th>アシスタント名</Th>
-                  <Th>要約(assistantSummary)</Th>
+                  <Th>{t('assistant.name')}</Th>
+                  <Th>{t('assistant.summary')}</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -116,7 +119,7 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
                         value={c.assistantSummary || ''}
                         onChange={(e) => handleChangeSummary(c.id, e.target.value)}
                         size="sm"
-                        placeholder="得意分野要約"
+                        placeholder={t('assistant.summary')}
                       />
                     </Td>
                   </Tr>
@@ -127,17 +130,17 @@ export const AutoAssistSettingsModal = memo<AutoAssistSettingsModalProps>(({
 
           <Box textAlign="center">
             <Button colorScheme="red" variant="outline" onClick={handleResetConfirm}>
-              オートアシストの会話履歴をリセット
+              {t('chat.resetConversation')}
             </Button>
           </Box>
         </ModalBody>
 
         <ModalFooter>
           <Button mr={3} onClick={onClose}>
-            キャンセル
+            {t('common.cancel')}
           </Button>
           <Button colorScheme="blue" onClick={handleSave}>
-            保存
+            {t('common.save')}
           </Button>
         </ModalFooter>
       </ModalContent>

@@ -93,6 +93,17 @@ if (process.contextIsolated) {
       },
       loadApiKey: async () => {
         return await ipcRenderer.invoke('load-api-key')
+      },
+
+      // 言語設定関連
+      getSystemLocale: async () => {
+        return await ipcRenderer.invoke('get-system-locale')
+      },
+      getStoredLocale: async () => {
+        return await ipcRenderer.invoke('get-stored-locale')
+      },
+      setLocale: async (language: string) => {
+        return await ipcRenderer.invoke('set-locale', language)
       }
     })
   } catch (error) {

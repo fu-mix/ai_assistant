@@ -66,6 +66,9 @@ let store: any = null
 // APIキー用ストア変数
 let apiKeyStore: any = null
 
+// 言語設定用ストア変数
+let languageStore: any = null
+
 async function initStore() {
   const myRequire = createRequire(import.meta.url)
   const storeModule = myRequire('electron-store')
@@ -109,6 +112,26 @@ async function initApiKeyStore() {
   return apiKeyStoreInstance
 }
 
+// 言語設定専用ストアの初期化関数
+async function initLanguageStore() {
+  const myRequire = createRequire(import.meta.url)
+  const storeModule = myRequire('electron-store')
+  const ElectronStore = storeModule.default
+
+  const userDataPath = app.getPath('userData')
+  const configDir = path.join(userDataPath, 'config')
+
+  const languageStoreInstance = new ElectronStore({
+    name: 'language-settings',
+    cwd: configDir,
+    defaults: {
+      language: null // 初回はnull
+    }
+  })
+
+  return languageStoreInstance
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1566,
@@ -150,6 +173,9 @@ app.whenReady().then(async () => {
 
     // APIキー専用ストアを別途初期化
     apiKeyStore = await initApiKeyStore()
+
+    // 言語設定ストアの初期化
+    languageStore = await initLanguageStore()
   } catch (err) {
     console.error('Error init store:', err)
   }
@@ -1069,5 +1095,42 @@ ipcMain.handle('load-api-key', () => {
     console.error('Error loading API key:', err)
 
     return ''
+  }
+})
+
+// ----------------------
+// 言語設定用IPCハンドラー
+// ----------------------
+ipcMain.handle('get-system-locale', () => {
+  // システムのロケール情報を取得
+  return app.getLocale()
+})
+
+ipcMain.handle('get-stored-locale', () => {
+  try {
+    if (!languageStore) {
+      console.error('Language Store not initialized')
+      return null
+    }
+
+    return languageStore.get('language', null)
+  } catch (err) {
+    console.error('Error loading language setting:', err)
+    return null
+  }
+})
+
+ipcMain.handle('set-locale', (_event, language: string) => {
+  try {
+    if (!languageStore) {
+      console.error('Language Store not initialized')
+      return false
+    }
+
+    languageStore.set('language', language)
+    return true
+  } catch (err) {
+    console.error('Error saving language setting:', err)
+    return false
   }
 })

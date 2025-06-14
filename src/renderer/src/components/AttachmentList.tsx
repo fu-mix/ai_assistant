@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react'
 import { Box, Text, Flex, IconButton } from '@chakra-ui/react'
 import { AiOutlineDelete } from 'react-icons/ai'
+import { useTranslation } from 'react-i18next'
 
 interface AttachmentFile {
   name: string
@@ -22,6 +23,7 @@ interface AttachmentItemProps {
  * 個別添付ファイル表示コンポーネント
  */
 const AttachmentItem = memo<AttachmentItemProps>(({ file, onDelete }) => {
+  const { t } = useTranslation()
   const handleDelete = useCallback(() => {
     onDelete(file.name)
   }, [onDelete, file.name])
@@ -40,7 +42,7 @@ const AttachmentItem = memo<AttachmentItemProps>(({ file, onDelete }) => {
       </Text>
       <IconButton
         icon={<AiOutlineDelete />}
-        aria-label="ファイル削除"
+        aria-label={t('assistant.removeFile')}
         colorScheme="red"
         size="sm"
         onClick={handleDelete}
@@ -56,12 +58,14 @@ AttachmentItem.displayName = 'AttachmentItem'
  * ファイルがない場合は何も表示しない
  */
 export const AttachmentList = memo<AttachmentListProps>(({ files, onDelete }) => {
+  const { t } = useTranslation()
+  
   if (files.length === 0) return null
 
   return (
     <Box p={4} borderTop="1px" borderColor="gray.200">
       <Text fontSize="sm" color="gray.600" mb={2}>
-        選択ファイル:
+        {t('chat.selectedFiles', '選択ファイル')}:
       </Text>
       {files.map((file) => (
         <AttachmentItem

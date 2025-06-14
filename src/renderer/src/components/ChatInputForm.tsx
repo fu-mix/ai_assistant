@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Flex, HStack, Textarea, Checkbox, Text, Switch, IconButton, Input } from '@chakra-ui/react'
 import { IoSend } from 'react-icons/io5'
 import { LuPaperclip } from 'react-icons/lu'
+import { useTranslation } from 'react-i18next'
 
 interface ChatInputFormProps {
   inputMessage: string
@@ -47,12 +48,13 @@ export const ChatInputForm = memo<ChatInputFormProps>(
     chatInputRef,
     fileInputRef
   }) => {
+    const { t } = useTranslation()
     // 送信ボタンの無効化条件をメモ化
     const isSendDisabled = disabled || inputMessage.length === 0
 
     // プレースホルダーテキストをメモ化
     const placeholderText =
-      selectedChatId === 'autoAssist' ? 'オートアシストに依頼する...' : 'メッセージを入力...'
+      selectedChatId === 'autoAssist' ? t('autoAssist.placeholder', 'オートアシストに依頼する...') : t('chat.placeholder')
 
     // 条件付きレンダリング用のフラグをメモ化
     const showAgentFileCheckbox = typeof selectedChatId === 'number'
@@ -80,13 +82,13 @@ export const ChatInputForm = memo<ChatInputFormProps>(
               onChange={onUseAgentFileChange}
               isDisabled={isLoading || disabled}
             >
-              ナレッジを使用する
+              {t('chat.useAssistantFile')}
             </Checkbox>
           )}
 
           {showAgentModeSwitch && (
             <HStack align="center">
-              <Text fontSize="sm">エージェントモード</Text>
+              <Text fontSize="sm">{t('chat.agentMode')}</Text>
               <Switch
                 isChecked={agentMode}
                 onChange={onAgentModeChange}
@@ -98,7 +100,7 @@ export const ChatInputForm = memo<ChatInputFormProps>(
 
           <IconButton
             icon={<LuPaperclip />}
-            aria-label="ファイル添付"
+            aria-label={t('chat.attachFile', 'ファイル添付')}
             onClick={onFileSelect}
             isDisabled={disabled}
           />
@@ -114,7 +116,7 @@ export const ChatInputForm = memo<ChatInputFormProps>(
 
           <IconButton
             icon={<IoSend />}
-            aria-label="送信"
+            aria-label={t('common.send', '送信')}
             onClick={onSendMessage}
             isLoading={isLoading}
             isDisabled={isSendDisabled}

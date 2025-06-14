@@ -30,6 +30,7 @@ import {
   InputRightElement,
   InputGroup
 } from '@chakra-ui/react'
+import { useTranslation } from 'react-i18next'
 import { MessageList } from './MessageList'
 import { ChatInputForm } from './ChatInputForm'
 import { AttachmentList } from './AttachmentList'
@@ -596,6 +597,9 @@ ${apiResultInfo}
  * メインコンポーネント
  * ------------------------------------------------ */
 export const Main = () => {
+  // 国際化対応
+  const { t } = useTranslation()
+  
   // 環境変数から外部API機能の有効/無効状態を確認
   const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
@@ -958,8 +962,8 @@ export const Main = () => {
             // ★ 未対応拡張子はブロックしてトースト表示
             if (!mime) {
               toast({
-                title: '未対応のファイル形式です',
-                description: `${file.name} はサポートされていません`,
+                title: t('chat.unsupportedFileType'),
+                description: t('chat.fileNotSupported', { fileName: file.name }),
                 status: 'error',
                 duration: 3000,
                 isClosable: true
@@ -1094,8 +1098,8 @@ export const Main = () => {
               // ★ 未対応ならブロック
               if (mime === 'application/octet-stream') {
                 toast({
-                  title: '未対応のファイル形式です',
-                  description: `${file.name} はサポートされていません`,
+                  title: t('chat.unsupportedFileType'),
+                  description: t('chat.fileNotSupported', { fileName: file.name }),
                   status: 'error',
                   duration: 3000,
                   isClosable: true
@@ -1214,8 +1218,8 @@ export const Main = () => {
       if (autoAssistIndex === -1) {
         console.error('AutoAssist entry not found!')
         toast({
-          title: 'エラー',
-          description: 'オートアシストが見つかりません',
+          title: t('common.error'),
+          description: t('autoAssist.notFound'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -1464,8 +1468,8 @@ export const Main = () => {
       setAutoAssistMessages((prev) => [...prev, errorAiMsg])
 
       toast({
-        title: 'エラー',
-        description: 'タスク分割処理中にエラーが発生しました。',
+        title: t('common.error'),
+        description: t('autoAssist.generalError'),
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -1651,9 +1655,8 @@ export const Main = () => {
 
         // トーストでユーザーに通知
         toast({
-          title: '保存エラー',
-          description:
-            '結果の保存中にエラーが発生しました。画面には表示されますが、保存されない可能性があります。',
+          title: t('errors.saveFailed'),
+          description: t('autoAssist.saveError'),
           status: 'error',
           duration: 5000,
           isClosable: true
@@ -1671,11 +1674,11 @@ export const Main = () => {
 
       // トーストでユーザーに通知
       toast({
-        title: 'エラー',
-        description: 'タスク実行中にエラーが発生しました。',
-        status: 'error',
-        duration: 3000,
-        isClosable: true
+      title: t('common.error'),
+      description: t('autoAssist.generalError'),
+      status: 'error',
+      duration: 3000,
+      isClosable: true
       })
     } finally {
       setPendingSubtasks([])
@@ -1767,17 +1770,17 @@ export const Main = () => {
         setInputMessage('') // 処理後に入力を空にする
 
         toast({
-          title: 'オートアシストの編集結果を再実行しました',
-          description: '指定index以降の履歴を削除し、新しい内容で実行しました。',
-          status: 'info',
-          duration: 2500,
-          isClosable: true
+        title: t('autoAssist.editRerunSuccess'),
+        description: t('autoAssist.editRerunDescription'),
+        status: 'info',
+        duration: 2500,
+        isClosable: true
         })
       } catch (err) {
         console.error('edit & re-run (autoAssist) error:', err)
         toast({
-          title: 'エラー',
-          description: 'オートアシスト編集実行でエラーが発生しました。',
+          title: t('common.error'),
+          description: t('autoAssist.editRerunError'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -1929,8 +1932,8 @@ export const Main = () => {
       } catch (err) {
         console.error('Yes/No応答処理中にエラーが発生しました:', err)
         toast({
-          title: 'エラー',
-          description: 'メッセージの処理中にエラーが発生しました。',
+          title: t('common.error'),
+          description: t('autoAssist.messageProcessError'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -2064,7 +2067,7 @@ export const Main = () => {
             // AIメッセージを作成（画像付き）
             const aiMsg: Message = {
               type: 'ai',
-              content: '画像を生成しました。', // 空文字から変更
+              content: t('chat.imageGenerated'), // 空文字から変更
               imagePath: imagePath
             }
 
@@ -2180,8 +2183,8 @@ export const Main = () => {
         await window.electronAPI.saveAgents(finalUpdated)
 
         toast({
-          title: '編集内容を反映しました',
-          description: '以降の履歴を削除し、新しい内容で実行しました。',
+          title: t('chat.editSuccess'),
+          description: t('chat.editDescription'),
           status: 'info',
           duration: 2500,
           isClosable: true
@@ -2189,8 +2192,8 @@ export const Main = () => {
       } catch (err) {
         console.error('edit & re-run error:', err)
         toast({
-          title: 'エラー',
-          description: '編集内容の実行中にエラーが発生しました。',
+          title: t('common.error'),
+          description: t('chat.editError'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -2295,7 +2298,7 @@ export const Main = () => {
           // AIメッセージを作成（画像付き）
           const aiMsg: Message = {
             type: 'ai',
-            content: '画像を生成しました。', // 空文字から変更
+            content: t('chat.imageGenerated'), // 空文字から変更
             imagePath: imagePath
           }
 
@@ -2412,8 +2415,8 @@ export const Main = () => {
     } catch (err) {
       console.error('sendMessageエラー:', err)
       toast({
-        title: 'エラー',
-        description: 'メッセージの送信に失敗しました。',
+        title: t('common.error'),
+        description: t('chat.sendError'),
         status: 'error',
         duration: 4000,
         isClosable: true
@@ -2444,7 +2447,7 @@ export const Main = () => {
     const copiedPath = await window.electronAPI.copyFileToUserData(undefined)
     if (!copiedPath) {
       toast({
-        title: 'ファイルが選択されませんでした',
+        title: t('validation.fileNotSelected'),
         status: 'info',
         duration: 2000,
         isClosable: true
@@ -2470,7 +2473,7 @@ export const Main = () => {
   const handleCreateCustomChat = async () => {
     if (!modalChatTitle.trim()) {
       toast({
-        title: 'アシスタント名が入力されていません',
+        title: t('assistant.nameRequired'),
         status: 'warning',
         duration: 3000,
         isClosable: true
@@ -2582,7 +2585,7 @@ export const Main = () => {
       setInputMessage('')
     }
     toast({
-      title: 'アシスタントを削除しました',
+      title: t('assistant.deleteSuccess'),
       status: 'info',
       duration: 2000,
       isClosable: true
@@ -2625,7 +2628,7 @@ export const Main = () => {
     const copiedPath = await window.electronAPI.copyFileToUserData(undefined)
     if (!copiedPath) {
       toast({
-        title: 'ファイルが選択されませんでした',
+        title: t('validation.fileNotSelected'),
         status: 'info',
         duration: 2000,
         isClosable: true
@@ -2671,10 +2674,10 @@ export const Main = () => {
     // @ts-ignore
     window.electronAPI.saveAgents(updated).catch(console.error)
     toast({
-      title: 'アシスタント情報を更新しました',
-      status: 'success',
-      duration: 2000,
-      isClosable: true
+    title: t('assistant.updateSuccess'),
+    status: 'success',
+    duration: 2000,
+    isClosable: true
     })
     setIsPromptModalOpen(false)
   }
@@ -2713,7 +2716,7 @@ export const Main = () => {
   function handleCopySystemPrompt() {
     navigator.clipboard.writeText(editingSystemPrompt).then(() => {
       toast({
-        title: '指示内容をコピーしました',
+        title: t('assistant.copySuccess'),
         status: 'info',
         duration: 1000,
         isClosable: true
@@ -2746,7 +2749,7 @@ export const Main = () => {
       // @ts-ignore
       await window.electronAPI.saveAgents(updated)
       toast({
-        title: 'オートアシストの会話履歴をリセットしました',
+        title: t('autoAssist.resetSuccess'),
         status: 'info',
         duration: 2000,
         isClosable: true
@@ -2767,7 +2770,7 @@ export const Main = () => {
       // @ts-ignore
       await window.electronAPI.saveAgents(updated)
       toast({
-        title: 'アシスタントの会話履歴をリセットしました',
+        title: t('chat.resetSuccess'),
         status: 'info',
         duration: 2000,
         isClosable: true
@@ -2797,10 +2800,10 @@ export const Main = () => {
     // @ts-ignore
     await window.electronAPI.saveAgents(updated)
     toast({
-      title: 'オートアシストの会話履歴をリセットしました',
-      status: 'info',
-      duration: 2000,
-      isClosable: true
+    title: t('autoAssist.resetSuccess'),
+    status: 'info',
+    duration: 2000,
+    isClosable: true
     })
   }
 
@@ -2808,7 +2811,7 @@ export const Main = () => {
     (content: string) => {
       navigator.clipboard.writeText(content).then(() => {
         toast({
-          title: 'メッセージをコピーしました',
+          title: t('chat.copyMessageSuccess'),
           status: 'info',
           duration: 1000,
           isClosable: true
@@ -2848,14 +2851,14 @@ export const Main = () => {
         await window.electronAPI.showSaveDialog(JSON.stringify(payload, null, 2))
       }
       toast({
-        title: 'すべてエクスポートしました',
+        title: t('export.exportSuccess'),
         status: 'success',
         duration: 2000,
         isClosable: true
       })
     } catch (err) {
       console.error('handleExportAll error', err)
-      toast({ title: 'エクスポート失敗', status: 'error', duration: 3000, isClosable: true })
+      toast({ title: t('export.exportError'), status: 'error', duration: 3000, isClosable: true })
     }
   }
 
@@ -2876,7 +2879,7 @@ export const Main = () => {
         await window.electronAPI.showSaveDialog(JSON.stringify(payload, null, 2))
       }
       toast({
-        title: '選択チャットをエクスポートしました',
+        title: t('export.exportSuccess'),
         status: 'success',
         duration: 2000,
         isClosable: true
@@ -2895,8 +2898,8 @@ export const Main = () => {
       // @ts-ignore
       if (!window.electronAPI.showOpenDialogAndRead) {
         toast({
-          title: 'エラー',
-          description: 'インポート機能が見つかりません',
+          title: t('common.error'),
+          description: t('errors.functionNotFound'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -2908,8 +2911,8 @@ export const Main = () => {
       const fileContent = await window.electronAPI.showOpenDialogAndRead()
       if (!fileContent) {
         toast({
-          title: 'キャンセル',
-          description: 'ファイルが選択されませんでした',
+          title: t('common.cancel'),
+          description: t('import.cancel'),
           status: 'info',
           duration: 2000,
           isClosable: true
@@ -2923,8 +2926,8 @@ export const Main = () => {
     } catch (err) {
       console.error('Import error:', err)
       toast({
-        title: 'エラー',
-        description: 'インポート中にエラーが発生しました。',
+        title: t('common.error'),
+        description: t('import.importError'),
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -2968,8 +2971,8 @@ export const Main = () => {
         await window.electronAPI.replaceLocalHistoryConfig(raw)
       } else {
         toast({
-          title: 'エラー',
-          description: 'replaceLocalHistoryConfig未実装',
+          title: t('common.error'),
+          description: 'replaceLocalHistoryConfig' + t('errors.notImplemented'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -2986,7 +2989,7 @@ export const Main = () => {
         setTitleSettings(newData.titleSettings)
       }
       toast({
-        title: 'アシスタントを置き換えました',
+        title: t('import.replaceSuccess'),
         status: 'success',
         duration: 2000,
         isClosable: true
@@ -2994,8 +2997,8 @@ export const Main = () => {
     } catch (err) {
       console.error('doReplaceImport error:', err)
       toast({
-        title: 'エラー',
-        description: '置き換えインポート中にエラーが発生しました。',
+        title: t('common.error'),
+        description: t('import.replaceError'),
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -3008,8 +3011,8 @@ export const Main = () => {
       // @ts-ignore
       if (!window.electronAPI.appendLocalHistoryConfig) {
         toast({
-          title: 'エラー',
-          description: 'appendLocalHistoryConfig未実装',
+          title: t('common.error'),
+          description: 'appendLocalHistoryConfig' + t('errors.notImplemented'),
           status: 'error',
           duration: 3000,
           isClosable: true
@@ -3040,7 +3043,7 @@ export const Main = () => {
       }
 
       toast({
-        title: 'アシスタントを追加しました',
+        title: t('import.appendSuccess'),
         status: 'success',
         duration: 2000,
         isClosable: true
@@ -3048,8 +3051,8 @@ export const Main = () => {
     } catch (err) {
       console.error('doAppendImport error:', err)
       toast({
-        title: 'エラー',
-        description: '追加インポート中にエラーが発生しました。',
+        title: t('common.error'),
+        description: t('import.appendError'),
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -3185,7 +3188,7 @@ export const Main = () => {
               isDisabled={isExpired}
               minW="250px"
             >
-              新しいアシスタントの作成
+              {t('header.newAssistant')}
             </Button>
 
             <Menu>
@@ -3196,9 +3199,9 @@ export const Main = () => {
                 isDisabled={isExpired}
               />
               <MenuList>
-                <MenuItem onClick={handleExportConfig}>データのエクスポート</MenuItem>
-                <MenuItem onClick={handleImportConfig}>データのインポート</MenuItem>
-                <MenuItem onClick={openApiKeySettings}>APIキー設定</MenuItem>
+                <MenuItem onClick={handleExportConfig}>{t('header.dataExport')}</MenuItem>
+                <MenuItem onClick={handleImportConfig}>{t('header.dataImport')}</MenuItem>
+                <MenuItem onClick={openApiKeySettings}>{t('header.apiKeySettings')}</MenuItem>
               </MenuList>
             </Menu>
           </HStack>
@@ -3208,33 +3211,33 @@ export const Main = () => {
         <Modal isOpen={isApiKeySettingsOpen} onClose={closeApiKeySettings} isCentered>
           <ModalOverlay />
           <ModalContent>
-            <ModalHeader>APIキー設定</ModalHeader>
+            <ModalHeader>{t('api.title')}</ModalHeader>
             <ModalBody>
               <FormControl>
-                <FormLabel htmlFor="api-key-input">APIキー</FormLabel>
+                <FormLabel htmlFor="api-key-input">{t('api.apiKey')}</FormLabel>
                 <InputGroup size="md">
                   <Input
                     id="api-key-input"
                     value={apiKey}
                     onChange={handleApiKeyChange}
                     onBlur={handleApiKeyBlur}
-                    placeholder="APIキーを入力"
+                    placeholder={t('api.apiKeyPlaceholder')}
                     type={showApiKey ? 'text' : 'password'}
                     pr="4.5rem"
                     isDisabled={isLoadingApiKey}
                   />
                   <InputRightElement width="4.5rem">
                     <Button h="1.75rem" size="sm" onClick={toggleApiKeyVisibility}>
-                      {showApiKey ? '隠す' : '表示'}
+                      {showApiKey ? t('api.hideKey') : t('api.showKey')}
                     </Button>
                   </InputRightElement>
                 </InputGroup>
-                <FormHelperText>入力されたAPIキーは暗号化されて保存されます</FormHelperText>
+                <FormHelperText>{t('api.apiKeyHelp')}</FormHelperText>
               </FormControl>
             </ModalBody>
             <ModalFooter>
               <Button colorScheme="blue" onClick={closeApiKeySettings}>
-                閉じる
+                {t('common.close')}
               </Button>
             </ModalFooter>
           </ModalContent>
@@ -3273,17 +3276,17 @@ export const Main = () => {
                 <Flex justify="space-between" align="center">
                   <Box>
                     <Text fontSize="md" fontWeight="bold">
-                      オートアシスト
+                      {t('assistant.autoAssist')}
                     </Text>
                     <Text fontSize="xs" color="gray.500">
-                      自動で最適アシスタントを提案
+                      {t('assistant.autoAssistDescription')}
                     </Text>
                   </Box>
                   {selectedChatId === 'autoAssist' && (
                     <HStack spacing={1}>
                       <IconButton
                         icon={<LuSettings />}
-                        aria-label="設定"
+                        aria-label={t('common.settings')}
                         isDisabled={isExpired}
                         variant="ghost"
                         colorScheme="blue"
@@ -3349,7 +3352,7 @@ export const Main = () => {
                               whiteSpace="nowrap"
                               w="100%"
                             >
-                              {chat.customTitle || '無題のアシスタント'}
+                              {chat.customTitle || t('assistant.untitled')}
                             </Text>
                           </Tooltip>
                         </Box>
@@ -3358,7 +3361,7 @@ export const Main = () => {
                           <HStack spacing={1}>
                             <IconButton
                               icon={<LuSettings />}
-                              aria-label="アシスタント設定"
+                              aria-label={t('assistant.settings')}
                               variant="ghost"
                               colorScheme="blue"
                               size="xs"
@@ -3369,7 +3372,7 @@ export const Main = () => {
                             />
                             <IconButton
                               icon={<AiOutlineDelete />}
-                              aria-label="アシスタント削除"
+                              aria-label={t('assistant.delete')}
                               variant="ghost"
                               colorScheme="red"
                               size="xs"

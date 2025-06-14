@@ -17,6 +17,7 @@ import {
   useToast
 } from '@chakra-ui/react'
 import { AiOutlineDelete } from 'react-icons/ai'
+import { useTranslation } from 'react-i18next'
 
 /**
  * タイトル設定用の型定義
@@ -47,6 +48,7 @@ interface TitleEditModalProps {
  */
 export const TitleEditModal = memo<TitleEditModalProps>(
   ({ isOpen, onClose, titleSettings, onSave }) => {
+    const { t } = useTranslation()
     const toast = useToast()
 
     // ローカルステート
@@ -98,7 +100,7 @@ export const TitleEditModal = memo<TitleEditModalProps>(
       setTempSegments(JSON.parse(JSON.stringify(defaultSegments)))
       setTempFont(defaultFont)
       toast({
-        title: 'タイトルをデフォルトに戻しました',
+        title: t('title.revertedToDefault'),
         status: 'info',
         duration: 1500,
         isClosable: true
@@ -118,7 +120,7 @@ export const TitleEditModal = memo<TitleEditModalProps>(
           setTempBackgroundPath(newPath)
         } else {
           toast({
-            title: '画像の選択がキャンセルされました',
+            title: t('title.imageSelectionCancelled'),
             status: 'info',
             duration: 1500,
             isClosable: true
@@ -127,7 +129,7 @@ export const TitleEditModal = memo<TitleEditModalProps>(
       } catch (err) {
         console.error('Failed to set background image:', err)
         toast({
-          title: '背景画像の設定でエラー',
+          title: t('title.backgroundImageError'),
           status: 'error',
           duration: 2000,
           isClosable: true
@@ -143,7 +145,7 @@ export const TitleEditModal = memo<TitleEditModalProps>(
         if (ok) {
           setTempBackgroundPath(undefined)
           toast({
-            title: '背景画像を削除しました',
+            title: t('title.backgroundImageRemoved'),
             status: 'info',
             duration: 1500,
             isClosable: true
@@ -165,7 +167,7 @@ export const TitleEditModal = memo<TitleEditModalProps>(
       onSave(newSettings)
 
       toast({
-        title: 'タイトル設定を保存しました',
+        title: t('title.settingsSaved'),
         status: 'success',
         duration: 2000,
         isClosable: true
@@ -177,10 +179,10 @@ export const TitleEditModal = memo<TitleEditModalProps>(
       <Modal isOpen={isOpen} onClose={onClose} closeOnOverlayClick={false} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>タイトルの編集</ModalHeader>
+          <ModalHeader>{t('title.edit')}</ModalHeader>
           <ModalBody>
             <FormControl mb={4}>
-              <FormLabel>書体</FormLabel>
+              <FormLabel>{t('title.fontFamily')}</FormLabel>
               <Select value={tempFont} onChange={(e) => setTempFont(e.target.value)}>
                 {fontOptions.map((f) => (
                   <option key={f} value={f}>
@@ -191,13 +193,13 @@ export const TitleEditModal = memo<TitleEditModalProps>(
             </FormControl>
 
             <FormControl mb={4}>
-              <FormLabel>タイトル文字＋色 (複数行可)</FormLabel>
+              <FormLabel>{t('title.titleSegmentsLabel')}</FormLabel>
               {tempSegments.map((seg, idx) => (
                 <HStack key={idx} spacing={2} mb={1}>
                   <Input
                     value={seg.text}
                     onChange={(e) => updateSegmentText(idx, e.target.value)}
-                    placeholder="文字"
+                    placeholder={t('title.text')}
                     width="100px"
                   />
                   <Input
@@ -209,7 +211,7 @@ export const TitleEditModal = memo<TitleEditModalProps>(
                   />
                   <IconButton
                     icon={<AiOutlineDelete />}
-                    aria-label="削除"
+                    aria-label={t('common.delete')}
                     colorScheme="red"
                     size="sm"
                     onClick={() => removeSegment(idx)}
@@ -217,21 +219,21 @@ export const TitleEditModal = memo<TitleEditModalProps>(
                 </HStack>
               ))}
               <Button mt={2} onClick={addSegment}>
-                + 行を追加
+                {t('title.addSegment')}
               </Button>
             </FormControl>
 
             <FormControl mt={4} mb={6}>
               <Button colorScheme="orange" variant="outline" onClick={handleRevertDefault}>
-                デフォルトに戻す
+                {t('title.revertToDefault')}
               </Button>
             </FormControl>
 
             <FormControl mt={2}>
-              <FormLabel>ヘッダー背景画像</FormLabel>
+              <FormLabel>{t('title.backgroundImage')}</FormLabel>
               <HStack spacing={3}>
                 <Button colorScheme="blue" onClick={handleSelectBackgroundImage}>
-                  背景画像を選択
+                  {t('title.selectImage')}
                 </Button>
                 <Button
                   colorScheme="red"
@@ -239,22 +241,22 @@ export const TitleEditModal = memo<TitleEditModalProps>(
                   onClick={handleRemoveBackgroundImage}
                   isDisabled={!tempBackgroundPath}
                 >
-                  背景画像を削除
+                  {t('title.removeImage')}
                 </Button>
               </HStack>
               {tempBackgroundPath && (
                 <Text fontSize="sm" color="gray.600" mt={2}>
-                  現在設定中: {tempBackgroundPath}
+                  {t('title.currentlySet')}: {tempBackgroundPath}
                 </Text>
               )}
             </FormControl>
           </ModalBody>
           <ModalFooter>
             <Button onClick={onClose} mr={3}>
-              キャンセル
+              {t('common.cancel')}
             </Button>
             <Button colorScheme="blue" onClick={handleSaveTitle}>
-              保存
+              {t('common.save')}
             </Button>
           </ModalFooter>
         </ModalContent>

@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { MdOutlineContentCopy } from 'react-icons/md'
 import { FiEdit } from 'react-icons/fi'
 import { DownloadIcon } from '@chakra-ui/icons'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Electron API interface
@@ -39,6 +40,7 @@ interface ImageWithLazyLoadingProps {
  */
 const ImageWithLazyLoading = memo<ImageWithLazyLoadingProps>(
   ({ imagePath, chatHistoryRef }) => {
+    const { t } = useTranslation()
     const [imageData, setImageData] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
 
@@ -53,7 +55,7 @@ const ImageWithLazyLoading = memo<ImageWithLazyLoadingProps>(
           setImageData(`data:image/png;base64,${base64Data}`)
         }
       } catch (err) {
-        console.error('画像の読み込みに失敗:', err)
+      console.error(t('errors.loadFailed'), err)
       } finally {
         setIsLoading(false)
       }
@@ -118,7 +120,7 @@ const ImageWithLazyLoading = memo<ImageWithLazyLoadingProps>(
       >
         <Image
           src={imageData}
-          alt="生成された画像"
+          alt={t('chat.generatedImage', '生成された画像')}
           maxWidth="500px"
           maxHeight="400px"
           borderRadius="md"
@@ -134,11 +136,11 @@ const ImageWithLazyLoading = memo<ImageWithLazyLoadingProps>(
           leftIcon={<DownloadIcon />}
           onClick={handleDownload}
         >
-          ダウンロード
+          {t('common.download', 'ダウンロード')}
         </Button>
       </Box>
     ) : (
-      <Text color="red.500">画像を読み込めませんでした</Text>
+      <Text color="red.500">{t('errors.imageLoadError', '画像を読み込めませんでした')}</Text>
     )
   }
 )
@@ -159,6 +161,7 @@ interface MessageItemProps {
  */
 export const MessageItem = memo<MessageItemProps>(
   ({ message, index, onCopy, onEdit, chatHistoryRef }) => {
+    const { t } = useTranslation()
     const [isHovered, setIsHovered] = useState(false)
 
     // ホバー状態管理をメモ化
@@ -248,7 +251,7 @@ export const MessageItem = memo<MessageItemProps>(
             <HStack spacing={1}>
               <IconButton
                 icon={<MdOutlineContentCopy />}
-                aria-label="コピー"
+                aria-label={t('common.copy')}
                 size="sm"
                 variant="ghost"
                 colorScheme="blue"
@@ -257,7 +260,7 @@ export const MessageItem = memo<MessageItemProps>(
               {message.type === 'user' && (
                 <IconButton
                   icon={<FiEdit />}
-                  aria-label="編集"
+                  aria-label={t('common.edit')}
                   size="sm"
                   variant="ghost"
                   colorScheme="blue"

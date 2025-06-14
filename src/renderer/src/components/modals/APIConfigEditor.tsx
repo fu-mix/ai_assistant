@@ -1,4 +1,5 @@
 import { useState, memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Box,
   FormControl,
@@ -48,6 +49,7 @@ interface APIConfigEditorProps {
  */
 export const APIConfigEditor = memo<APIConfigEditorProps>(
   ({ config, onSave, onCancel, applyDirectly = false }) => {
+    const { t } = useTranslation()
     const [localConfig, setLocalConfig] = useState<APIConfig>({ ...config })
     const [triggers, setTriggers] = useState<APITrigger[]>(config.triggers || [])
     const [newTriggerType, setNewTriggerType] = useState<'keyword' | 'pattern'>('keyword')
@@ -103,9 +105,9 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
         // JSON解析エラーの場合、エラーメッセージを設定するが
         // テキストは保持したまま
         console.error('Invalid JSON for headers:', err)
-        setHeadersJsonError('無効なJSONフォーマットです')
+        setHeadersJsonError(t('apiConfig.invalidJsonFormat'))
       }
-    }, [])
+    }, [t])
 
     const handleAddTrigger = useCallback(() => {
       if (!newTriggerValue.trim()) return
@@ -117,13 +119,13 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
           value: newTriggerValue.trim(),
           description:
             newTriggerDescription.trim() ||
-            `${newTriggerType === 'keyword' ? 'キーワード' : 'パターン'}トリガー`
+            `${newTriggerType === 'keyword' ? t('apiConfig.triggers.keywordTrigger') : t('apiConfig.triggers.patternTrigger')}`
         }
       ])
 
       setNewTriggerValue('')
       setNewTriggerDescription('')
-    }, [newTriggerType, newTriggerValue, newTriggerDescription])
+    }, [newTriggerType, newTriggerValue, newTriggerDescription, t])
 
     const handleRemoveTrigger = useCallback((index: number) => {
       setTriggers((prev) => prev.filter((_, i) => i !== index))
@@ -156,13 +158,13 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
 
       // 保存成功のトースト通知を表示
       toast({
-        title: 'API設定を保存しました',
-        description: '変更がすぐに適用されました',
+        title: t('apiConfig.saveSuccess'),
+        description: t('apiConfig.saveSuccessDescription'),
         status: 'success',
         duration: 2000,
         isClosable: true
       })
-    }, [localConfig, triggers, onSave, toast])
+    }, [localConfig, triggers, onSave, toast, t])
 
     // 展開するテンプレートの例を安全に作成する関数
     const getSafeTemplate = useCallback((type: string) => {
@@ -195,34 +197,34 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
     return (
       <Box>
         <FormControl mb={4}>
-          <FormLabel>API名</FormLabel>
+          <FormLabel>{t('apiConfig.apiName')}</FormLabel>
           <Input
             value={localConfig.name}
             onChange={(e) => handleChange('name', e.target.value)}
-            placeholder="天気API、検索API など"
+            placeholder={t('apiConfig.apiNamePlaceholder')}
           />
         </FormControl>
 
         <FormControl mb={4}>
-          <FormLabel>API説明</FormLabel>
+          <FormLabel>{t('apiConfig.description')}</FormLabel>
           <Input
             value={localConfig.description || ''}
             onChange={(e) => handleChange('description', e.target.value)}
-            placeholder="このAPIの機能や用途を説明"
+            placeholder={t('apiConfig.descriptionPlaceholder')}
           />
         </FormControl>
 
         <FormControl mb={4}>
-          <FormLabel>エンドポイント</FormLabel>
+          <FormLabel>{t('apiConfig.endpoint')}</FormLabel>
           <Input
             value={localConfig.endpoint}
             onChange={(e) => handleChange('endpoint', e.target.value)}
-            placeholder="https://api.example.com/data"
+            placeholder={t('apiConfig.endpointPlaceholder')}
           />
         </FormControl>
 
         <FormControl mb={4}>
-          <FormLabel>メソッド</FormLabel>
+          <FormLabel>{t('apiConfig.method')}</FormLabel>
           <Select
             value={localConfig.method}
             onChange={(e) => handleChange('method', e.target.value)}
@@ -235,45 +237,45 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
         </FormControl>
 
         <FormControl mb={4}>
-          <FormLabel>認証タイプ</FormLabel>
+          <FormLabel>{t('apiConfig.authType')}</FormLabel>
           <Select
             value={localConfig.authType || 'none'}
             onChange={(e) => handleChange('authType', e.target.value)}
           >
-            <option value="none">認証なし</option>
-            <option value="apiKey">APIキー</option>
-            <option value="bearer">Bearer Token</option>
-            <option value="basic">Basic認証</option>
+            <option value="none">{t('apiConfig.authTypeOptions.none')}</option>
+            <option value="apiKey">{t('apiConfig.authTypeOptions.apiKey')}</option>
+            <option value="bearer">{t('apiConfig.authTypeOptions.bearer')}</option>
+            <option value="basic">{t('apiConfig.authTypeOptions.basic')}</option>
           </Select>
         </FormControl>
 
         {localConfig.authType === 'apiKey' && (
           <>
             <FormControl mb={4}>
-              <FormLabel>APIキー名</FormLabel>
+              <FormLabel>{t('apiConfig.apiKeyName')}</FormLabel>
               <Input
                 value={localConfig.authConfig?.keyName || ''}
                 onChange={(e) => handleAuthChange('keyName', e.target.value)}
-                placeholder="X-API-Key"
+                placeholder={t('apiConfig.apiKeyNamePlaceholder')}
               />
             </FormControl>
 
             <FormControl mb={4}>
-              <FormLabel>APIキー値</FormLabel>
+              <FormLabel>{t('apiConfig.apiKeyValue')}</FormLabel>
               <InputGroup>
                 <Input
                   type={showApiKey ? 'text' : 'password'}
                   value={localConfig.authConfig?.keyValue || ''}
                   onChange={(e) => handleAuthChange('keyValue', e.target.value)}
-                  placeholder="your-api-key"
+                  placeholder={t('apiConfig.apiKeyValuePlaceholder')}
                 />
                 <InputRightElement width="4.5rem">
                   <Button h="1.75rem" size="sm" onClick={() => setShowApiKey(!showApiKey)}>
-                    {showApiKey ? '隠す' : '表示'}
+                    {showApiKey ? t('api.hideKey') : t('api.showKey')}
                   </Button>
                 </InputRightElement>
               </InputGroup>
-              <FormHelperText>APIキーは安全に保管され、ローカルに保存されます</FormHelperText>
+              <FormHelperText>{t('apiConfig.apiKeyHelp')}</FormHelperText>
             </FormControl>
 
             <FormControl mb={4}>
@@ -281,7 +283,7 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
                 isChecked={localConfig.authConfig?.inHeader || false}
                 onChange={(e) => handleAuthChange('inHeader', e.target.checked)}
               >
-                ヘッダーに含める (チェックしない場合はクエリパラメータ)
+                {t('apiConfig.includeInHeader')}
               </Checkbox>
             </FormControl>
           </>
@@ -289,68 +291,68 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
 
         {localConfig.authType === 'bearer' && (
           <FormControl mb={4}>
-            <FormLabel>Bearer Token</FormLabel>
+            <FormLabel>{t('apiConfig.bearerToken')}</FormLabel>
             <InputGroup>
               <Input
                 type={showBearerToken ? 'text' : 'password'}
                 value={localConfig.authConfig?.token || ''}
                 onChange={(e) => handleAuthChange('token', e.target.value)}
-                placeholder="your-access-token"
+                placeholder={t('apiConfig.bearerTokenPlaceholder')}
               />
               <InputRightElement width="4.5rem">
                 <Button h="1.75rem" size="sm" onClick={() => setShowBearerToken(!showBearerToken)}>
-                  {showBearerToken ? '隠す' : '表示'}
+                  {showBearerToken ? t('api.hideKey') : t('api.showKey')}
                 </Button>
               </InputRightElement>
             </InputGroup>
-            <FormHelperText>トークンは安全に保管され、ローカルに保存されます</FormHelperText>
+            <FormHelperText>{t('apiConfig.bearerTokenHelp')}</FormHelperText>
           </FormControl>
         )}
 
         {localConfig.authType === 'basic' && (
           <>
             <FormControl mb={4}>
-              <FormLabel>ユーザー名</FormLabel>
+              <FormLabel>{t('apiConfig.username')}</FormLabel>
               <Input
                 value={localConfig.authConfig?.username || ''}
                 onChange={(e) => handleAuthChange('username', e.target.value)}
-                placeholder="username"
+                placeholder={t('apiConfig.usernamePlaceholder')}
               />
             </FormControl>
 
             <FormControl mb={4}>
-              <FormLabel>パスワード</FormLabel>
+              <FormLabel>{t('apiConfig.password')}</FormLabel>
               <InputGroup>
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   value={localConfig.authConfig?.password || ''}
                   onChange={(e) => handleAuthChange('password', e.target.value)}
-                  placeholder="password"
+                  placeholder={t('apiConfig.passwordPlaceholder')}
                 />
                 <InputRightElement width="4.5rem">
                   <Button h="1.75rem" size="sm" onClick={() => setShowPassword(!showPassword)}>
-                    {showPassword ? '隠す' : '表示'}
+                    {showPassword ? t('api.hideKey') : t('api.showKey')}
                   </Button>
                 </InputRightElement>
               </InputGroup>
-              <FormHelperText>パスワードは安全に保管され、ローカルに保存されます</FormHelperText>
+              <FormHelperText>{t('apiConfig.passwordHelp')}</FormHelperText>
             </FormControl>
           </>
         )}
 
         <FormControl mb={4} isInvalid={!!headersJsonError}>
-          <FormLabel>リクエストヘッダー (JSONフォーマット)</FormLabel>
+          <FormLabel>{t('apiConfig.requestHeaders')}</FormLabel>
           <Textarea
             value={headersText}
             onChange={(e) => handleHeadersChange(e.target.value)}
-            placeholder={'{\n  "Content-Type": "application/json"\n}'}
+            placeholder={t('apiConfig.requestHeadersPlaceholder')}
           />
-          {headersJsonError && <FormHelperText color="red.500">{headersJsonError}</FormHelperText>}
+          {headersJsonError && <FormHelperText color="red.500">{t('apiConfig.invalidJsonFormat')}</FormHelperText>}
         </FormControl>
 
         {(localConfig.method === 'POST' || localConfig.method === 'PUT') && (
           <FormControl mb={4}>
-            <FormLabel>リクエストボディテンプレート (ES6テンプレート構文)</FormLabel>
+            <FormLabel>{t('apiConfig.requestBodyTemplate')}</FormLabel>
             <Textarea
               value={localConfig.bodyTemplate || ''}
               onChange={(e) => handleChange('bodyTemplate', e.target.value)}
@@ -358,54 +360,54 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
               rows={10}
             />
             <FormHelperText>
-              $&#123;params.xxx&#125; の形式でパラメータを参照できます
+              {t('apiConfig.templateHelp')}
             </FormHelperText>
           </FormControl>
         )}
 
         <FormControl mb={4}>
-          <FormLabel>クエリパラメータテンプレート (ES6テンプレート構文)</FormLabel>
+          <FormLabel>{t('apiConfig.queryParamsTemplate')}</FormLabel>
           <Textarea
             value={localConfig.queryParamsTemplate || ''}
             onChange={(e) => handleChange('queryParamsTemplate', e.target.value)}
             placeholder={getSafeTemplate('query')}
           />
-          <FormHelperText>$&#123;params.xxx&#125; の形式でパラメータを参照できます</FormHelperText>
+          <FormHelperText>{t('apiConfig.templateHelp')}</FormHelperText>
         </FormControl>
 
         <FormControl mb={4}>
-          <FormLabel>レスポンステンプレート (ES6テンプレート構文)</FormLabel>
+          <FormLabel>{t('apiConfig.responseTemplate')}</FormLabel>
           <Textarea
             value={localConfig.responseTemplate || ''}
             onChange={(e) => handleChange('responseTemplate', e.target.value)}
             placeholder={getSafeTemplate('response')}
           />
-          <FormHelperText>responseObj 変数でAPIレスポンスにアクセスできます</FormHelperText>
+          <FormHelperText>{t('apiConfig.responseTemplateHelp')}</FormHelperText>
         </FormControl>
 
         <FormControl mt={4}>
-          <FormLabel>レスポンスタイプ</FormLabel>
+          <FormLabel>{t('apiConfig.responseType')}</FormLabel>
           <RadioGroup
             value={responseType}
             onChange={(val) => setResponseType(val as 'text' | 'image')}
           >
             <HStack spacing={5}>
-              <Radio value="text">テキスト</Radio>
-              <Radio value="image">画像</Radio>
+              <Radio value="text">{t('apiConfig.responseTypeText')}</Radio>
+              <Radio value="image">{t('apiConfig.responseTypeImage')}</Radio>
             </HStack>
           </RadioGroup>
         </FormControl>
 
         {responseType === 'image' && (
           <FormControl mt={4}>
-            <FormLabel>画像データパス</FormLabel>
+            <FormLabel>{t('apiConfig.imageDataPath')}</FormLabel>
             <Input
               value={imageDataPath}
               onChange={(e) => setImageDataPath(e.target.value)}
-              placeholder="例: data[0].b64_json"
+              placeholder={t('apiConfig.imageDataPathPlaceholder')}
             />
             <FormHelperText>
-              レスポンスJSON内の画像データ（Base64）の場所を指定します。例: data[0].b64_json
+              {t('apiConfig.imageDataPathHelp')}
             </FormHelperText>
           </FormControl>
         )}
@@ -413,10 +415,10 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
         <Divider my={6} />
 
         <Heading size="md" mb={4}>
-          APIトリガー設定
+          {t('apiConfig.triggers.title')}
         </Heading>
         <Text fontSize="sm" color="gray.600" mb={4}>
-          以下のトリガーに一致するとAPIが呼び出されます。複数設定できます。
+          {t('apiConfig.triggers.description')}
         </Text>
 
         {/* 現在のトリガーリスト */}
@@ -428,7 +430,7 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
                   <Flex justify="space-between" align="center">
                     <Box>
                       <Badge colorScheme={trigger.type === 'keyword' ? 'blue' : 'purple'}>
-                        {trigger.type === 'keyword' ? 'キーワード' : 'パターン'}
+                        {trigger.type === 'keyword' ? t('apiConfig.triggers.keyword') : t('apiConfig.triggers.pattern')}
                       </Badge>
                       <Text mt={1} fontWeight="bold">
                         {trigger.value}
@@ -439,7 +441,7 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
                     </Box>
                     <IconButton
                       icon={<AiOutlineDelete />}
-                      aria-label="削除"
+                      aria-label={t('apiConfig.triggers.deleteButton')}
                       size="sm"
                       colorScheme="red"
                       onClick={() => handleRemoveTrigger(index)}
@@ -452,7 +454,7 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
         ) : (
           <Box mb={4} p={3} borderWidth="1px" borderRadius="md" bg="yellow.50">
             <Text color="yellow.800">
-              トリガーが設定されていません。少なくとも1つのトリガーを追加することをお勧めします。
+              {t('apiConfig.triggers.noTriggers')}
             </Text>
           </Box>
         )}
@@ -460,46 +462,46 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
         {/* 新しいトリガーの追加 */}
         <Box mb={6} p={4} borderWidth="1px" borderRadius="md">
           <Heading size="sm" mb={3}>
-            新しいトリガーを追加
+            {t('apiConfig.triggers.addNew')}
           </Heading>
 
           <FormControl mb={3}>
-            <FormLabel>トリガータイプ</FormLabel>
+            <FormLabel>{t('apiConfig.triggers.triggerType')}</FormLabel>
             <RadioGroup
               value={newTriggerType}
               onChange={(v) => setNewTriggerType(v as 'keyword' | 'pattern')}
             >
               <HStack spacing={5}>
-                <Radio value="keyword">キーワード (カンマ区切り)</Radio>
-                <Radio value="pattern">パターン (正規表現)</Radio>
+                <Radio value="keyword">{t('apiConfig.triggers.keywordOption')}</Radio>
+                <Radio value="pattern">{t('apiConfig.triggers.patternOption')}</Radio>
               </HStack>
             </RadioGroup>
           </FormControl>
 
           <FormControl mb={3}>
-            <FormLabel>{newTriggerType === 'keyword' ? 'キーワード' : 'パターン'}</FormLabel>
+            <FormLabel>{newTriggerType === 'keyword' ? t('apiConfig.triggers.keywordLabel') : t('apiConfig.triggers.patternLabel')}</FormLabel>
             <Input
               value={newTriggerValue}
               onChange={(e) => setNewTriggerValue(e.target.value)}
               placeholder={
                 newTriggerType === 'keyword'
-                  ? '例: 天気,気象,気温'
-                  : '例: (東京|大阪|名古屋)の(天気|気温)'
+                  ? t('apiConfig.triggers.keywordPlaceholder')
+                  : t('apiConfig.triggers.patternPlaceholder')
               }
             />
             <FormHelperText>
               {newTriggerType === 'keyword'
-                ? 'カンマで区切って複数のキーワードを指定できます。いずれかのキーワードが含まれるとトリガーされます。'
-                : '正規表現パターンを指定します。パターンに一致するとトリガーされます。'}
+                ? t('apiConfig.triggers.keywordHelp')
+                : t('apiConfig.triggers.patternHelp')}
             </FormHelperText>
           </FormControl>
 
           <FormControl mb={3}>
-            <FormLabel>説明 (オプション)</FormLabel>
+            <FormLabel>{t('apiConfig.triggers.descriptionLabel')}</FormLabel>
             <Input
               value={newTriggerDescription}
               onChange={(e) => setNewTriggerDescription(e.target.value)}
-              placeholder="例: 天気に関する質問を検出"
+              placeholder={t('apiConfig.triggers.descriptionPlaceholder')}
             />
           </FormControl>
 
@@ -508,14 +510,14 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
             onClick={handleAddTrigger}
             isDisabled={!newTriggerValue.trim()}
           >
-            トリガーを追加
+            {t('apiConfig.triggers.addButton')}
           </Button>
         </Box>
 
         <HStack spacing={4} justify="flex-end" mt={6}>
-          <Button onClick={onCancel}>キャンセル</Button>
+          <Button onClick={onCancel}>{t('common.cancel')}</Button>
           <Button colorScheme="blue" onClick={handleSaveConfig}>
-            保存
+            {t('common.save')}
           </Button>
         </HStack>
 
@@ -523,19 +525,19 @@ export const APIConfigEditor = memo<APIConfigEditorProps>(
         <Modal isOpen={isSaveConfirmOpen} onClose={() => setIsSaveConfirmOpen(false)}>
           <ModalOverlay />
           <ModalContent>
-            <ModalHeader>設定を保存</ModalHeader>
+            <ModalHeader>{t('apiConfig.confirmSave.title')}</ModalHeader>
             <ModalBody>
-              <Text>この設定変更を直接適用しますか？</Text>
+              <Text>{t('apiConfig.confirmSave.message')}</Text>
               <Text fontSize="sm" color="gray.600" mt={2}>
-                ※この変更はすぐに適用されます。元の設定画面で「保存」を押す必要はありません。
+                {t('apiConfig.confirmSave.note')}
               </Text>
             </ModalBody>
             <ModalFooter>
               <Button mr={3} onClick={() => setIsSaveConfirmOpen(false)}>
-                キャンセル
+                {t('common.cancel')}
               </Button>
               <Button colorScheme="blue" onClick={handleConfirmDirectSave}>
-                保存して適用
+                {t('apiConfig.confirmSave.saveAndApply')}
               </Button>
             </ModalFooter>
           </ModalContent>

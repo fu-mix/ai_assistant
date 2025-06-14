@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Modal,
   ModalOverlay,
@@ -33,6 +34,7 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
   onReplace,
   onAppend
 }) => {
+  const { t } = useTranslation()
   const toast = useToast()
 
   // インポートデータが有効なJSONか確認する関数
@@ -122,7 +124,7 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
           </VStack>
         </ModalBody>
         <ModalFooter>
-          <Button onClick={onClose}>キャンセル</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
         </ModalFooter>
       </ModalContent>
     </Modal>

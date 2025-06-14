@@ -16,6 +16,7 @@ import {
 } from '@chakra-ui/react'
 import { FiEdit } from 'react-icons/fi'
 import { AiOutlineDelete } from 'react-icons/ai'
+import { useTranslation } from 'react-i18next'
 import { APIConfig } from '../types'
 import { APIConfigEditor } from './APIConfigEditor'
 
@@ -35,6 +36,7 @@ interface APISettingsModalProps {
  */
 export const APISettingsModal = memo<APISettingsModalProps>(
   ({ isOpen, onClose, apiConfigs = [], onSave, directSave = false }) => {
+    const { t } = useTranslation()
     const toast = useToast()
     const [localConfigs, setLocalConfigs] = useState<APIConfig[]>([])
     const [currentEditConfig, setCurrentEditConfig] = useState<APIConfig | null>(null)
@@ -50,7 +52,7 @@ export const APISettingsModal = memo<APISettingsModalProps>(
     const handleAddConfig = useCallback(() => {
       const newConfig: APIConfig = {
         id: `api-${Date.now()}`,
-        name: '新しいAPI',
+        name: 'New API',
         description: '',
         endpoint: '',
         method: 'GET',
@@ -85,8 +87,8 @@ export const APISettingsModal = memo<APISettingsModalProps>(
 
           // 直接保存時のトースト通知
           toast({
-            title: 'API設定を保存しました',
-            description: '変更がすぐに適用されました',
+            title: t('common.success'),
+            description: t('assistant.updateSuccess'),
             status: 'success',
             duration: 2000,
             isClosable: true
@@ -96,7 +98,7 @@ export const APISettingsModal = memo<APISettingsModalProps>(
         setCurrentEditConfig(null)
         setIsAddingConfig(false)
       },
-      [isAddingConfig, localConfigs, directSave, onSave, toast]
+      [isAddingConfig, localConfigs, directSave, onSave, toast, t]
     )
 
     const handleDeleteConfig = useCallback(
@@ -109,27 +111,28 @@ export const APISettingsModal = memo<APISettingsModalProps>(
           onSave(updatedConfigs)
 
           toast({
-            title: 'API設定を削除しました',
-            description: '変更がすぐに適用されました',
+            title: t('common.success'),
+            description: t('assistant.deleteSuccess'),
             status: 'success',
             duration: 2000,
             isClosable: true
           })
         }
       },
-      [localConfigs, directSave, onSave, toast]
+      [localConfigs, directSave, onSave, toast, t]
     )
 
     const handleSaveAll = useCallback(() => {
       onSave(localConfigs)
       toast({
-        title: 'API設定を保存しました',
+        title: t('common.success'),
+        description: t('assistant.updateSuccess'),
         status: 'success',
         duration: 2000,
         isClosable: true
       })
       onClose()
-    }, [localConfigs, onSave, onClose, toast])
+    }, [localConfigs, onSave, onClose, toast, t])
 
     const handleCancelEdit = useCallback(() => {
       setCurrentEditConfig(null)
@@ -147,7 +150,7 @@ export const APISettingsModal = memo<APISettingsModalProps>(
           flexDirection="column"
         >
           <ModalHeader position="sticky" top={0} bg="white" zIndex={1} borderBottomWidth="1px">
-            外部API設定
+            {t('assistant.apiSettings')}
           </ModalHeader>
 
           {/* スクロール可能なコンテンツエリア */}
@@ -176,12 +179,12 @@ export const APISettingsModal = memo<APISettingsModalProps>(
               ) : (
                 <>
                   <Button colorScheme="blue" mb={4} onClick={handleAddConfig}>
-                    新しいAPIを追加
+                    {t('api.addNew')}
                   </Button>
 
                   {localConfigs.length === 0 ? (
                     <Text>
-                      設定されたAPIはありません。「新しいAPIを追加」ボタンから作成してください。
+                      {t('api.noConfigured')}
                     </Text>
                   ) : (
                     <List spacing={3}>
@@ -194,24 +197,24 @@ export const APISettingsModal = memo<APISettingsModalProps>(
                                 {config.method} {config.endpoint}
                               </Text>
                               <Text fontSize="xs" color="gray.500">
-                                トリガー:{' '}
+                                {t('api.triggers')}:{' '}
                                 {config.triggers.length > 0
                                   ? config.triggers
-                                      .map((t) => (t.type === 'keyword' ? t.value : 'パターン'))
+                                      .map((t) => (t.type === 'keyword' ? t.value : t('api.pattern')))
                                       .join(', ')
-                                  : 'なし'}
+                                  : t('common.none')}
                               </Text>
                             </Box>
                             <HStack>
                               <IconButton
                                 icon={<FiEdit />}
-                                aria-label="編集"
+                                aria-label={t('common.edit')}
                                 size="sm"
                                 onClick={() => handleEditConfig(config)}
                               />
                               <IconButton
                                 icon={<AiOutlineDelete />}
-                                aria-label="削除"
+                                aria-label={t('common.delete')}
                                 size="sm"
                                 colorScheme="red"
                                 onClick={() => handleDeleteConfig(config.id)}
@@ -242,10 +245,10 @@ export const APISettingsModal = memo<APISettingsModalProps>(
               justifyContent="flex-end"
             >
               <Button mr={3} onClick={onClose}>
-                キャンセル
+                {t('common.cancel')}
               </Button>
               <Button colorScheme="blue" onClick={handleSaveAll}>
-                保存
+                {t('common.save')}
               </Button>
             </Box>
           )}
