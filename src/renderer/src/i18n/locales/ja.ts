@@ -32,6 +32,7 @@ export default {
     apiKeySettings: 'APIキー設定'
   },
   assistant: {
+    default: 'オートアシストモード',
     title: 'アシスタント',
     autoAssist: 'オートアシスト',
     autoAssistDescription: '自動で最適アシスタントを提案',
@@ -55,12 +56,13 @@ export default {
     copySuccess: '指示内容をコピーしました'
   },
   chat: {
+    default: 'アシスタントを作成・選択して開始してください',
     placeholder: 'メッセージを入力...',
     dragDropFiles: 'ファイルをドラッグ＆ドロップ、またはクリックして選択',
     unsupportedFileType: '未対応のファイル形式です',
     fileNotSupported: '{{fileName}} はサポートされていません',
     attachedFiles: '添付ファイル',
-    useAssistantFile: 'アシスタントファイルを利用する',
+    useAssistantFile: 'ナレッジファイルを利用する',
     agentMode: 'エージェントモード',
     resetConversation: '会話履歴をリセット',
     resetConfirmTitle: '会話履歴のリセット',
@@ -93,7 +95,8 @@ export default {
     noAssistantFound: '(指定アシスタントが見つかりません)',
     executionError: '(アシスタント実行エラー)',
     generalError: 'タスク分割処理中にエラーが発生しました。',
-    saveError: '結果の保存中にエラーが発生しました。画面には表示されますが、保存されない可能性があります。',
+    saveError:
+      '結果の保存中にエラーが発生しました。画面には表示されますが、保存されない可能性があります。',
     notFound: 'オートアシストが見つかりません',
     resetSuccess: 'オートアシストの会話履歴をリセットしました',
     editRerunSuccess: 'オートアシストの編集結果を再実行しました',
@@ -139,7 +142,8 @@ export default {
   import: {
     title: 'インポートモード選択',
     replaceMode: '既存データを置き換える',
-    replaceModeDescription: 'すべての既存アシスタントを削除し、インポートしたデータで置き換えます。',
+    replaceModeDescription:
+      'すべての既存アシスタントを削除し、インポートしたデータで置き換えます。',
     appendMode: '既存データに追加',
     appendModeDescription: '既存のアシスタントを保持したまま、新しいアシスタントを追加します。',
     replaceWarning: 'この操作は取り消せません。本当に置き換えますか？',
@@ -189,12 +193,13 @@ export default {
       title: '新しいアシスタントの作成',
       assistantName: 'アシスタント名',
       assistantNamePlaceholder: 'アシスタント名を入力',
-      systemPrompt: 'システムプロンプト',
-      systemPromptPlaceholder: 'プロンプトを入力してください',
-      agentFiles: 'エージェントファイル',
+      systemPrompt: '指示',
+      systemPromptPlaceholder: 'アシスタントの役割や口調などを設定',
+      agentFiles: 'ナレッジファイル(複数可)',
       selectFile: 'ファイル選択',
       noFiles: 'ファイルなし',
       enableApiCall: '外部API呼び出しを有効にする',
+      apiCallHelper: 'アシスタントが呼び出し可能な外部APIを設定します',
       apiSettings: 'API設定',
       create: '作成',
       cancel: 'キャンセル'
@@ -202,14 +207,18 @@ export default {
     editAssistant: {
       title: 'アシスタント設定',
       assistantName: 'アシスタント名',
-      systemPrompt: 'システムプロンプト',
-      systemPromptPlaceholder: 'プロンプトを入力してください',
-      agentFiles: 'エージェントファイル',
+      assistantNamePlaceholder: 'アシスタント名を変更',
+      systemPrompt: '指示',
+      systemPromptPlaceholder: 'アシスタントの役割や口調などを設定',
+      systemPromptCopy: 'コピー',
+      agentFiles: 'ナレッジファイル(複数可)',
       selectFile: 'ファイル選択',
       noFiles: 'ファイルなし',
       copyInstructions: '指示内容をコピー',
+      resetConversation: '会話履歴をリセット',
       enableApiCall: '外部API呼び出しを有効にする',
       apiSettings: 'API設定',
+      apiCallHelper: 'アシスタントが呼び出し可能な外部APIを設定します',
       save: '保存',
       cancel: 'キャンセル'
     },
@@ -217,6 +226,12 @@ export default {
       title: 'アシスタントの削除',
       message: '本当にこのアシスタントを削除しますか？この操作は取り消せません。',
       delete: '削除',
+      cancel: 'キャンセル'
+    },
+    resetConversation: {
+      title: '会話履歴リセット',
+      message: '本当に会話履歴をリセットしますか？',
+      reset: 'リセット',
       cancel: 'キャンセル'
     },
     resetAutoAssist: {
@@ -268,7 +283,8 @@ export default {
     responseTypeImage: '画像',
     imageDataPath: '画像データパス',
     imageDataPathPlaceholder: '例: data[0].b64_json',
-    imageDataPathHelp: 'レスポンスJSON内の画像データ（Base64）の場所を指定します。例: data[0].b64_json',
+    imageDataPathHelp:
+      'レスポンスJSON内の画像データ（Base64）の場所を指定します。例: data[0].b64_json',
     triggers: {
       title: 'APIトリガー設定',
       description: '以下のトリガーに一致するとAPIが呼び出されます。複数設定できます。',
@@ -276,7 +292,8 @@ export default {
       pattern: 'パターン',
       keywordTrigger: 'キーワードトリガー',
       patternTrigger: 'パターントリガー',
-      noTriggers: 'トリガーが設定されていません。少なくとも1つのトリガーを追加することをお勧めします。',
+      noTriggers:
+        'トリガーが設定されていません。少なくとも1つのトリガーを追加することをお勧めします。',
       addNew: '新しいトリガーを追加',
       triggerType: 'トリガータイプ',
       keywordOption: 'キーワード (カンマ区切り)',
@@ -285,7 +302,8 @@ export default {
       patternLabel: 'パターン',
       keywordPlaceholder: '例: 天気,気象,気温',
       patternPlaceholder: '例: (東京|大阪|名古屋)の(天気|気温)',
-      keywordHelp: 'カンマで区切って複数のキーワードを指定できます。いずれかのキーワードが含まれるとトリガーされます。',
+      keywordHelp:
+        'カンマで区切って複数のキーワードを指定できます。いずれかのキーワードが含まれるとトリガーされます。',
       patternHelp: '正規表現パターンを指定します。パターンに一致するとトリガーされます。',
       descriptionLabel: '説明 (オプション)',
       descriptionPlaceholder: '例: 天気に関する質問を検出',

@@ -599,7 +599,7 @@ ${apiResultInfo}
 export const Main = () => {
   // 国際化対応
   const { t } = useTranslation()
-  
+
   // 環境変数から外部API機能の有効/無効状態を確認
   const isExternalApiEnabled = import.meta.env.VITE_ENABLE_EXTERNAL_API !== 'false'
 
@@ -1674,11 +1674,11 @@ export const Main = () => {
 
       // トーストでユーザーに通知
       toast({
-      title: t('common.error'),
-      description: t('autoAssist.generalError'),
-      status: 'error',
-      duration: 3000,
-      isClosable: true
+        title: t('common.error'),
+        description: t('autoAssist.generalError'),
+        status: 'error',
+        duration: 3000,
+        isClosable: true
       })
     } finally {
       setPendingSubtasks([])
@@ -1770,11 +1770,11 @@ export const Main = () => {
         setInputMessage('') // 処理後に入力を空にする
 
         toast({
-        title: t('autoAssist.editRerunSuccess'),
-        description: t('autoAssist.editRerunDescription'),
-        status: 'info',
-        duration: 2500,
-        isClosable: true
+          title: t('autoAssist.editRerunSuccess'),
+          description: t('autoAssist.editRerunDescription'),
+          status: 'info',
+          duration: 2500,
+          isClosable: true
         })
       } catch (err) {
         console.error('edit & re-run (autoAssist) error:', err)
@@ -2674,10 +2674,10 @@ export const Main = () => {
     // @ts-ignore
     window.electronAPI.saveAgents(updated).catch(console.error)
     toast({
-    title: t('assistant.updateSuccess'),
-    status: 'success',
-    duration: 2000,
-    isClosable: true
+      title: t('assistant.updateSuccess'),
+      status: 'success',
+      duration: 2000,
+      isClosable: true
     })
     setIsPromptModalOpen(false)
   }
@@ -2800,10 +2800,10 @@ export const Main = () => {
     // @ts-ignore
     await window.electronAPI.saveAgents(updated)
     toast({
-    title: t('autoAssist.resetSuccess'),
-    status: 'info',
-    duration: 2000,
-    isClosable: true
+      title: t('autoAssist.resetSuccess'),
+      status: 'info',
+      duration: 2000,
+      isClosable: true
     })
   }
 
@@ -3410,7 +3410,7 @@ export const Main = () => {
             {selectedChatId === 'autoAssist' ? (
               <>
                 <Text fontWeight="bold" color="gray.600" mb={3}>
-                  オートアシストモード
+                  {t('assistant.default')}
                 </Text>
                 <MessageList
                   messages={autoAssistMessages}
@@ -3428,7 +3428,7 @@ export const Main = () => {
               />
             ) : (
               <Text fontWeight="bold" color="gray.500">
-                アシスタントを作成・選択して開始してください
+                {t('chat.default')}
               </Text>
             )}
           </Box>
@@ -3486,32 +3486,32 @@ export const Main = () => {
       >
         <ModalOverlay />
         <ModalContent maxW="3xl">
-          <ModalHeader>新しいアシスタントの作成</ModalHeader>
+          <ModalHeader>{t('modal.newAssistant.title')}</ModalHeader>
           <ModalBody>
             <FormControl mb={4}>
-              <FormLabel>アシスタント名</FormLabel>
+              <FormLabel>{t('modal.newAssistant.assistantName')}</FormLabel>
               <Input
                 value={modalChatTitle}
                 onChange={(e) => setModalChatTitle(e.target.value)}
-                placeholder="アシスタント名を入力"
+                placeholder={t('modal.newAssistant.assistantNamePlaceholder')}
               />
             </FormControl>
 
             <FormControl mb={4}>
-              <FormLabel>指示</FormLabel>
+              <FormLabel>{t('modal.newAssistant.systemPrompt')}</FormLabel>
               <Textarea
                 rows={5}
                 w="full"
                 value={modalSystemPrompt}
                 onChange={(e) => setModalSystemPrompt(e.target.value)}
-                placeholder="アシスタントの役割や口調などを指定"
+                placeholder={t('modal.newAssistant.systemPromptPlaceholder')}
               />
             </FormControl>
 
             <FormControl>
-              <FormLabel>ナレッジファイル(複数可)</FormLabel>
+              <FormLabel>{t('modal.newAssistant.agentFiles')}</FormLabel>
               <Button colorScheme="blue" variant="outline" onClick={handleSelectAgentFiles}>
-                ファイルを選択
+                {t('modal.newAssistant.selectFile')}
               </Button>
               {modalAgentFiles.length > 0 && (
                 <Box mt={2}>
@@ -3530,7 +3530,7 @@ export const Main = () => {
                       </Text>
                       <IconButton
                         icon={<AiOutlineDelete />}
-                        aria-label="削除"
+                        aria-label={t('common.delete')}
                         colorScheme="red"
                         size="sm"
                         onClick={() => handleRemoveAgentFile(f.path)}
@@ -3544,7 +3544,7 @@ export const Main = () => {
               <>
                 <FormControl mt={4} mb={4} display="flex" alignItems="center">
                   <FormLabel htmlFor="create-api-call-enabled" mb="0">
-                    外部API呼び出しを有効にする
+                    {t('modal.newAssistant.enableApiCall')}
                   </FormLabel>
                   <Switch
                     id="create-api-call-enabled"
@@ -3559,19 +3559,19 @@ export const Main = () => {
                     colorScheme="teal"
                     isDisabled={!modalEnableAPICall}
                   >
-                    外部API設定
+                    {t('modal.newAssistant.apiSettings')} {t('modal.newAssistant.create')}
                   </Button>
-                  <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
+                  <FormHelperText> {t('modal.newAssistant.apiCallHelper')}</FormHelperText>
                 </FormControl>
               </>
             )}
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeCustomChatModal}>
-              キャンセル
+              {t('modal.newAssistant.cancel')}
             </Button>
             <Button colorScheme="blue" onClick={handleCreateCustomChat}>
-              作成
+              {t('modal.newAssistant.create')}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -3594,37 +3594,37 @@ export const Main = () => {
       >
         <ModalOverlay />
         <ModalContent maxW="3xl">
-          <ModalHeader>アシスタントの設定</ModalHeader>
+          <ModalHeader> {t('modal.editAssistant.title')}</ModalHeader>
           <ModalBody>
             <FormControl mb={4}>
-              <FormLabel>アシスタント名</FormLabel>
+              <FormLabel>{t('modal.editAssistant.assistantName')}</FormLabel>
               <Input
                 value={editingCustomTitle}
                 onChange={(e) => setEditingCustomTitle(e.target.value)}
-                placeholder="アシスタント名を変更"
+                placeholder={t('modal.editAssistant.assistantNamePlaceholder')}
               />
             </FormControl>
 
             <FormControl>
-              <FormLabel>指示</FormLabel>
+              <FormLabel>{t('modal.editAssistant.systemPrompt')}</FormLabel>
               <Textarea
                 rows={6}
                 value={editingSystemPrompt}
                 onChange={(e) => setEditingSystemPrompt(e.target.value)}
-                placeholder="アシスタントへの指示を入力/編集"
+                placeholder={t('modal.editAssistant.systemPromptPlaceholder')}
                 height="250px"
               />
             </FormControl>
             <HStack spacing={2} mt={3}>
               <Button variant="outline" colorScheme="blue" onClick={handleCopySystemPrompt}>
-                コピー
+                {t('modal.editAssistant.systemPromptCopy')}
               </Button>
             </HStack>
 
             <FormControl mt={5}>
-              <FormLabel>ナレッジファイル(複数可)</FormLabel>
+              <FormLabel>{t('modal.editAssistant.agentFiles')}</FormLabel>
               <Button colorScheme="blue" variant="outline" onClick={handleAddAgentFileInPrompt}>
-                ファイルを選択
+                {t('modal.editAssistant.selectFile')}
               </Button>
               {editingAgentFiles.length > 0 && (
                 <Box mt={2}>
@@ -3655,20 +3655,20 @@ export const Main = () => {
             </FormControl>
 
             <FormControl mt={5}>
-              <FormLabel>会話履歴のリセット</FormLabel>
+              <FormLabel>{t('modal.editAssistant.resetConversation')}</FormLabel>
               <Button
                 colorScheme="red"
                 variant="outline"
                 onClick={() => setIsResetConfirmOpen(true)}
               >
-                会話履歴リセット
+                {t('modal.editAssistant.resetConversation')}
               </Button>
             </FormControl>
             {isExternalApiEnabled && (
               <>
                 <FormControl mt={5} mb={4} display="flex" alignItems="center">
                   <FormLabel htmlFor="api-call-enabled" mb="0">
-                    外部API呼び出しを有効にする
+                    {t('modal.editAssistant.enableApiCall')}
                   </FormLabel>
                   <Switch
                     id="api-call-enabled"
@@ -3683,19 +3683,19 @@ export const Main = () => {
                     colorScheme="teal"
                     isDisabled={!enableAPICall}
                   >
-                    外部API設定
+                    {t('modal.editAssistant.apiSettings')}
                   </Button>
-                  <FormHelperText>アシスタントが呼び出し可能な外部APIを設定します</FormHelperText>
+                  <FormHelperText> {t('modal.editAssistant.apiCallHelper')}</FormHelperText>
                 </FormControl>
               </>
             )}
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeSystemPromptModal}>
-              キャンセル
+              {t('modal.editAssistant.cancel')}
             </Button>
             <Button colorScheme="blue" onClick={handleSaveSystemPrompt}>
-              保存
+              {t('modal.editAssistant.save')}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -3712,16 +3712,16 @@ export const Main = () => {
       <Modal isOpen={isResetConfirmOpen} onClose={closeResetConfirm} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>会話履歴のリセット</ModalHeader>
+          <ModalHeader>{t('modal.resetConversation.title')}</ModalHeader>
           <ModalBody>
-            <Text>本当にこの会話の履歴を消去しますか？</Text>
+            <Text>{t('modal.resetConversation.message')}</Text>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeResetConfirm}>
-              キャンセル
+              {t('modal.resetConversation.cancel')}
             </Button>
             <Button colorScheme="red" onClick={handleResetConversation}>
-              消去
+              {t('modal.resetConversation.reset')}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -3735,16 +3735,16 @@ export const Main = () => {
       >
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>オートアシスト会話履歴リセット</ModalHeader>
+          <ModalHeader>{t('modal.resetAutoAssist.title')}</ModalHeader>
           <ModalBody>
-            <Text>オートアシストの会話履歴を消去しますか？</Text>
+            <Text>{t('modal.resetAutoAssist.message')}</Text>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={() => setIsResetAutoAssistConfirm(false)}>
-              キャンセル
+              {t('modal.resetAutoAssist.cancel')}
             </Button>
             <Button colorScheme="red" onClick={handleResetAutoAssistFromModal}>
-              消去
+              {t('modal.resetAutoAssist.reset')}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -3754,16 +3754,16 @@ export const Main = () => {
       <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>アシスタント削除の確認</ModalHeader>
+          <ModalHeader> {t('modal.deleteAssistant.title')}</ModalHeader>
           <ModalBody>
-            <Text>このアシスタントを削除しますか？</Text>
+            <Text>{t('modal.deleteAssistant.message')}</Text>
           </ModalBody>
           <ModalFooter>
             <Button mr={3} onClick={closeDeleteModal}>
-              キャンセル
+              {t('modal.deleteAssistant.cancel')}
             </Button>
             <Button colorScheme="red" onClick={() => confirmDeleteChat()}>
-              削除
+              {t('modal.deleteAssistant.delete')}
             </Button>
           </ModalFooter>
         </ModalContent>

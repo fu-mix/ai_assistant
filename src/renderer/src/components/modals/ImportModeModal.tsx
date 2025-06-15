@@ -54,8 +54,8 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
   const handleReplace = useCallback(() => {
     if (!importedRaw) {
       toast({
-        title: 'エラー',
-        description: 'インポートデータがありません',
+        title: t('common.error'),
+        description: t('import.importError'),
         status: 'error',
         duration: 2000,
         isClosable: true
@@ -66,8 +66,8 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
     // データ検証
     if (!validateImportData(importedRaw)) {
       toast({
-        title: 'エラー',
-        description: 'インポートデータが正しい形式ではありません',
+        title: t('common.error'),
+        description: t('validation.unsupportedFormat'),
         status: 'error',
         duration: 2000,
         isClosable: true
@@ -77,13 +77,13 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
 
     onReplace(importedRaw)
     onClose()
-  }, [importedRaw, validateImportData, onReplace, onClose, toast])
+  }, [importedRaw, validateImportData, onReplace, onClose, toast, t])
 
   const handleAppend = useCallback(() => {
     if (!importedRaw) {
       toast({
-        title: 'エラー',
-        description: 'インポートデータがありません',
+        title: t('common.error'),
+        description: t('import.importError'),
         status: 'error',
         duration: 2000,
         isClosable: true
@@ -94,8 +94,8 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
     // データ検証
     if (!validateImportData(importedRaw)) {
       toast({
-        title: 'エラー',
-        description: 'インポートデータが正しい形式ではありません',
+        title: t('common.error'),
+        description: t('validation.unsupportedFormat'),
         status: 'error',
         duration: 2000,
         isClosable: true
@@ -105,21 +105,21 @@ export const ImportModeModal = memo<ImportModeModalProps>(({
 
     onAppend(importedRaw)
     onClose()
-  }, [importedRaw, validateImportData, onAppend, onClose, toast])
+  }, [importedRaw, validateImportData, onAppend, onClose, toast, t])
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>インポート方法</ModalHeader>
+        <ModalHeader>{t('import.title')}</ModalHeader>
         <ModalBody>
-          <Text mb={3}>読み込んだデータをどのように適用しますか？</Text>
+          <Text mb={3}>{t('import.title')}</Text>
           <VStack align="stretch" spacing={3}>
             <Button colorScheme="teal" variant="outline" onClick={handleAppend}>
-              既存のアシスタントに追加する
+              {t('import.appendMode')}
             </Button>
             <Button colorScheme="blue" variant="outline" onClick={handleReplace}>
-              すべて消して置き換える(リストア)
+              {t('import.replaceMode')}
             </Button>
           </VStack>
         </ModalBody>

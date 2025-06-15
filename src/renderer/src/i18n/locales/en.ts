@@ -32,6 +32,7 @@ export default {
     apiKeySettings: 'API Key Settings'
   },
   assistant: {
+    default: 'Auto Assist Mode',
     title: 'Assistant',
     autoAssist: 'AutoAssist',
     autoAssistDescription: 'Automatically suggests optimal assistant',
@@ -55,16 +56,18 @@ export default {
     copySuccess: 'Instructions copied to clipboard'
   },
   chat: {
+    default: 'Create and select an assistant to get started.',
     placeholder: 'Type a message...',
     dragDropFiles: 'Drag and drop files here, or click to select',
     unsupportedFileType: 'Unsupported file format',
     fileNotSupported: '{{fileName}} is not supported',
     attachedFiles: 'Attached Files',
-    useAssistantFile: 'Use Assistant Files',
+    useAssistantFile: 'Use Knowledge Files',
     agentMode: 'Agent Mode',
     resetConversation: 'Reset Conversation',
     resetConfirmTitle: 'Reset Conversation History',
-    resetConfirmMessage: 'Are you sure you want to reset the conversation history? This action cannot be undone.',
+    resetConfirmMessage:
+      'Are you sure you want to reset the conversation history? This action cannot be undone.',
     resetSuccess: 'Conversation history reset successfully',
     messageEmpty: 'Message is empty',
     sendError: 'Failed to send message',
@@ -191,10 +194,11 @@ export default {
       assistantNamePlaceholder: 'Enter assistant name',
       systemPrompt: 'System Prompt',
       systemPromptPlaceholder: 'Enter prompt',
-      agentFiles: 'Agent Files',
+      agentFiles: 'Knowledge files (multiple files allowed)',
       selectFile: 'Select File',
       noFiles: 'No files',
       enableApiCall: 'Enable External API Calls',
+      apiCallHelper: 'Set up external APIs that can be called by the assistant.',
       apiSettings: 'API Settings',
       create: 'Create',
       cancel: 'Cancel'
@@ -202,13 +206,17 @@ export default {
     editAssistant: {
       title: 'Assistant Settings',
       assistantName: 'Assistant Name',
+      assistantNamePlaceholder: 'Set the role and tone of the assistant',
       systemPrompt: 'System Prompt',
       systemPromptPlaceholder: 'Enter prompt',
-      agentFiles: 'Agent Files',
+      systemPromptCopy: 'Copy',
+      agentFiles: 'Knowledge files (multiple files allowed)',
       selectFile: 'Select File',
       noFiles: 'No files',
       copyInstructions: 'Copy Instructions',
+      resetConversation: 'Reset conversation history',
       enableApiCall: 'Enable External API Calls',
+      apiCallHelper: 'Set up external APIs that can be called by the assistant.',
       apiSettings: 'API Settings',
       save: 'Save',
       cancel: 'Cancel'
@@ -219,9 +227,16 @@ export default {
       delete: 'Delete',
       cancel: 'Cancel'
     },
+    resetConversation: {
+      title: 'Reset Conversation History',
+      message: 'Are you sure you want to reset conversation history?',
+      reset: 'Reset',
+      cancel: 'Cancel'
+    },
     resetAutoAssist: {
       title: 'Reset AutoAssist Conversation History',
-      message: 'Are you sure you want to reset AutoAssist conversation history? This action cannot be undone.',
+      message:
+        'Are you sure you want to reset AutoAssist conversation history? This action cannot be undone.',
       reset: 'Reset',
       cancel: 'Cancel'
     }
@@ -268,10 +283,12 @@ export default {
     responseTypeImage: 'Image',
     imageDataPath: 'Image Data Path',
     imageDataPathPlaceholder: 'e.g., data[0].b64_json',
-    imageDataPathHelp: 'Specify the location of image data (Base64) in the response JSON. e.g., data[0].b64_json',
+    imageDataPathHelp:
+      'Specify the location of image data (Base64) in the response JSON. e.g., data[0].b64_json',
     triggers: {
       title: 'API Trigger Settings',
-      description: 'API will be called when matching the following triggers. Multiple triggers can be set.',
+      description:
+        'API will be called when matching the following triggers. Multiple triggers can be set.',
       keyword: 'Keyword',
       pattern: 'Pattern',
       keywordTrigger: 'Keyword Trigger',
@@ -285,7 +302,8 @@ export default {
       patternLabel: 'Pattern',
       keywordPlaceholder: 'e.g., weather,forecast,temperature',
       patternPlaceholder: 'e.g., (Tokyo|Osaka|Nagoya) (weather|temperature)',
-      keywordHelp: 'Specify multiple keywords separated by commas. Triggers when any keyword is found.',
+      keywordHelp:
+        'Specify multiple keywords separated by commas. Triggers when any keyword is found.',
       patternHelp: 'Specify a regular expression pattern. Triggers when the pattern matches.',
       descriptionLabel: 'Description (optional)',
       descriptionPlaceholder: 'e.g., Detect weather-related questions',
