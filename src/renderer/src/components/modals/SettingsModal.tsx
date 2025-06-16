@@ -47,7 +47,7 @@ export const SettingsModal = memo<SettingsModalProps>(
     const toast = useToast()
     const [selectedTab, setSelectedTab] = useState(0)
     const [showApiModal, setShowApiModal] = useState(false)
-    
+
     // APIキー管理
     const [apiKey, setApiKey] = useState('')
     const [showApiKey, setShowApiKey] = useState(false)
@@ -71,28 +71,31 @@ export const SettingsModal = memo<SettingsModalProps>(
       }
     }, [])
 
-    const saveApiKey = useCallback(async (key: string) => {
-      try {
-        // @ts-ignore
-        await window.electronAPI?.saveApiKey(key)
-        toast({
-          title: t('common.success'),
-          description: 'APIキーを保存しました',
-          status: 'success',
-          duration: 2000,
-          isClosable: true
-        })
-      } catch (err) {
-        console.error('Failed to save API key:', err)
-        toast({
-          title: t('common.error'),
-          description: 'APIキーの保存に失敗しました',
-          status: 'error',
-          duration: 3000,
-          isClosable: true
-        })
-      }
-    }, [t, toast])
+    const saveApiKey = useCallback(
+      async (key: string) => {
+        try {
+          // @ts-ignore
+          await window.electronAPI?.saveApiKey(key)
+          toast({
+            title: t('common.success'),
+            description: t('api.saveSuccess'),
+            status: 'success',
+            duration: 2000,
+            isClosable: true
+          })
+        } catch (err) {
+          console.error('Failed to save API key:', err)
+          toast({
+            title: t('common.error'),
+            description: t('api.saveError'),
+            status: 'error',
+            duration: 3000,
+            isClosable: true
+          })
+        }
+      },
+      [t, toast]
+    )
 
     const handleApiKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
       setApiKey(e.target.value)
@@ -105,7 +108,7 @@ export const SettingsModal = memo<SettingsModalProps>(
     }, [apiKey, saveApiKey])
 
     const toggleApiKeyVisibility = useCallback(() => {
-      setShowApiKey(prev => !prev)
+      setShowApiKey((prev) => !prev)
     }, [])
 
     // モーダルが開いたらAPIキーを読み込み
@@ -177,12 +180,12 @@ export const SettingsModal = memo<SettingsModalProps>(
                 h="100%"
               >
                 <TabList minW="180px" borderRightWidth="1px" pt={4}>
-                  <Tab justifyContent="flex-start" px={6} py={3}>
+                  {/* <Tab justifyContent="flex-start" px={6} py={3}>
                     <HStack spacing={3}>
                       <Icon as={MdSettings} />
                       <Text>{t('settings.tabs.general')}</Text>
                     </HStack>
-                  </Tab>
+                  </Tab> */}
                   <Tab justifyContent="flex-start" px={6} py={3}>
                     <HStack spacing={3}>
                       <Icon as={MdLanguage} />
@@ -195,34 +198,34 @@ export const SettingsModal = memo<SettingsModalProps>(
                       <Text>{t('api.title')}</Text>
                     </HStack>
                   </Tab>
-                  <Tab justifyContent="flex-start" px={6} py={3}>
+                  {/* <Tab justifyContent="flex-start" px={6} py={3}>
                     <HStack spacing={3}>
                       <Icon as={MdApi} />
                       <Text>{t('settings.tabs.api')}</Text>
                     </HStack>
-                  </Tab>
+                  </Tab> */}
                 </TabList>
 
                 <TabPanels flex="1">
                   {/* 一般設定 */}
-                  <TabPanel p={6}>
+                  {/* <TabPanel p={6}>
                     <VStack align="stretch" spacing={6}>
                       <Box>
                         <Text fontSize="xl" fontWeight="semibold" mb={2}>
                           {t('settings.tabs.general')}
                         </Text>
                         <Text color="gray.600" fontSize="sm">
-                          一般的な設定オプションです。
+                          {t('settings.general.description')}
                         </Text>
                       </Box>
-                      {/* 将来的に追加する一般設定項目のプレースホルダー */}
+                     
                       <Box p={4} bg="gray.50" borderRadius="md">
                         <Text color="gray.500" fontSize="sm">
-                          今後、追加の設定項目がここに表示されます。
+                          {t('settings.general.futureSettings')}
                         </Text>
                       </Box>
                     </VStack>
-                  </TabPanel>
+                  </TabPanel> */}
 
                   {/* 言語設定 */}
                   <TabPanel p={6}>
@@ -238,13 +241,11 @@ export const SettingsModal = memo<SettingsModalProps>(
 
                       <Box>
                         <Text mb={4} fontWeight="medium">
-                          {t('settings.language.current')}: {currentLanguage === 'ja' ? '日本語' : 'English'}
+                          {t('settings.language.current')}:{' '}
+                          {currentLanguage === 'ja' ? '日本語' : 'English'}
                         </Text>
-                        
-                        <RadioGroup
-                          value={currentLanguage}
-                          onChange={handleLanguageChange}
-                        >
+
+                        <RadioGroup value={currentLanguage} onChange={handleLanguageChange}>
                           <Stack spacing={4}>
                             <Radio value="ja" size="lg">
                               <HStack spacing={3}>
@@ -276,7 +277,7 @@ export const SettingsModal = memo<SettingsModalProps>(
                           {t('api.title')}
                         </Text>
                         <Text color="gray.600" fontSize="sm">
-                          Google AI (Gemini) APIキーを設定します。
+                          {t('api.apiKeyDescription')}
                         </Text>
                       </Box>
 
@@ -305,14 +306,14 @@ export const SettingsModal = memo<SettingsModalProps>(
                   </TabPanel>
 
                   {/* 外部API設定 */}
-                  <TabPanel p={6}>
+                  {/* <TabPanel p={6}>
                     <VStack align="stretch" spacing={6}>
                       <Box>
                         <Text fontSize="xl" fontWeight="semibold" mb={2}>
                           {t('settings.tabs.api')}
                         </Text>
                         <Text color="gray.600" fontSize="sm">
-                          外部API連携の設定を管理します。
+                          {t('api.externalApiDescription')}
                         </Text>
                       </Box>
 
@@ -322,22 +323,20 @@ export const SettingsModal = memo<SettingsModalProps>(
                           onClick={handleOpenApiSettings}
                           leftIcon={<Icon as={MdApi} />}
                         >
-                          API設定を開く
+                          {t('api.openApiSettings')}
                         </Button>
                         <Text fontSize="sm" color="gray.500" mt={2}>
-                          現在 {apiConfigs.length} 個のAPIが設定されています
+                          {t('api.configuredApisCount', { count: apiConfigs.length })}
                         </Text>
                       </Box>
                     </VStack>
-                  </TabPanel>
+                  </TabPanel> */}
                 </TabPanels>
               </Tabs>
             </ModalBody>
 
             <ModalFooter borderTopWidth="1px">
-              <Button onClick={onClose}>
-                {t('common.close')}
-              </Button>
+              <Button onClick={onClose}>{t('common.close')}</Button>
             </ModalFooter>
           </ModalContent>
         </Modal>

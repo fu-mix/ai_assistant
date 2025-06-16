@@ -109,6 +109,9 @@ export default {
     apiKey: 'API Key',
     apiKeyPlaceholder: 'Enter API key',
     apiKeyHelp: 'The entered API key will be encrypted and saved',
+    apiKeyDescription: 'Configure your Google AI (Gemini) API key.',
+    saveSuccess: 'API key saved successfully',
+    saveError: 'Failed to save API key',
     showKey: 'Show',
     hideKey: 'Hide',
     externalApiDisabled: 'API call function is not available',
@@ -119,7 +122,10 @@ export default {
     addNew: 'Add New API',
     noConfigured: 'No APIs configured. Please create one using the "Add New API" button.',
     triggers: 'Triggers',
-    pattern: 'Pattern'
+    pattern: 'Pattern',
+    externalApiDescription: 'Manage external API integration settings.',
+    openApiSettings: 'Open API Settings',
+    configuredApisCount: 'Currently {{count}} APIs configured'
   },
   export: {
     title: 'Export Settings',
@@ -247,6 +253,10 @@ export default {
       general: 'General',
       api: 'API',
       language: 'Language'
+    },
+    general: {
+      description: 'General configuration options.',
+      futureSettings: 'Additional settings will be displayed here in the future.'
     },
     language: {
       title: 'Language Settings',

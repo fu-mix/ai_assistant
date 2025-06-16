@@ -109,6 +109,9 @@ export default {
     apiKey: 'APIキー',
     apiKeyPlaceholder: 'APIキーを入力',
     apiKeyHelp: '入力されたAPIキーは暗号化されて保存されます',
+    apiKeyDescription: 'Google AI (Gemini) APIキーを設定します。',
+    saveSuccess: 'APIキーを保存しました',
+    saveError: 'APIキーの保存に失敗しました',
     showKey: '表示',
     hideKey: '隠す',
     externalApiDisabled: 'API呼び出し機能が利用できません',
@@ -119,7 +122,10 @@ export default {
     addNew: '新しいAPIを追加',
     noConfigured: '設定されたAPIはありません。「新しいAPIを追加」ボタンから作成してください。',
     triggers: 'トリガー',
-    pattern: 'パターン'
+    pattern: 'パターン',
+    externalApiDescription: '外部API連携の設定を管理します。',
+    openApiSettings: 'API設定を開く',
+    configuredApisCount: '現在 {{count}} 個のAPIが設定されています'
   },
   export: {
     title: 'エクスポート設定',
@@ -247,6 +253,10 @@ export default {
       general: '一般',
       api: 'API',
       language: '言語'
+    },
+    general: {
+      description: '一般的な設定オプションです。',
+      futureSettings: '今後、追加の設定項目がここに表示されます。'
     },
     language: {
       title: '言語設定',
