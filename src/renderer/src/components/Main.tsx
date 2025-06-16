@@ -49,7 +49,8 @@ import {
   AutoAssistSettingsModal,
   ExportModal,
   ImportModeModal,
-  TitleEditModal
+  TitleEditModal,
+  SettingsModal
 } from './modals'
 
 function getMimeByExt(fileName: string): string | null {
@@ -750,6 +751,9 @@ export const Main = () => {
 
   // APIキー設定モーダル用のstate
   const [isApiKeySettingsOpen, setIsApiKeySettingsOpen] = useState(false)
+
+  // 統合設定モーダル用のstate
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // --------------------------------
   // 初期ロード
@@ -3020,19 +3024,25 @@ export const Main = () => {
 
         return
       }
+      
+      // インポートデータを解析して、実際に追加されるエージェントを確認
+      const importData = JSON.parse(raw) as { agents?: ChatInfo[] }
+      const importAgentCount = importData.agents?.length || 0
+      console.log(`インポート対象アシスタント数: ${importAgentCount}`)
+      
+      // appendLocalHistoryConfigを呼び出す（この関数がメインプロセス側で追加処理を行う）
       // @ts-ignore
       await window.electronAPI.appendLocalHistoryConfig(raw)
 
+      // 追加後の最新データを取得
       // @ts-ignore
       const updatedChats = await window.electronAPI.loadAgents()
-      setChats(updatedChats)
-      // @ts-ignore
-      const loaded = await window.electronAPI.loadAgents()
-      // 追加分をマージしつつ正規化
-      const normalized = normalizeAgents(loaded)
-      const merged = mergeWithoutDup(chats, normalized)
-      setChats(merged)
+      
+      // 正規化のみ実行（重複マージは行わない）
+      const normalized = normalizeAgents(updatedChats)
+      setChats(normalized)
 
+      // タイトル設定もリロード
       // @ts-ignore
       if (window.electronAPI.loadTitleSettings) {
         // @ts-ignore
@@ -3199,49 +3209,37 @@ export const Main = () => {
                 isDisabled={isExpired}
               />
               <MenuList>
+                <MenuItem onClick={() => setIsSettingsOpen(true)}>{t('common.settings')}</MenuItem>
                 <MenuItem onClick={handleExportConfig}>{t('header.dataExport')}</MenuItem>
                 <MenuItem onClick={handleImportConfig}>{t('header.dataImport')}</MenuItem>
-                <MenuItem onClick={openApiKeySettings}>{t('header.apiKeySettings')}</MenuItem>
               </MenuList>
             </Menu>
           </HStack>
         </HStack>
 
-        {/* APIキー設定モーダル */}
-        <Modal isOpen={isApiKeySettingsOpen} onClose={closeApiKeySettings} isCentered>
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>{t('api.title')}</ModalHeader>
-            <ModalBody>
-              <FormControl>
-                <FormLabel htmlFor="api-key-input">{t('api.apiKey')}</FormLabel>
-                <InputGroup size="md">
-                  <Input
-                    id="api-key-input"
-                    value={apiKey}
-                    onChange={handleApiKeyChange}
-                    onBlur={handleApiKeyBlur}
-                    placeholder={t('api.apiKeyPlaceholder')}
-                    type={showApiKey ? 'text' : 'password'}
-                    pr="4.5rem"
-                    isDisabled={isLoadingApiKey}
-                  />
-                  <InputRightElement width="4.5rem">
-                    <Button h="1.75rem" size="sm" onClick={toggleApiKeyVisibility}>
-                      {showApiKey ? t('api.hideKey') : t('api.showKey')}
-                    </Button>
-                  </InputRightElement>
-                </InputGroup>
-                <FormHelperText>{t('api.apiKeyHelp')}</FormHelperText>
-              </FormControl>
-            </ModalBody>
-            <ModalFooter>
-              <Button colorScheme="blue" onClick={closeApiKeySettings}>
-                {t('common.close')}
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </Modal>
+        {/* 統合設定モーダル */}
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          apiConfigs={editingAPIConfigs}
+          onSaveApiConfigs={(configs) => {
+            setEditingAPIConfigs(configs)
+            if (typeof selectedChatId === 'number') {
+              const updatedChats = chats.map((chat) => {
+                if (chat.id === selectedChatId) {
+                  return {
+                    ...chat,
+                    apiConfigs: configs
+                  }
+                }
+                return chat
+              })
+              setChats(updatedChats)
+              // @ts-ignore
+              window.electronAPI.saveAgents(updatedChats).catch(console.error)
+            }
+          }}
+        />
       </Flex>
 
       {/* メイン (左=アシスタント一覧, ドラッグハンドル, 右=チャット表示) */}

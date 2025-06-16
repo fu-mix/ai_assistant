@@ -241,6 +241,23 @@ export default {
       cancel: 'キャンセル'
     }
   },
+  settings: {
+    title: '設定',
+    tabs: {
+      general: '一般',
+      api: 'API',
+      language: '言語'
+    },
+    language: {
+      title: '言語設定',
+      description: 'アプリケーションの表示言語を変更します',
+      current: '現在の言語',
+      japanese: '日本語',
+      english: 'English',
+      changeSuccess: '言語を変更しました',
+      changeError: '言語の変更に失敗しました'
+    }
+  },
   apiConfig: {
     apiName: 'API名',
     apiNamePlaceholder: '天気API、検索API など',

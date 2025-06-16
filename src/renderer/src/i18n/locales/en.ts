@@ -241,6 +241,23 @@ export default {
       cancel: 'Cancel'
     }
   },
+  settings: {
+    title: 'Settings',
+    tabs: {
+      general: 'General',
+      api: 'API',
+      language: 'Language'
+    },
+    language: {
+      title: 'Language Settings',
+      description: 'Change the application display language',
+      current: 'Current Language',
+      japanese: '日本語',
+      english: 'English',
+      changeSuccess: 'Language changed successfully',
+      changeError: 'Failed to change language'
+    }
+  },
   apiConfig: {
     apiName: 'API Name',
     apiNamePlaceholder: 'Weather API, Search API, etc.',

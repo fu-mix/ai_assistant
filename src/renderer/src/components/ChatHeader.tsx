@@ -1,7 +1,9 @@
 import { memo, useMemo, useCallback } from 'react'
-import { Box, Flex, Text, IconButton, HStack, Tooltip } from '@chakra-ui/react'
+import { Box, Flex, Text, IconButton, HStack, Tooltip, Menu, MenuButton, MenuList, MenuItem } from '@chakra-ui/react'
 import { LuSettings } from 'react-icons/lu'
 import { FiEdit } from 'react-icons/fi'
+import { MdApi, MdSettings, MdFileDownload, MdFileUpload } from 'react-icons/md'
+import { useTranslation } from 'react-i18next'
 import type { TitleSettings, ChatInfo } from './types'
 
 interface ChatHeaderProps {
@@ -14,6 +16,9 @@ interface ChatHeaderProps {
   onTitleHover: (hovered: boolean) => void
   onTitleEdit: () => void
   onSettingsClick: () => void
+  onApiSettingsClick: () => void
+  onExportClick: () => void
+  onImportClick: () => void
 }
 
 export const ChatHeader = memo(
@@ -26,8 +31,12 @@ export const ChatHeader = memo(
     appVersion,
     onTitleHover,
     onTitleEdit,
-    onSettingsClick
+    onSettingsClick,
+    onApiSettingsClick,
+    onExportClick,
+    onImportClick
   }: ChatHeaderProps) => {
+    const { t } = useTranslation()
     // タイトル要素のメモ化
     const titleElements = useMemo(
       () =>
@@ -141,18 +150,32 @@ export const ChatHeader = memo(
             {currentChatTitle}
           </Text>
 
-          {/* 設定ボタン */}
+          {/* 設定メニュー */}
           <HStack spacing={2}>
-            <Tooltip label="設定" placement="bottom">
-              <IconButton
+            <Menu>
+              <MenuButton
+                as={IconButton}
                 icon={<LuSettings />}
                 variant="ghost"
                 size="md"
-                onClick={handleSettingsClick}
-                aria-label="設定"
+                aria-label={t('common.settings')}
                 _hover={{ bg: 'gray.100' }}
               />
-            </Tooltip>
+              <MenuList>
+                <MenuItem icon={<MdSettings />} onClick={handleSettingsClick}>
+                  {t('common.settings')}
+                </MenuItem>
+                <MenuItem icon={<MdApi />} onClick={onApiSettingsClick}>
+                  {t('header.apiKeySettings')}
+                </MenuItem>
+                <MenuItem icon={<MdFileDownload />} onClick={onExportClick}>
+                  {t('header.dataExport')}
+                </MenuItem>
+                <MenuItem icon={<MdFileUpload />} onClick={onImportClick}>
+                  {t('header.dataImport')}
+                </MenuItem>
+              </MenuList>
+            </Menu>
           </HStack>
         </Flex>
       </Box>
