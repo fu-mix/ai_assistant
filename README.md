@@ -4,6 +4,37 @@
 
 DesAIn_Assistantは、Electron-Viteを使用したデスクトップアプリケーションで、React、TypeScript、Chakra-UI、Tailwind CSSを使用して構築されています。Google AI (Gemini)のAPIを活用したチャットアシスタント機能を提供します。
 
+### i18n（国際化）システム
+
+本アプリケーションは`react-i18next`を使用した完全な多言語対応を実装しています：
+
+#### 実装の特徴
+- **動的言語切り替え**: アプリケーションの再起動不要で即座に言語変更
+- **翻訳キーの階層構造**: ネストされたオブジェクト形式で翻訳を整理
+- **変数補間対応**: `{{variable}}` 形式で動的な値を翻訳文に埋め込み可能
+- **TypeScript型安全**: 翻訳キーの型定義により、存在しないキーの使用を防止
+
+#### 翻訳ファイルの構成
+```
+i18n/
+├── index.ts         # i18next初期化と設定
+└── locales/
+    ├── ja.ts       # 日本語翻訳ファイル
+    └── en.ts       # 英語翻訳ファイル
+```
+
+#### 使用方法
+```typescript
+// コンポーネント内での使用例
+import { useTranslation } from 'react-i18next'
+
+const MyComponent = () => {
+  const { t } = useTranslation()
+  
+  return <Button>{t('common.save')}</Button>
+}
+```
+
 ### 主要ディレクトリ・ファイル構成
 
 ```
@@ -30,6 +61,7 @@ DesAIn_Assistant/
 │       │   │   │   ├── ExportModal.tsx - エクスポートモーダル
 │       │   │   │   ├── ImportModeModal.tsx - インポートモーダル
 │       │   │   │   ├── TitleEditModal.tsx - タイトル編集モーダル
+│       │   │   │   ├── SettingsModal.tsx - 設定モーダル（言語設定、API設定等）
 │       │   │   │   └── index.ts - モーダル群のインデックス
 │       │   │   ├── panels/ - パネルコンポーネント群
 │       │   │   ├── types/ - TypeScript型定義
@@ -48,6 +80,11 @@ DesAIn_Assistant/
 │       │   │   ├── postChatAI.ts - Gemini API通信モジュール
 │       │   │   ├── promptTemplate.ts - プロンプトテンプレート
 │       │   │   └── Versions.tsx - バージョン表示コンポーネント
+│       │   ├── i18n/ - 国際化（i18n）設定
+│       │   │   ├── index.ts - i18n初期化
+│       │   │   └── locales/ - 言語ファイル
+│       │   │       ├── ja.ts - 日本語翻訳
+│       │   │       └── en.ts - 英語翻訳
 │       │   ├── types/ - TypeScript型定義ファイル
 │       │   ├── utils/ - ユーティリティ関数
 │       │   ├── App.tsx - アプリケーションルート
@@ -120,6 +157,12 @@ DesAIn_Assistant/
    - 背景画像設定
    - ダークモード対応（Chakra-UI経由）
 
+8. **多言語対応（i18n）**
+   - 日本語・英語の切り替え機能
+   - 設定画面から簡単に言語変更可能
+   - 全UI要素の完全な翻訳対応
+   - 言語設定の永続化（再起動後も維持）
+
 ## 技術スタック
 
 - **フレームワーク**: Electron (electron-vite)
@@ -128,6 +171,7 @@ DesAIn_Assistant/
   - Chakra-UI（メインUIコンポーネント）
   - Tailwind CSS（カスタムスタイリング）
 - **アイコン**: React Icons, Lucide React
+- **国際化**: react-i18next（多言語対応）
 - **主要ライブラリ**:
   - axios: APIリクエスト
   - react-markdown: マークダウンレンダリング
@@ -177,6 +221,7 @@ DesAIn_Assistant/
 - **ExportModal.tsx**: データエクスポート用モーダル
 - **ImportModeModal.tsx**: データインポート用モーダル
 - **TitleEditModal.tsx**: タイトル編集用モーダル
+- **SettingsModal.tsx**: アプリケーション設定用モーダル（言語切り替え、API設定等）
 
 ### postChatAI.ts
 
@@ -234,14 +279,29 @@ npm run build:mac
 npm run build:linux
 ```
 
-## API設定
+## 設定機能
+
+### 言語設定
+
+アプリケーションは日本語と英語の2言語に対応しています：
+
+1. **言語切り替え**: ヘッダーの設定ボタンから設定モーダルを開き、「言語」タブで切り替え可能
+2. **対応言語**:
+   - 日本語（ja）
+   - 英語（en）
+3. **即時反映**: 言語を変更すると、すべてのUI要素が即座に新しい言語で表示
+4. **設定の永続化**: 言語設定は保存され、アプリケーション再起動後も維持
+5. **完全な翻訳**: メニュー、ボタン、メッセージ、エラー表示等、すべてのテキストが翻訳対応
+
+### API設定
 
 アプリケーションは以下の方法でAPIキーを管理します：
 
-1. **APIキー設定モーダル**: ヘッダーメニューからアクセス可能
+1. **APIキー設定**: 設定モーダルの「API設定」タブからGoogle AI (Gemini) APIキーを設定
 2. **暗号化保存**: APIキーは暗号化されてローカルに保存
 3. **自動ロード**: アプリケーション再起動時に自動的にロード
 4. **表示/非表示切り替え**: セキュリティのため表示切り替え可能
+5. **外部API設定**: 設定モーダルの「API」タブから外部API連携の詳細設定が可能
 
 ## 外部API連携機能
 

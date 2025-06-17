@@ -143,10 +143,6 @@ export const SettingsModal = memo<SettingsModalProps>(
       [t, toast]
     )
 
-    const handleOpenApiSettings = useCallback(() => {
-      setShowApiModal(true)
-    }, [])
-
     const handleCloseApiSettings = useCallback(() => {
       setShowApiModal(false)
     }, [])

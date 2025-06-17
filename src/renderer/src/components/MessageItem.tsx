@@ -16,6 +16,7 @@ interface ElectronAPI {
 
 declare global {
   interface Window {
+    // @ts-ignore
     electronAPI: ElectronAPI
   }
 }
@@ -38,112 +39,110 @@ interface ImageWithLazyLoadingProps {
  * 画像遅延読み込みコンポーネント
  * メモ化により不要な再レンダリングを防止
  */
-const ImageWithLazyLoading = memo<ImageWithLazyLoadingProps>(
-  ({ imagePath, chatHistoryRef }) => {
-    const { t } = useTranslation()
-    const [imageData, setImageData] = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
+const ImageWithLazyLoading = memo<ImageWithLazyLoadingProps>(({ imagePath, chatHistoryRef }) => {
+  const { t } = useTranslation()
+  const [imageData, setImageData] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-    // 画像読み込み処理をuseCallbackでメモ化
-    const loadImage = useCallback(async () => {
-      if (!imagePath) return
+  // 画像読み込み処理をuseCallbackでメモ化
+  const loadImage = useCallback(async () => {
+    if (!imagePath) return
 
-      try {
-        setIsLoading(true)
-        const base64Data = await window.electronAPI.loadImage(imagePath)
-        if (base64Data) {
-          setImageData(`data:image/png;base64,${base64Data}`)
-        }
-      } catch (err) {
+    try {
+      setIsLoading(true)
+      const base64Data = await window.electronAPI.loadImage(imagePath)
+      if (base64Data) {
+        setImageData(`data:image/png;base64,${base64Data}`)
+      }
+    } catch (err) {
       console.error(t('errors.loadFailed'), err)
-      } finally {
-        setIsLoading(false)
-      }
-    }, [imagePath])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [imagePath])
 
-    // 初回レンダリング時に画像読み込み
-    useEffect(() => {
-      loadImage()
-    }, [loadImage])
+  // 初回レンダリング時に画像読み込み
+  useEffect(() => {
+    loadImage()
+  }, [loadImage])
 
-    // 画像ロード完了時のハンドラー
-    const handleImageLoaded = useCallback(() => {
-      if (chatHistoryRef?.current) {
-        setTimeout(() => {
-          chatHistoryRef.current!.scrollTop = chatHistoryRef.current!.scrollHeight
-        }, 50)
-      }
-    }, [chatHistoryRef])
+  // 画像ロード完了時のハンドラー
+  const handleImageLoaded = useCallback(() => {
+    if (chatHistoryRef?.current) {
+      setTimeout(() => {
+        chatHistoryRef.current!.scrollTop = chatHistoryRef.current!.scrollHeight
+      }, 50)
+    }
+  }, [chatHistoryRef])
 
-    // 画像ダウンロード処理
-    const handleDownload = useCallback(() => {
-      if (!imageData) return
+  // 画像ダウンロード処理
+  const handleDownload = useCallback(() => {
+    if (!imageData) return
 
-      // data URLからBlobを作成
-      const byteString = atob(imageData.split(',')[1])
-      const mimeType = 'image/png'
-      const ab = new ArrayBuffer(byteString.length)
-      const ia = new Uint8Array(ab)
+    // data URLからBlobを作成
+    const byteString = atob(imageData.split(',')[1])
+    const mimeType = 'image/png'
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
 
-      for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i)
-      }
-
-      const blob = new Blob([ab], { type: mimeType })
-      const url = URL.createObjectURL(blob)
-
-      // ダウンロードリンクを作成
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `generated_image_${Date.now()}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    }, [imageData])
-
-    if (isLoading) {
-      return <Spinner size="md" />
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i)
     }
 
-    return imageData ? (
-      <Box
-        position="relative"
-        display="flex"
-        justifyContent="center"
-        width="100%"
-        mt={2}
-        mb={2}
-        onMouseEnter={(e) => e.stopPropagation()}
-        onMouseOver={(e) => e.stopPropagation()}
-        onMouseMove={(e) => e.stopPropagation()}
-      >
-        <Image
-          src={imageData}
-          alt={t('chat.generatedImage', '生成された画像')}
-          maxWidth="500px"
-          maxHeight="400px"
-          borderRadius="md"
-          objectFit="contain"
-          onLoad={handleImageLoaded}
-        />
-        <Button
-          position="absolute"
-          bottom="8px"
-          right="8px"
-          size="sm"
-          colorScheme="blue"
-          leftIcon={<DownloadIcon />}
-          onClick={handleDownload}
-        >
-          {t('common.download', 'ダウンロード')}
-        </Button>
-      </Box>
-    ) : (
-      <Text color="red.500">{t('errors.imageLoadError', '画像を読み込めませんでした')}</Text>
-    )
+    const blob = new Blob([ab], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+
+    // ダウンロードリンクを作成
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `generated_image_${Date.now()}.png`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [imageData])
+
+  if (isLoading) {
+    return <Spinner size="md" />
   }
-)
+
+  return imageData ? (
+    <Box
+      position="relative"
+      display="flex"
+      justifyContent="center"
+      width="100%"
+      mt={2}
+      mb={2}
+      onMouseEnter={(e) => e.stopPropagation()}
+      onMouseOver={(e) => e.stopPropagation()}
+      onMouseMove={(e) => e.stopPropagation()}
+    >
+      <Image
+        src={imageData}
+        alt={t('chat.generatedImage', '生成された画像')}
+        maxWidth="500px"
+        maxHeight="400px"
+        borderRadius="md"
+        objectFit="contain"
+        onLoad={handleImageLoaded}
+      />
+      <Button
+        position="absolute"
+        bottom="8px"
+        right="8px"
+        size="sm"
+        colorScheme="blue"
+        leftIcon={<DownloadIcon />}
+        onClick={handleDownload}
+      >
+        {t('common.download', 'ダウンロード')}
+      </Button>
+    </Box>
+  ) : (
+    <Text color="red.500">{t('errors.imageLoadError', '画像を読み込めませんでした')}</Text>
+  )
+})
 
 ImageWithLazyLoading.displayName = 'ImageWithLazyLoading'
 

@@ -26,9 +26,7 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  FormHelperText,
-  InputRightElement,
-  InputGroup
+  FormHelperText
 } from '@chakra-ui/react'
 import { useTranslation } from 'react-i18next'
 import { MessageList } from './MessageList'
@@ -746,11 +744,13 @@ export const Main = () => {
     }
   }
 
-  const [isLoadingApiKey, setIsLoadingApiKey] = useState(true)
-  const [showApiKey, setShowApiKey] = useState(false)
+  const [_isLoadingApiKey, setIsLoadingApiKey] = useState(true)
+
+  //const [_showApiKey, setShowApiKey] = useState(false)
 
   // APIキー設定モーダル用のstate
-  const [isApiKeySettingsOpen, setIsApiKeySettingsOpen] = useState(false)
+
+  // const [_isApiKeySettingsOpen, setIsApiKeySettingsOpen] = useState(false)
 
   // 統合設定モーダル用のstate
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -2949,24 +2949,6 @@ export const Main = () => {
     }))
   }
 
-  /** 追加インポート時の ID 重複・AUTO_ASSIST_ID(999999) ガード */
-  function mergeWithoutDup(base: ChatInfo[], incoming: ChatInfo[]): ChatInfo[] {
-    const baseIds = new Set(base.map((c) => c.id))
-    const next: ChatInfo[] = []
-
-    for (const item of incoming) {
-      if (item.id === AUTO_ASSIST_ID) continue // AutoAssist は常に 1 つ
-      if (baseIds.has(item.id)) {
-        // 重複したらタイムスタンプで新 ID を振り直す
-        next.push({ ...item, id: Date.now() + Math.floor(Math.random() * 1000) })
-      } else {
-        next.push(item)
-      }
-    }
-
-    return [...base, ...next]
-  }
-
   async function doReplaceImport(raw: string) {
     try {
       // @ts-ignore
@@ -3024,12 +3006,12 @@ export const Main = () => {
 
         return
       }
-      
+
       // インポートデータを解析して、実際に追加されるエージェントを確認
       const importData = JSON.parse(raw) as { agents?: ChatInfo[] }
       const importAgentCount = importData.agents?.length || 0
       console.log(`インポート対象アシスタント数: ${importAgentCount}`)
-      
+
       // appendLocalHistoryConfigを呼び出す（この関数がメインプロセス側で追加処理を行う）
       // @ts-ignore
       await window.electronAPI.appendLocalHistoryConfig(raw)
@@ -3037,7 +3019,7 @@ export const Main = () => {
       // 追加後の最新データを取得
       // @ts-ignore
       const updatedChats = await window.electronAPI.loadAgents()
-      
+
       // 正規化のみ実行（重複マージは行わない）
       const normalized = normalizeAgents(updatedChats)
       setChats(normalized)
@@ -3089,49 +3071,14 @@ export const Main = () => {
     }
   }, [])
 
-  // APIキー保存関数 - 最小限のコード
-  const saveApiKey = useCallback(async (key: string) => {
-    // @ts-ignore
-    if (!window.electronAPI?.saveApiKey) return
-
-    try {
-      // @ts-ignore
-      await window.electronAPI.saveApiKey(key)
-    } catch (err) {
-      console.error('Failed to save API key:', err)
-    }
-  }, [])
-
-  // APIキー変更ハンドラ
-  const handleApiKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setApiKey(e.target.value)
-  }, [])
-
-  // フォーカスアウト時の処理 - シンプルに保存
-  const handleApiKeyBlur = useCallback(() => {
-    if (apiKey && apiKey.trim() !== '') {
-      saveApiKey(apiKey)
-    }
-  }, [apiKey, saveApiKey])
-
   // 初回ロード時にAPIキーを読み込む
   useEffect(() => {
     loadSavedApiKey()
   }, [loadSavedApiKey])
 
-  // APIキー設定モーダルを開く関数
-  const openApiKeySettings = useCallback(() => {
-    setIsApiKeySettingsOpen(true)
-  }, [])
-
-  // APIキー設定モーダルを閉じる関数
-  const closeApiKeySettings = useCallback(() => {
-    setIsApiKeySettingsOpen(false)
-  }, [])
-
-  const toggleApiKeyVisibility = useCallback(() => {
-    setShowApiKey((prev) => !prev)
-  }, [])
+  // const toggleApiKeyVisibility = useCallback(() => {
+  //   setShowApiKey((prev) => !prev)
+  // }, [])
 
   // --------------------------------
   // JSX
@@ -3232,6 +3179,7 @@ export const Main = () => {
                     apiConfigs: configs
                   }
                 }
+
                 return chat
               })
               setChats(updatedChats)

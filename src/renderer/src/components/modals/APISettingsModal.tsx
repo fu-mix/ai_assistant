@@ -183,9 +183,7 @@ export const APISettingsModal = memo<APISettingsModalProps>(
                   </Button>
 
                   {localConfigs.length === 0 ? (
-                    <Text>
-                      {t('api.noConfigured')}
-                    </Text>
+                    <Text>{t('api.noConfigured')}</Text>
                   ) : (
                     <List spacing={3}>
                       {localConfigs.map((config) => (
@@ -200,7 +198,10 @@ export const APISettingsModal = memo<APISettingsModalProps>(
                                 {t('api.triggers')}:{' '}
                                 {config.triggers.length > 0
                                   ? config.triggers
-                                      .map((t) => (t.type === 'keyword' ? t.value : t('api.pattern')))
+                                      .map((t) =>
+                                        // @ts-ignore
+                                        t.type === 'keyword' ? t.value : t('api.pattern')
+                                      )
                                       .join(', ')
                                   : t('common.none')}
                               </Text>
