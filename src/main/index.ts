@@ -69,6 +69,20 @@ let apiKeyStore: any = null
 // 言語設定用ストア変数
 let languageStore: any = null
 
+/* ────────────────────────────────────────────────
+   共通ユーティリティ
+──────────────────────────────────────────────── */
+function buildProxyAgent() {
+  // .env で定義されていなければ '' が返る
+  const proxy = `${import.meta.env.MAIN_VITE_PROXY}`.trim()
+
+  // 空文字列なら Agent を作らない
+  if (!proxy) return { useProxy: false } // ⟵ ここで終了
+
+  // Proxy が設定されている場合だけ生成
+  return { useProxy: true, httpsAgent: new HttpsProxyAgent(proxy) }
+}
+
 async function initStore() {
   const myRequire = createRequire(import.meta.url)
   const storeModule = myRequire('electron-store')
@@ -304,7 +318,9 @@ ipcMain.handle(
     }
     const API_ENDPOINT = `${import.meta.env.MAIN_VITE_API_ENDPOINT}`
 
-    const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
+    const proxyUrl = `${import.meta.env.MAIN_VITE_PROXY}`.trim()
+    const useProxy = proxyUrl !== ''
+    const httpsAgent = useProxy ? new HttpsProxyAgent(proxyUrl) : undefined
 
     try {
       const response = await axios.post(
@@ -321,8 +337,9 @@ ipcMain.handle(
             Authorization: `Bearer ${apiKey}`,
             'Access-Control-Allow-Origin': '*'
           },
-          httpsAgent,
-          proxy: false
+          // httpsAgent,
+          // proxy: false
+          ...(useProxy && { httpsAgent, proxy: false })
         }
       )
       if (response.status !== 200) {
@@ -833,14 +850,25 @@ ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) =>
     }
 
     // APIリクエスト実行
+    // const response = await axios({
+    //   method: method.toLowerCase(),
+    //   url,
+    //   headers: finalHeaders,
+    //   data: requestData,
+    //   httpsAgent: new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`),
+    //   proxy: false,
+    //   // 画像の場合はJSONレスポンスを期待
+    //   responseType: 'json'
+    // })
+
+    const { httpsAgent, useProxy } = buildProxyAgent()
+
     const response = await axios({
       method: method.toLowerCase(),
       url,
       headers: finalHeaders,
       data: requestData,
-      httpsAgent: new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`),
-      proxy: false,
-      // 画像の場合はJSONレスポンスを期待
+      ...(useProxy && { httpsAgent, proxy: false }), // 空なら付かない
       responseType: 'json'
     })
 
@@ -1110,12 +1138,14 @@ ipcMain.handle('get-stored-locale', () => {
   try {
     if (!languageStore) {
       console.error('Language Store not initialized')
+
       return null
     }
 
     return languageStore.get('language', null)
   } catch (err) {
     console.error('Error loading language setting:', err)
+
     return null
   }
 })
@@ -1124,13 +1154,16 @@ ipcMain.handle('set-locale', (_event, language: string) => {
   try {
     if (!languageStore) {
       console.error('Language Store not initialized')
+
       return false
     }
 
     languageStore.set('language', language)
+
     return true
   } catch (err) {
     console.error('Error saving language setting:', err)
+
     return false
   }
 })
