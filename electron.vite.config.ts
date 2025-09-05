@@ -2,19 +2,40 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  main: {
-    plugins: [externalizeDepsPlugin()]
-  },
-  preload: {
-    plugins: [externalizeDepsPlugin()]
-  },
-  renderer: {
-    resolve: {
-      alias: {
-        '@renderer': resolve('src/renderer/src')
-      }
+export default defineConfig(() => {
+  // 環境変数CUSTOM_ENV_PATHが設定されていればそれを使い、なければデフォルトパスを使用
+  const envDir = process.env.CUSTOM_ENV_PATH ? resolve(process.env.CUSTOM_ENV_PATH) : resolve('.') // プロジェクトルート
+
+  const ReactCompilerConfig = {
+    sources: (filename) => {
+      return filename.indexOf('src/renderer/src/components/') !== -1
     },
-    plugins: [react()]
+    target: '18'
+  }
+
+  return {
+    main: {
+      plugins: [externalizeDepsPlugin()],
+      envDir: envDir // メインプロセス用の環境変数ディレクトリ
+    },
+    preload: {
+      plugins: [externalizeDepsPlugin()],
+      envDir: envDir // プリロードプロセス用の環境変数ディレクトリ
+    },
+    renderer: {
+      resolve: {
+        alias: {
+          '@renderer': resolve('src/renderer/src')
+        }
+      },
+      plugins: [
+        react({
+          babel: {
+            plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]]
+          }
+        })
+      ],
+      envDir: envDir // レンダラープロセス用の環境変数ディレクトリ
+    }
   }
 })

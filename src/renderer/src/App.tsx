@@ -1,9 +1,9 @@
-import { FinalRefinedElectronAppMockup } from './components/FinalRefinedElectronAppMockup'
+import { Main } from './components/Main'
 
 function App(): JSX.Element {
   return (
     <div>
-      <FinalRefinedElectronAppMockup />
+      <Main />
     </div>
     // <>
     //   <img alt="logo" className="logo" src={electronLogo} />

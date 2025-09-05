@@ -1,4 +1,5 @@
 module.exports = {
+  plugins:["react-compiler"],
   extends: [
     'eslint:recommended',
     'plugin:react/recommended',

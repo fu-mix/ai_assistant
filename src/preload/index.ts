@@ -59,14 +59,51 @@ if (process.contextIsolated) {
         return await ipcRenderer.invoke('replace-local-history-config', newContent)
       },
 
-      // ★ New: 部分エクスポート（複数IDを渡す）
-      exportSelectedAgents: async (selectedIds: number[]) => {
-        return await ipcRenderer.invoke('export-selected-agents', selectedIds)
+      // 部分エクスポート（オブジェクトとして渡す）
+      exportSelectedAgents: async (arg: { selectedIds: number[]; includeHistory: boolean }) => {
+        return await ipcRenderer.invoke('export-selected-agents', arg)
       },
 
-      // ★ New: 追加インポート
+      // 追加インポート
       appendLocalHistoryConfig: async (newContent: string) => {
         return await ipcRenderer.invoke('append-local-history-config', newContent)
+      },
+
+      // 外部API呼び出し
+      callExternalAPI: async (apiConfig: any, params: any) => {
+        return await ipcRenderer.invoke('callExternalAPI', apiConfig, params)
+      },
+      // 画像保存用の関数を追加
+      saveImageToFile: async (base64Data: string) => {
+        return await ipcRenderer.invoke('save-image-to-file', base64Data)
+      },
+
+      // 画像読み込み用の関数を追加
+      loadImage: async (imagePath: string) => {
+        return await ipcRenderer.invoke('load-image', imagePath)
+      },
+      directDeleteFile: async (filePath: string) => {
+        return await ipcRenderer.invoke('direct-delete-file', filePath)
+      },
+      getUserDataPath: async () => {
+        return await ipcRenderer.invoke('get-user-data-path')
+      },
+      saveApiKey: async (apiKey: string) => {
+        return await ipcRenderer.invoke('save-api-key', apiKey)
+      },
+      loadApiKey: async () => {
+        return await ipcRenderer.invoke('load-api-key')
+      },
+
+      // 言語設定関連
+      getSystemLocale: async () => {
+        return await ipcRenderer.invoke('get-system-locale')
+      },
+      getStoredLocale: async () => {
+        return await ipcRenderer.invoke('get-stored-locale')
+      },
+      setLocale: async (language: string) => {
+        return await ipcRenderer.invoke('set-locale', language)
       }
     })
   } catch (error) {

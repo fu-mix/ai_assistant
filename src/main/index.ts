@@ -63,6 +63,26 @@ type TitleSettings = {
 import { createRequire } from 'module'
 let store: any = null
 
+// APIキー用ストア変数
+let apiKeyStore: any = null
+
+// 言語設定用ストア変数
+let languageStore: any = null
+
+/* ────────────────────────────────────────────────
+   共通ユーティリティ
+──────────────────────────────────────────────── */
+function buildProxyAgent() {
+  // .env で定義されていなければ '' が返る
+  const proxy = `${import.meta.env.MAIN_VITE_PROXY}`.trim()
+
+  // 空文字列なら Agent を作らない
+  if (!proxy) return { useProxy: false } // ⟵ ここで終了
+
+  // Proxy が設定されている場合だけ生成
+  return { useProxy: true, httpsAgent: new HttpsProxyAgent(proxy) }
+}
+
 async function initStore() {
   const myRequire = createRequire(import.meta.url)
   const storeModule = myRequire('electron-store')
@@ -80,6 +100,50 @@ async function initStore() {
   })
 
   return storeInstance
+}
+
+// APIキー専用ストアの初期化関数を分離
+async function initApiKeyStore() {
+  const myRequire = createRequire(import.meta.url)
+  const storeModule = myRequire('electron-store')
+  const ElectronStore = storeModule.default
+
+  const userDataPath = app.getPath('userData')
+  const secureDir = path.join(userDataPath, 'secure')
+
+  // マシン固有情報から暗号化キーを生成
+  const machineId = os.hostname() + os.userInfo().username
+  const encryptionKey = Buffer.from(machineId).toString('hex').slice(0, 32)
+
+  // APIキー専用の暗号化ストアを別ファイルで作成
+  const apiKeyStoreInstance = new ElectronStore({
+    name: 'api-keys', // 別のファイル名を使用
+    cwd: secureDir,
+    encryptionKey, // 暗号化キーを設定
+    clearInvalidConfig: true
+  })
+
+  return apiKeyStoreInstance
+}
+
+// 言語設定専用ストアの初期化関数
+async function initLanguageStore() {
+  const myRequire = createRequire(import.meta.url)
+  const storeModule = myRequire('electron-store')
+  const ElectronStore = storeModule.default
+
+  const userDataPath = app.getPath('userData')
+  const configDir = path.join(userDataPath, 'config')
+
+  const languageStoreInstance = new ElectronStore({
+    name: 'language-settings',
+    cwd: configDir,
+    defaults: {
+      language: null // 初回はnull
+    }
+  })
+
+  return languageStoreInstance
 }
 
 function createWindow(): void {
@@ -120,6 +184,12 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   try {
     store = await initStore()
+
+    // APIキー専用ストアを別途初期化
+    apiKeyStore = await initApiKeyStore()
+
+    // 言語設定ストアの初期化
+    languageStore = await initLanguageStore()
   } catch (err) {
     console.error('Error init store:', err)
   }
@@ -246,10 +316,11 @@ ipcMain.handle(
       console.log('apiKey:', apiKey ? '********' : '(none)')
       console.log('systemPrompt:', systemPrompt)
     }
-    const API_ENDPOINT =
-      'https://api.ai-service.global.fujitsu.com/ai-foundation/chat-ai/gemini/flash:generateContent'
+    const API_ENDPOINT = `${import.meta.env.MAIN_VITE_API_ENDPOINT}`
 
-    const httpsAgent = new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`)
+    const proxyUrl = `${import.meta.env.MAIN_VITE_PROXY}`.trim()
+    const useProxy = proxyUrl !== ''
+    const httpsAgent = useProxy ? new HttpsProxyAgent(proxyUrl) : undefined
 
     try {
       const response = await axios.post(
@@ -266,8 +337,9 @@ ipcMain.handle(
             Authorization: `Bearer ${apiKey}`,
             'Access-Control-Allow-Origin': '*'
           },
-          httpsAgent,
-          proxy: false
+          // httpsAgent,
+          // proxy: false
+          ...(useProxy && { httpsAgent, proxy: false })
         }
       )
       if (response.status !== 200) {
@@ -665,5 +737,433 @@ ipcMain.handle('append-local-history-config', async (_event, newContent: string)
   } catch (err) {
     console.error('[append-local-history-config] 追加インポートエラー:', err)
     throw err
+  }
+})
+
+// 外部API呼び出し用のIPC通信ハンドラを追加
+ipcMain.handle('callExternalAPI', async (_event, apiConfig: any, params: any) => {
+  const debugFlag = `${import.meta.env.MAIN_VITE_DEBUG}`
+
+  try {
+    const { endpoint, method, headers, bodyTemplate, queryParamsTemplate, authType, authConfig } =
+      apiConfig
+
+    if (debugFlag) {
+      console.log('\n=== API Request ===')
+      console.log('Endpoint:', endpoint)
+      console.log('Method:', method)
+      console.log('Headers:', JSON.stringify(headers, null, 2))
+      console.log('Parameters:', JSON.stringify(params, null, 2))
+
+      // 認証情報のマスク処理（既存のコード）
+      let authInfo = 'None'
+      if (authType === 'bearer') authInfo = 'Bearer Token: ********'
+      else if (authType === 'apiKey')
+        authInfo = `API Key (${authConfig?.keyName || 'unknown'}): ********`
+      else if (authType === 'basic') authInfo = 'Basic Auth: ********'
+      console.log('Authentication:', authInfo)
+    }
+
+    // 既存の認証情報処理（変更なし）
+    const finalHeaders = { ...headers }
+    if (authType === 'bearer' && authConfig?.token) {
+      let token = authConfig.token
+      if (token.includes('${params.apiKey}') && params.apiKey) {
+        token = params.apiKey
+      }
+      finalHeaders['Authorization'] = `Bearer ${token}`
+    } else if (authType === 'basic' && authConfig?.username && authConfig?.password) {
+      const auth = Buffer.from(`${authConfig.username}:${authConfig.password}`).toString('base64')
+      finalHeaders['Authorization'] = `Basic ${auth}`
+    } else if (authType === 'apiKey' && authConfig?.keyName && authConfig?.keyValue) {
+      if (authConfig.inHeader) {
+        finalHeaders[authConfig.keyName] = authConfig.keyValue
+      }
+    }
+
+    // 既存のリクエストボディとクエリパラメータの処理（変更なし）
+    let url = endpoint
+    let requestData = null
+
+    if (queryParamsTemplate) {
+      try {
+        const paramsObj = params || {}
+        const templateFn = new Function(
+          'params',
+          'return `' + queryParamsTemplate.replace(/`/g, '\\`') + '`'
+        )
+        const queryParamsJson = templateFn(paramsObj)
+        const queryParams = JSON.parse(queryParamsJson)
+
+        const queryString = Object.entries(queryParams)
+          .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+          .join('&')
+        if (debugFlag) {
+          console.log('Query Parameters:', queryString)
+        }
+
+        url = `${endpoint}${url.includes('?') ? '&' : '?'}${queryString}`
+      } catch (err) {
+        console.error('Failed to process query parameters:', err)
+      }
+    }
+
+    if (bodyTemplate && (method === 'POST' || method === 'PUT')) {
+      try {
+        const paramsObj = params || {}
+
+        // プロンプトなどの文字列パラメータの改行を適切に処理
+        const sanitizedParams = { ...paramsObj }
+
+        // 画像生成用のプロンプトなど、文字列型パラメータの改行を処理
+        Object.keys(sanitizedParams).forEach((key) => {
+          if (typeof sanitizedParams[key] === 'string') {
+            // 改行を空白に置換して1行にする
+            sanitizedParams[key] = sanitizedParams[key].replace(/\r?\n/g, ' ')
+          }
+        })
+
+        // テンプレートからリクエストボディを生成する際にsanitizedParamsを渡す
+        const templateFn = new Function(
+          'params',
+          'return `' + bodyTemplate.replace(/`/g, '\\`') + '`'
+        )
+
+        // sanitizedParamsを引数として渡す
+        const bodyJson = templateFn(sanitizedParams)
+        // const templateFn = new Function(
+        //   'params',
+        //   'return `' + bodyTemplate.replace(/`/g, '\\`') + '`'
+        // )
+        // const bodyJson = templateFn(paramsObj)
+        requestData = JSON.parse(bodyJson)
+        if (debugFlag) {
+          console.log('Request Body:', JSON.stringify(requestData, null, 2))
+        }
+      } catch (err) {
+        console.error('Failed to process request body:', err)
+      }
+    }
+
+    if (debugFlag) {
+      console.log('==================\n')
+    }
+
+    // APIリクエスト実行
+    // const response = await axios({
+    //   method: method.toLowerCase(),
+    //   url,
+    //   headers: finalHeaders,
+    //   data: requestData,
+    //   httpsAgent: new HttpsProxyAgent(`${import.meta.env.MAIN_VITE_PROXY}`),
+    //   proxy: false,
+    //   // 画像の場合はJSONレスポンスを期待
+    //   responseType: 'json'
+    // })
+
+    const { httpsAgent, useProxy } = buildProxyAgent()
+
+    const response = await axios({
+      method: method.toLowerCase(),
+      url,
+      headers: finalHeaders,
+      data: requestData,
+      ...(useProxy && { httpsAgent, proxy: false }), // 空なら付かない
+      responseType: 'json'
+    })
+
+    if (debugFlag) {
+      console.log('\n=== API Response ===')
+      console.log('Status:', response.status)
+      console.log('Headers:', JSON.stringify(response.headers, null, 2))
+      console.log('Data:', JSON.stringify(response.data, null, 2).substring(0, 1000) + '...')
+      console.log('====================\n')
+    }
+
+    // 画像生成APIの場合の特別処理
+    if (apiConfig.responseType === 'image') {
+      try {
+        // imageDataPathからデータを抽出（例: 'data[0].b64_json'）
+        let base64Data = response.data
+
+        if (apiConfig.imageDataPath) {
+          // ドット記法でネストされたプロパティにアクセス
+          const pathParts = apiConfig.imageDataPath.split('.')
+          let current = response.data
+
+          // 配列表記（例: data[0]）も処理
+          for (const part of pathParts) {
+            const arrayMatch = part.match(/^([^\[]+)\[(\d+)\]$/)
+            if (arrayMatch) {
+              // 配列要素へのアクセス
+              const [_, arrayName, index] = arrayMatch
+              current = current[arrayName][parseInt(index)]
+            } else {
+              // 通常のプロパティアクセス
+              current = current[part]
+            }
+          }
+
+          base64Data = current
+        }
+
+        // ここでbase64Dataが実際の画像データになっているはず
+        if (base64Data) {
+          // 画像データをレンダラープロセスに返す
+          return {
+            success: true,
+            type: 'image',
+            data: base64Data,
+            status: response.status
+          }
+        }
+      } catch (err) {
+        console.error('Error processing image response:', err)
+      }
+    }
+
+    // 既存のレスポンス処理
+    let formattedResponse = response.data
+    if (apiConfig.responseTemplate) {
+      try {
+        const templateFn = new Function(
+          'responseObj',
+          'return `' + apiConfig.responseTemplate.replace(/`/g, '\\`') + '`'
+        )
+        formattedResponse = templateFn(response.data)
+      } catch (err) {
+        console.error('Error formatting response:', err)
+      }
+    }
+
+    return {
+      success: true,
+      data: formattedResponse,
+      status: response.status
+    }
+  } catch (error) {
+    console.error('Error calling external API:', error)
+
+    if (debugFlag) {
+      console.log('\n=== API Error ===')
+      // @ts-ignore
+      console.log('Message:', error.message)
+      // @ts-ignore
+      console.log('Status:', error.response?.status)
+      // @ts-ignore
+      console.log('Data:', error.response?.data)
+      console.log('================\n')
+    }
+
+    return {
+      success: false,
+      // @ts-ignore
+      error: error.message,
+      // @ts-ignore
+      status: error.response?.status || 500
+    }
+  }
+})
+// 画像保存用IPCハンドラー
+ipcMain.handle('save-image-to-file', async (_event, base64Data: string) => {
+  const imageId = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+  const userDataDir = app.getPath('userData')
+  const imagesDir = path.join(userDataDir, 'images')
+
+  // imagesディレクトリの作成
+  if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir, { recursive: true })
+  }
+
+  const filePath = path.join(imagesDir, `${imageId}.png`)
+
+  try {
+    // Base64データをデコードして保存
+    const imageBuffer = Buffer.from(base64Data, 'base64')
+    fs.writeFileSync(filePath, imageBuffer)
+
+    // 相対パスを返す
+    return `images/${imageId}.png`
+  } catch (err) {
+    console.error('Failed to save image:', err)
+    throw err
+  }
+})
+
+// 画像読み込み用IPCハンドラー
+ipcMain.handle('load-image', async (_event, imagePath: string) => {
+  try {
+    const userDataDir = app.getPath('userData')
+    const fullPath = path.join(userDataDir, imagePath)
+
+    if (fs.existsSync(fullPath)) {
+      const data = fs.readFileSync(fullPath)
+
+      return data.toString('base64')
+    }
+
+    return null
+  } catch (err) {
+    console.error('Failed to load image:', err)
+
+    return null
+  }
+})
+
+ipcMain.handle('direct-delete-file', (_event, filePath: string) => {
+  if (!filePath) return false
+  console.log(`[direct-delete-file] 削除試行: ${filePath}`)
+
+  try {
+    // 絶対パスとして試行
+    if (path.isAbsolute(filePath)) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        console.log(`[direct-delete-file] 絶対パスで削除成功: ${filePath}`)
+
+        return true
+      }
+    }
+
+    // 相対パスの場合または絶対パスでの削除に失敗した場合
+    // ユーザーデータディレクトリと結合して試行
+    const userDataDir = app.getPath('userData')
+
+    // パターン1: userDataDir直下
+    let combinedPath = path.join(userDataDir, filePath)
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] ユーザーデータ直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    // パターン2: userDataDir/files直下
+    combinedPath = path.join(userDataDir, 'files', filePath.replace(/^files[/\\]?/, ''))
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] files直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    // パターン3: userDataDir/images直下
+    combinedPath = path.join(userDataDir, 'images', path.basename(filePath))
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] images直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    // パターン4: userDataDir/files/images直下
+    combinedPath = path.join(userDataDir, 'files', 'images', path.basename(filePath))
+    if (fs.existsSync(combinedPath)) {
+      fs.unlinkSync(combinedPath)
+      console.log(`[direct-delete-file] files/images直下で削除成功: ${combinedPath}`)
+
+      return true
+    }
+
+    console.log(`[direct-delete-file] 該当ファイルが見つかりませんでした: ${filePath}`)
+
+    return false
+  } catch (err) {
+    console.error(`[direct-delete-file] 削除エラー: ${filePath}`, err)
+
+    return false
+  }
+})
+
+// ----------------------
+// get-user-data-path
+// ----------------------
+ipcMain.handle('get-user-data-path', () => {
+  return app.getPath('userData')
+})
+
+// APIキー保存用のIPCハンドラを追加
+ipcMain.handle('save-api-key', (_event, apiKey: string) => {
+  try {
+    if (!apiKeyStore) {
+      console.error('API Key Store not initialized')
+
+      return false
+    }
+
+    // 空のキーなら削除
+    if (!apiKey || apiKey.trim() === '') {
+      apiKeyStore.delete('apiKey')
+
+      return true
+    }
+
+    // APIキーを保存
+    apiKeyStore.set('apiKey', apiKey)
+
+    return true
+  } catch (err) {
+    console.error('Error saving API key:', err)
+
+    return false
+  }
+})
+
+// APIキー読み込み用のIPCハンドラを追加
+ipcMain.handle('load-api-key', () => {
+  try {
+    if (!apiKeyStore) {
+      console.error('API Key Store not initialized')
+
+      return ''
+    }
+
+    return apiKeyStore.get('apiKey', '')
+  } catch (err) {
+    console.error('Error loading API key:', err)
+
+    return ''
+  }
+})
+
+// ----------------------
+// 言語設定用IPCハンドラー
+// ----------------------
+ipcMain.handle('get-system-locale', () => {
+  // システムのロケール情報を取得
+  return app.getLocale()
+})
+
+ipcMain.handle('get-stored-locale', () => {
+  try {
+    if (!languageStore) {
+      console.error('Language Store not initialized')
+
+      return null
+    }
+
+    return languageStore.get('language', null)
+  } catch (err) {
+    console.error('Error loading language setting:', err)
+
+    return null
+  }
+})
+
+ipcMain.handle('set-locale', (_event, language: string) => {
+  try {
+    if (!languageStore) {
+      console.error('Language Store not initialized')
+
+      return false
+    }
+
+    languageStore.set('language', language)
+
+    return true
+  } catch (err) {
+    console.error('Error saving language setting:', err)
+
+    return false
   }
 })
