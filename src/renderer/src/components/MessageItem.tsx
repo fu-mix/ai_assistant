@@ -181,8 +181,6 @@ export const MessageItem = memo<MessageItemProps>(
       <Box
         mb={6}
         position="relative"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         display="flex"
         justifyContent={message.type === 'user' ? 'flex-end' : 'flex-start'}
       >
@@ -206,6 +204,8 @@ export const MessageItem = memo<MessageItemProps>(
             wordBreak: 'break-word',
             overflow: 'hidden'
           }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           _after={{
             content: '""',
             position: 'absolute',
@@ -277,45 +277,44 @@ export const MessageItem = memo<MessageItemProps>(
         {isHovered && (
           <HStack 
             position="absolute" 
-            top={-12} 
-            right={message.type === 'user' ? 0 : 'auto'}
-            left={message.type === 'user' ? 'auto' : 0}
+            top={2} 
+            right={2}
             bg="rgba(255, 255, 255, 0.95)" 
-            borderRadius="12px" 
-            boxShadow="0 4px 12px rgba(0, 0, 0, 0.15)"
+            borderRadius="8px" 
+            boxShadow="0 2px 8px rgba(0, 0, 0, 0.15)"
             border="1px solid rgba(102, 126, 234, 0.1)"
             backdropFilter="blur(10px)"
             p={1}
             spacing={1}
-            zIndex={10}
+            zIndex={20}
           >
             <IconButton
               icon={<MdOutlineContentCopy />}
               aria-label={t('common.copy')}
-              size="sm"
+              size="xs"
               variant="ghost"
               onClick={handleCopy}
               color="purple.600"
               _hover={{
                 bg: 'purple.50',
-                transform: 'scale(1.1)'
+                transform: 'scale(1.05)'
               }}
-              borderRadius="8px"
+              borderRadius="6px"
               transition="all 0.2s ease"
             />
             {message.type === 'user' && (
               <IconButton
                 icon={<FiEdit />}
                 aria-label={t('common.edit')}
-                size="sm"
+                size="xs"
                 variant="ghost"
                 onClick={handleEdit}
                 color="purple.600"
                 _hover={{
                   bg: 'purple.50',
-                  transform: 'scale(1.1)'
+                  transform: 'scale(1.05)'
                 }}
-                borderRadius="8px"
+                borderRadius="6px"
                 transition="all 0.2s ease"
               />
             )}
