@@ -179,20 +179,49 @@ export const MessageItem = memo<MessageItemProps>(
 
     return (
       <Box
-        mb={4}
-        p={3}
-        rounded="lg"
-        bg={message.type === 'user' ? 'gray.300' : 'gray.50'}
+        mb={6}
         position="relative"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        style={{
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          maxWidth: '100%',
-          overflow: 'hidden'
-        }}
+        display="flex"
+        justifyContent={message.type === 'user' ? 'flex-end' : 'flex-start'}
       >
+        <Box
+          maxW="75%"
+          p={4}
+          borderRadius="20px"
+          bg={message.type === 'user' 
+            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+            : 'white'
+          }
+          color={message.type === 'user' ? 'white' : 'gray.800'}
+          boxShadow={message.type === 'user' 
+            ? '0 8px 25px rgba(102, 126, 234, 0.25)' 
+            : '0 4px 12px rgba(0, 0, 0, 0.08)'
+          }
+          border={message.type === 'user' ? 'none' : '1px solid rgba(102, 126, 234, 0.1)'}
+          position="relative"
+          style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            overflow: 'hidden'
+          }}
+          _after={{
+            content: '""',
+            position: 'absolute',
+            bottom: '12px',
+            [message.type === 'user' ? 'right' : 'left']: '-8px',
+            width: 0,
+            height: 0,
+            borderStyle: 'solid',
+            borderWidth: message.type === 'user' 
+              ? '8px 0 8px 12px' 
+              : '8px 12px 8px 0',
+            borderColor: message.type === 'user' 
+              ? 'transparent transparent transparent #667eea' 
+              : 'transparent white transparent transparent'
+          }}
+        >
         <div>
           {message.type === 'user' ? (
             message.content
@@ -246,29 +275,53 @@ export const MessageItem = memo<MessageItemProps>(
           )}
         </div>
         {isHovered && (
-          <Box position="absolute" top="4px" right="6px">
-            <HStack spacing={1}>
+          <HStack 
+            position="absolute" 
+            top={-12} 
+            right={message.type === 'user' ? 0 : 'auto'}
+            left={message.type === 'user' ? 'auto' : 0}
+            bg="rgba(255, 255, 255, 0.95)" 
+            borderRadius="12px" 
+            boxShadow="0 4px 12px rgba(0, 0, 0, 0.15)"
+            border="1px solid rgba(102, 126, 234, 0.1)"
+            backdropFilter="blur(10px)"
+            p={1}
+            spacing={1}
+            zIndex={10}
+          >
+            <IconButton
+              icon={<MdOutlineContentCopy />}
+              aria-label={t('common.copy')}
+              size="sm"
+              variant="ghost"
+              onClick={handleCopy}
+              color="purple.600"
+              _hover={{
+                bg: 'purple.50',
+                transform: 'scale(1.1)'
+              }}
+              borderRadius="8px"
+              transition="all 0.2s ease"
+            />
+            {message.type === 'user' && (
               <IconButton
-                icon={<MdOutlineContentCopy />}
-                aria-label={t('common.copy')}
+                icon={<FiEdit />}
+                aria-label={t('common.edit')}
                 size="sm"
                 variant="ghost"
-                colorScheme="blue"
-                onClick={handleCopy}
+                onClick={handleEdit}
+                color="purple.600"
+                _hover={{
+                  bg: 'purple.50',
+                  transform: 'scale(1.1)'
+                }}
+                borderRadius="8px"
+                transition="all 0.2s ease"
               />
-              {message.type === 'user' && (
-                <IconButton
-                  icon={<FiEdit />}
-                  aria-label={t('common.edit')}
-                  size="sm"
-                  variant="ghost"
-                  colorScheme="blue"
-                  onClick={handleEdit}
-                />
-              )}
-            </HStack>
-          </Box>
+            )}
+          </HStack>
         )}
+        </Box>
       </Box>
     )
   }
