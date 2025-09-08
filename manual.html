@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AssIstant_Atelier - Professional AI Desktop Assistant</title>
+    <title>AssIstant Atelier - Professional AI Desktop Assistant</title>
     <style>
         * {
             margin: 0;
@@ -105,6 +105,28 @@
             background-clip: text;
             animation: slideInUp 1s ease-out;
             letter-spacing: -0.02em;
+        }
+
+        /* Wrap title and reading so widths align */
+        .hero-title {
+            display: inline-block;
+        }
+
+        /* Product name reading (furigana-like) */
+        .name-reading {
+            display: block;
+            font-size: 0.98rem;
+            letter-spacing: 0.06em;
+            line-height: 1.1;
+            margin-top: -0.4rem; /* タイトルに寄せる（寄せすぎ回避） */
+            margin-bottom: 1rem;
+            text-align: right; /* 右詰め（タイトル幅内） */
+            opacity: 0.95;
+            background: linear-gradient(135deg, #06b6d4, #7c3aed); /* タイトルと同色 */
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: slideInUp 1s ease-out 0.1s both;
         }
 
         .hero-subtitle {
@@ -640,7 +662,7 @@
     <nav class="nav">
         <div class="container">
             <div class="nav-content">
-                <div class="logo">AssIstant_Atelier</div>
+                <div class="logo">AssIstant Atelier</div>
                 <ul class="nav-links">
                     <li><a href="#features">機能</a></li>
                     <li><a href="#use-cases">利用シーン</a></li>
@@ -657,7 +679,10 @@
         <div class="particles"></div>
         <div class="container">
             <div class="hero-content">
-                <h1>AssIstant_Atelier</h1>
+                <div class="hero-title">
+                    <h1>AssIstant Atelier</h1>
+                    <div class="name-reading">アシスタント アトリエ</div>
+                </div>
                 <p class="hero-subtitle">特化型AIアシスタント工房</p>
                 <p class="hero-description">
                     毎日の作業で同じことを何度も繰り返していませんか？専門的な作業で思うような成果が得られずに困っていませんか？
