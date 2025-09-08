@@ -182,7 +182,7 @@ export const ChatSidebar = memo(
         </Box>
 
         {/* オートアシストボタン */}
-        <Box p={2} borderBottom="1px solid #ddd">
+        <Box p={2}>
           <Button
             width="100%"
             colorScheme={selectedChatId === 'autoAssist' ? 'blue' : 'gray'}
@@ -197,12 +197,14 @@ export const ChatSidebar = memo(
           </Button>
         </Box>
 
+        {/* 分離線 */}
+        <Box borderBottom="1px solid #ddd" />
+
         {/* アシスタント一覧 */}
         <Box flex="1" overflowY="auto">
           <List spacing={0}>
             {/* 新規作成ボタン */}
             <ListItem
-              borderBottom="1px solid #eee"
               cursor="pointer"
               _hover={{ bg: 'gray.100' }}
               transition="background-color 0.2s"

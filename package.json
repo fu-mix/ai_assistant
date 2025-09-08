@@ -1,6 +1,6 @@
 {
   "name": "AssIstant_Atelier",
-  "version": "1.0.8",
+  "version": "1.0.0",
   "description": "AssIstant Atelier - AI-Powered Multi-Agent Assistant Platform",
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -28,6 +28,7 @@
     "@electron-toolkit/utils": "^3.0.0",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
+    "@google/genai": "^1.17.0",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.3",
