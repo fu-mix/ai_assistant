@@ -3905,7 +3905,20 @@ export const Main = () => {
         isOpen={isTitleEditOpen}
         onClose={() => setIsTitleEditOpen(false)}
         titleSettings={titleSettings}
-        onSave={setTitleSettings}
+        onSave={async (settings) => {
+          // 画面反映
+          setTitleSettings(settings)
+          // 永続化
+          try {
+            // @ts-ignore
+            if (window.electronAPI?.saveTitleSettings) {
+              // @ts-ignore
+              await window.electronAPI.saveTitleSettings(settings)
+            }
+          } catch (e) {
+            console.error('Failed to save TitleSettings:', e)
+          }
+        }}
       />
 
       {/* エクスポートモーダル */}
