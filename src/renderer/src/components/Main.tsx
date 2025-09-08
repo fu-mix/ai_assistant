@@ -3160,33 +3160,6 @@ export const Main = () => {
           </Box>
 
           <HStack spacing={4}>
-            <Button
-              onClick={openCustomChatModal}
-              bg="white"
-              color="purple.600"
-              _hover={{
-                bg: 'purple.50',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 8px 25px rgba(102, 126, 234, 0.25)'
-              }}
-              _active={{
-                transform: 'translateY(0px)'
-              }}
-              isDisabled={isExpired}
-              minW="250px"
-              borderRadius="12px"
-              fontWeight="600"
-              transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-              border="2px solid"
-              borderColor="transparent"
-              _focus={{
-                borderColor: 'white',
-                outline: 'none'
-              }}
-            >
-              {t('header.newAssistant')}
-            </Button>
-
             <Menu>
               <MenuButton
                 as={IconButton}
@@ -3325,6 +3298,34 @@ export const Main = () => {
                       />
                     </HStack>
                   )}
+                </Flex>
+              </ListItem>
+
+              {/* 新規作成ボタン */}
+              <ListItem
+                p={4}
+                borderRadius="16px"
+                cursor="pointer"
+                onClick={openCustomChatModal}
+                bg="gray.50"
+                _hover={{
+                  bg: 'blue.50',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(59, 130, 246, 0.15)',
+                  borderColor: "blue.300"
+                }}
+                transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+                border="2px dashed"
+                borderColor="gray.300"
+                boxShadow="0 2px 8px rgba(0, 0, 0, 0.04)"
+              >
+                <Flex align="center" justify="center">
+                  <Text fontSize="lg" color="blue.500" mr={2}>
+                    +
+                  </Text>
+                  <Text color="gray.600" fontWeight="500" fontSize="sm">
+                    新規作成
+                  </Text>
                 </Flex>
               </ListItem>
             </List>

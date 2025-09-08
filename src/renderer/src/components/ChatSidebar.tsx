@@ -200,6 +200,19 @@ export const ChatSidebar = memo(
         {/* アシスタント一覧 */}
         <Box flex="1" overflowY="auto">
           <List spacing={0}>
+            {/* 新規作成ボタン */}
+            <ListItem
+              borderBottom="1px solid #eee"
+              cursor="pointer"
+              _hover={{ bg: 'gray.100' }}
+              transition="background-color 0.2s"
+            >
+              <Flex align="center" p={3} onClick={onCreateNewAssistant} justify="center">
+                <Text fontSize="sm" color="blue.600" fontWeight="medium">
+                  + 新しいアシスタント
+                </Text>
+              </Flex>
+            </ListItem>
             {regularChats.map((chat, index) => (
               <ListItem
                 key={chat.id}
@@ -274,18 +287,6 @@ export const ChatSidebar = memo(
           </List>
         </Box>
 
-        {/* 新規作成ボタン */}
-        <Box p={3} borderTop="1px solid #ddd" bg="white">
-          <Button
-            width="100%"
-            colorScheme="blue"
-            variant="outline"
-            onClick={onCreateNewAssistant}
-            size="sm"
-          >
-            + 新しいアシスタント
-          </Button>
-        </Box>
 
         {/* リサイズハンドル */}
         <Box
