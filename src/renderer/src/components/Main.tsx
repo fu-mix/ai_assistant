@@ -639,14 +639,13 @@ export const Main = () => {
   // タイトル設定
   const [titleSettings, setTitleSettings] = useState<TitleSettings>({
     segments: [
-      { text: 'D', color: '#ff6600' },
-      { text: 'es', color: '#333333' },
-      { text: 'AI', color: '#dd5588' },
-      { text: 'n ', color: '#333333' },
-      { text: 'A', color: '#ffd700' },
-      { text: 'ssistant', color: '#333333' }
+      { text: 'A', color: '#FFD700' },      // 強調A：ゴールド（知性・価値）
+      { text: 'ss', color: '#E5E7EB' },     // 通常文字：プラチナシルバー
+      { text: 'I', color: '#FFD700' },      // 強調I：ゴールド（知性・価値）
+      { text: 'stant ', color: '#E5E7EB' }, // 通常文字：プラチナシルバー
+      { text: 'Atelier', color: '#F59E0B' }  // Atelier：アンバーゴールド（創作・工房）
     ],
-    fontFamily: 'Arial',
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     backgroundImagePath: undefined
   })
   const [isTitleEditOpen, setIsTitleEditOpen] = useState(false)
@@ -3089,7 +3088,7 @@ export const Main = () => {
       {/* ヘッダー */}
       <Flex
         as="header"
-        backgroundImage={headerBgDataUri ? headerBgDataUri : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"}
+        backgroundImage={headerBgDataUri ? headerBgDataUri : "linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #334155 50%, #64748b 100%)"}
         backgroundSize="cover"
         backgroundPosition="center"
         backgroundRepeat="no-repeat"
@@ -3099,7 +3098,7 @@ export const Main = () => {
         height={headerBgDataUri ? '130px' : '120px'}
         justify="space-between"
         align="center"
-        boxShadow="0 4px 20px rgba(0, 0, 0, 0.1)"
+        boxShadow="0 8px 32px rgba(0, 0, 0, 0.3)"
         position="relative"
         _before={{
           content: '""',
@@ -3108,8 +3107,8 @@ export const Main = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%)',
-          backdropFilter: 'blur(10px)',
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 25%, rgba(51, 65, 85, 0.95) 50%, rgba(100, 116, 139, 0.95) 100%)',
+          backdropFilter: 'blur(15px)',
           zIndex: -1
         }}
       >
