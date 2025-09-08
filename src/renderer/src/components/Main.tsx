@@ -3129,11 +3129,22 @@ export const Main = () => {
             alignItems="center"
             fontFamily={titleSettings.fontFamily}
           >
-            {titleSettings.segments.map((seg, idx) => (
-              <Text as="span" key={idx} color={seg.color} whiteSpace="pre">
-                {seg.text}
-              </Text>
-            ))}
+            {(() => {
+              const shadow = headerBgDataUri
+                ? '0 0 2px rgba(0,0,0,0.55), 0 1px 6px rgba(0,0,0,0.35)'
+                : '0 1px 1px rgba(0,0,0,0.25)'
+              return titleSettings.segments.map((seg, idx) => (
+                <Text
+                  as="span"
+                  key={idx}
+                  color={seg.color}
+                  whiteSpace="pre"
+                  textShadow={shadow}
+                >
+                  {seg.text}
+                </Text>
+              ))
+            })()}
           </Heading>
           {titleHovered && (
             <IconButton
