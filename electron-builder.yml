@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: desain_assistant_1_1
+productName: assistant_atelier
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: desain_assistant
+  executableName: assistant_atelier
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
