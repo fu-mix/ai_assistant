@@ -639,11 +639,11 @@ export const Main = () => {
   // タイトル設定
   const [titleSettings, setTitleSettings] = useState<TitleSettings>({
     segments: [
-      { text: 'A', color: '#FFD700' },      // 強調A：ゴールド（知性・価値）
-      { text: 'ss', color: '#E5E7EB' },     // 通常文字：プラチナシルバー
-      { text: 'I', color: '#FFD700' },      // 強調I：ゴールド（知性・価値）
+      { text: 'A', color: '#FFD700' }, // 強調A：ゴールド（知性・価値）
+      { text: 'ss', color: '#E5E7EB' }, // 通常文字：プラチナシルバー
+      { text: 'I', color: '#FFD700' }, // 強調I：ゴールド（知性・価値）
       { text: 'stant ', color: '#E5E7EB' }, // 通常文字：プラチナシルバー
-      { text: 'Atelier', color: '#F59E0B' }  // Atelier：アンバーゴールド（創作・工房）
+      { text: 'Atelier', color: '#F59E0B' } // Atelier：アンバーゴールド（創作・工房）
     ],
     fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     backgroundImagePath: undefined
@@ -3088,7 +3088,11 @@ export const Main = () => {
       {/* ヘッダー */}
       <Flex
         as="header"
-        backgroundImage={headerBgDataUri ? headerBgDataUri : "linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #334155 50%, #64748b 100%)"}
+        backgroundImage={
+          headerBgDataUri
+            ? headerBgDataUri
+            : 'linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #334155 50%, #64748b 100%)'
+        }
         backgroundSize="cover"
         backgroundPosition="center"
         backgroundRepeat="no-repeat"
@@ -3107,7 +3111,8 @@ export const Main = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 25%, rgba(51, 65, 85, 0.95) 50%, rgba(100, 116, 139, 0.95) 100%)',
+          background:
+            'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 25%, rgba(51, 65, 85, 0.95) 50%, rgba(100, 116, 139, 0.95) 100%)',
           backdropFilter: 'blur(15px)',
           zIndex: -1
         }}
@@ -3144,8 +3149,8 @@ export const Main = () => {
 
         <HStack spacing={5}>
           <Box>
-            <Text 
-              fontSize="sm" 
+            <Text
+              fontSize="sm"
               color="rgba(255, 255, 255, 0.8)"
               fontWeight="500"
               bg="rgba(255, 255, 255, 0.1)"
@@ -3160,33 +3165,6 @@ export const Main = () => {
           </Box>
 
           <HStack spacing={4}>
-            <Button
-              onClick={openCustomChatModal}
-              bg="white"
-              color="purple.600"
-              _hover={{
-                bg: 'purple.50',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 8px 25px rgba(102, 126, 234, 0.25)'
-              }}
-              _active={{
-                transform: 'translateY(0px)'
-              }}
-              isDisabled={isExpired}
-              minW="250px"
-              borderRadius="12px"
-              fontWeight="600"
-              transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-              border="2px solid"
-              borderColor="transparent"
-              _focus={{
-                borderColor: 'white',
-                outline: 'none'
-              }}
-            >
-              {t('header.newAssistant')}
-            </Button>
-
             <Menu>
               <MenuButton
                 as={IconButton}
@@ -3259,8 +3237,8 @@ export const Main = () => {
           overflow="hidden"
         >
           {/* オートアシスト */}
-          <Box 
-            p={6} 
+          <Box
+            p={6}
             borderBottom="1px solid rgba(102, 126, 234, 0.1)"
             bg="linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)"
           >
@@ -3268,38 +3246,51 @@ export const Main = () => {
               <ListItem
                 key="autoAssist"
                 p={4}
-                bg={selectedChatId === 'autoAssist' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'white'}
+                bg={
+                  selectedChatId === 'autoAssist'
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : 'white'
+                }
                 borderRadius="16px"
                 cursor="pointer"
                 onClick={() => {
                   setSelectedChatId('autoAssist')
                   setInputMessage('')
                 }}
-                _hover={{ 
-                  bg: selectedChatId === 'autoAssist' 
-                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
-                    : 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                _hover={{
+                  bg:
+                    selectedChatId === 'autoAssist'
+                      ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                      : 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 8px 25px rgba(102, 126, 234, 0.15)'
                 }}
                 transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
                 border="2px solid"
-                borderColor={selectedChatId === 'autoAssist' ? 'transparent' : 'rgba(102, 126, 234, 0.1)'}
-                boxShadow={selectedChatId === 'autoAssist' ? '0 8px 25px rgba(102, 126, 234, 0.25)' : '0 4px 12px rgba(0, 0, 0, 0.05)'}
+                borderColor={
+                  selectedChatId === 'autoAssist' ? 'transparent' : 'rgba(102, 126, 234, 0.1)'
+                }
+                boxShadow={
+                  selectedChatId === 'autoAssist'
+                    ? '0 8px 25px rgba(102, 126, 234, 0.25)'
+                    : '0 4px 12px rgba(0, 0, 0, 0.05)'
+                }
               >
                 <Flex justify="space-between" align="center">
                   <Box>
-                    <Text 
-                      fontSize="md" 
+                    <Text
+                      fontSize="md"
                       fontWeight="700"
                       color={selectedChatId === 'autoAssist' ? 'white' : 'gray.800'}
                       letterSpacing="0.5px"
                     >
                       {t('assistant.autoAssist')}
                     </Text>
-                    <Text 
-                      fontSize="xs" 
-                      color={selectedChatId === 'autoAssist' ? 'rgba(255, 255, 255, 0.8)' : 'gray.500'}
+                    <Text
+                      fontSize="xs"
+                      color={
+                        selectedChatId === 'autoAssist' ? 'rgba(255, 255, 255, 0.8)' : 'gray.500'
+                      }
                       mt={1}
                       lineHeight="1.4"
                     >
@@ -3333,6 +3324,34 @@ export const Main = () => {
           {/* アシスタント一覧 (オートアシスト以外) */}
           <Box overflowY="auto" flex="1" bg="gray.50">
             <List spacing={4} p={6}>
+              {/* 新規作成ボタン */}
+              <ListItem
+                p={4}
+                borderRadius="16px"
+                cursor="pointer"
+                onClick={openCustomChatModal}
+                bg="gray.50"
+                _hover={{
+                  bg: 'blue.50',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(59, 130, 246, 0.15)',
+                  borderColor: 'blue.300'
+                }}
+                transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+                border="2px dashed"
+                borderColor="gray.300"
+                boxShadow="0 2px 8px rgba(0, 0, 0, 0.04)"
+              >
+                <Flex align="center" justify="center">
+                  <Text fontSize="lg" color="blue.500" mr={2}>
+                    +
+                  </Text>
+                  <Text color="gray.600" fontWeight="500" fontSize="sm">
+                    新しいアシスタントの作成
+                  </Text>
+                </Flex>
+              </ListItem>
+
               {(() => {
                 // 表示用にオートアシスト以外を取り出し
                 const displayedList = chats.filter((c) => c.id !== AUTO_ASSIST_ID)
@@ -3360,8 +3379,14 @@ export const Main = () => {
                       }}
                       transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
                       border="2px solid"
-                      borderColor={isCurrentSelected ? 'purple.400' : isDragTarget ? 'purple.200' : 'gray.200'}
-                      boxShadow={isCurrentSelected ? '0 8px 25px rgba(102, 126, 234, 0.25)' : '0 2px 8px rgba(0, 0, 0, 0.04)'}
+                      borderColor={
+                        isCurrentSelected ? 'purple.400' : isDragTarget ? 'purple.200' : 'gray.200'
+                      }
+                      boxShadow={
+                        isCurrentSelected
+                          ? '0 8px 25px rgba(102, 126, 234, 0.25)'
+                          : '0 2px 8px rgba(0, 0, 0, 0.04)'
+                      }
                       // ellipsis関連の指定をListItem自身にも残しておく
                       overflow="hidden"
                       textOverflow="ellipsis"
@@ -3450,28 +3475,28 @@ export const Main = () => {
         />
 
         {/* 右カラム(チャット表示) */}
-        <Box 
-          w="100%" 
-          bg="white" 
-          boxShadow="0 10px 25px rgba(0, 0, 0, 0.1)" 
-          borderRadius="20px" 
-          display="flex" 
+        <Box
+          w="100%"
+          bg="white"
+          boxShadow="0 10px 25px rgba(0, 0, 0, 0.1)"
+          borderRadius="20px"
+          display="flex"
           flexDirection="column"
           border="1px solid rgba(102, 126, 234, 0.1)"
           overflow="hidden"
         >
-          <Box 
-            ref={chatHistoryRef} 
-            flex="1" 
-            overflowY="auto" 
+          <Box
+            ref={chatHistoryRef}
+            flex="1"
+            overflowY="auto"
             p={6}
             bg="linear-gradient(to bottom, rgba(102, 126, 234, 0.02) 0%, rgba(255, 255, 255, 1) 10%)"
           >
             {selectedChatId === 'autoAssist' ? (
               <>
-                <Text 
-                  fontWeight="700" 
-                  color="gray.700" 
+                <Text
+                  fontWeight="700"
+                  color="gray.700"
                   mb={6}
                   fontSize="lg"
                   letterSpacing="0.5px"
@@ -3496,41 +3521,33 @@ export const Main = () => {
                 chatHistoryRef={chatHistoryRef}
               />
             ) : (
-              <Flex 
-                direction="column" 
-                align="center" 
-                justify="center" 
-                h="100%" 
+              <Flex
+                direction="column"
+                align="center"
+                justify="center"
+                h="100%"
                 textAlign="center"
                 py={20}
               >
-                <Box 
-                  w={16} 
-                  h={16} 
-                  borderRadius="full" 
-                  bg="linear-gradient(135deg, #667eea 0%, #764ba2 100%)" 
+                <Box
+                  w={16}
+                  h={16}
+                  borderRadius="full"
+                  bg="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
                   mb={6}
                   display="flex"
                   align="center"
                   justify="center"
                   boxShadow="0 8px 25px rgba(102, 126, 234, 0.25)"
                 >
-                  <Text color="white" fontSize="2xl" fontWeight="bold">💬</Text>
+                  <Text color="white" fontSize="2xl" fontWeight="bold">
+                    💬
+                  </Text>
                 </Box>
-                <Text 
-                  fontWeight="600" 
-                  color="gray.600"
-                  fontSize="xl"
-                  mb={2}
-                >
+                <Text fontWeight="600" color="gray.600" fontSize="xl" mb={2}>
                   {t('chat.default')}
                 </Text>
-                <Text 
-                  color="gray.500" 
-                  fontSize="md"
-                  maxW="md"
-                  lineHeight="1.6"
-                >
+                <Text color="gray.500" fontSize="md" maxW="md" lineHeight="1.6">
                   アシスタントを選択して会話を開始してください
                 </Text>
               </Flex>

@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 //import icon from '../../resources/icon.png?asset'
 
+import { GoogleGenAI } from '@google/genai'
 import axios from 'axios'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import * as fs from 'fs'
@@ -316,36 +317,48 @@ ipcMain.handle(
       console.log('apiKey:', apiKey ? '********' : '(none)')
       console.log('systemPrompt:', systemPrompt)
     }
-    const API_ENDPOINT = `${import.meta.env.MAIN_VITE_API_ENDPOINT}`
-
-    const proxyUrl = `${import.meta.env.MAIN_VITE_PROXY}`.trim()
-    const useProxy = proxyUrl !== ''
-    const httpsAgent = useProxy ? new HttpsProxyAgent(proxyUrl) : undefined
 
     try {
-      const response = await axios.post(
-        API_ENDPOINT,
-        {
-          contents: [...message],
-          system_instruction: {
-            parts: [{ text: systemPrompt }]
-          }
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-            'Access-Control-Allow-Origin': '*'
-          },
-          // httpsAgent,
-          // proxy: false
-          ...(useProxy && { httpsAgent, proxy: false })
-        }
-      )
-      if (response.status !== 200) {
-        throw new Error(`API request failed with status ${response.status}`)
+      // GoogleGenAIクライアントの初期化
+      const ai = new GoogleGenAI({
+        apiKey: apiKey
+      })
+
+      // @google/genaiでは、contentsは文字列または構造化オブジェクトの配列
+      // 既存のmessage形式を変換
+      let contents
+      if (message.length === 1 && message[0].parts.length === 1 && message[0].parts[0].text) {
+        // シンプルなテキストメッセージの場合
+        contents = message[0].parts[0].text
+      } else {
+        // 複雑な構造の場合は配列として保持
+        contents = message.map(msg => ({
+          role: msg.role,
+          parts: msg.parts.filter(part => part !== undefined).map(part => {
+            if (part.text) {
+              return { text: part.text }
+            } else if (part.inline_data) {
+              return { inline_data: part.inline_data }
+            }
+            return part
+          })
+        }))
       }
-      const resData: string = response.data.candidates[0].content.parts[0].text
+
+      // API呼び出し
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contents,
+        ...(systemPrompt && { 
+          config: {
+            systemInstruction: {
+              parts: [{ text: systemPrompt }]
+            }
+          }
+        })
+      })
+
+      const resData: string = response.text
 
       if (debugFlag) {
         console.log('\n=== postChatAI Response ===')
