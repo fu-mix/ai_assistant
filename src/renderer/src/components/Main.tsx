@@ -3217,6 +3217,10 @@ export const Main = () => {
               window.electronAPI.saveAgents(updatedChats).catch(console.error)
             }
           }}
+          onApiKeySaved={(key) => {
+            // APIキー保存後に即時反映し、入力フォームのdisableを解除
+            setApiKey(key)
+          }}
         />
       </Flex>
 

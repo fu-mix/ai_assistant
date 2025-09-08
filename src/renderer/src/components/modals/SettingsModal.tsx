@@ -39,10 +39,11 @@ interface SettingsModalProps {
   onClose: () => void
   apiConfigs: APIConfig[]
   onSaveApiConfigs: (configs: APIConfig[]) => void
+  onApiKeySaved?: (key: string) => void
 }
 
 export const SettingsModal = memo<SettingsModalProps>(
-  ({ isOpen, onClose, apiConfigs, onSaveApiConfigs }) => {
+  ({ isOpen, onClose, apiConfigs, onSaveApiConfigs, onApiKeySaved }) => {
     const { t, i18n } = useTranslation()
     const toast = useToast()
     const [selectedTab, setSelectedTab] = useState(0)
@@ -76,6 +77,8 @@ export const SettingsModal = memo<SettingsModalProps>(
         try {
           // @ts-ignore
           await window.electronAPI?.saveApiKey(key)
+          // 親へ即時通知してUI反映（再起動不要に）
+          if (onApiKeySaved) onApiKeySaved(key)
           toast({
             title: t('common.success'),
             description: t('api.saveSuccess'),
@@ -94,7 +97,7 @@ export const SettingsModal = memo<SettingsModalProps>(
           })
         }
       },
-      [t, toast]
+      [t, toast, onApiKeySaved]
     )
 
     const handleApiKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
