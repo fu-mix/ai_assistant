@@ -645,7 +645,7 @@ export const Main = () => {
       { text: 'stant ', color: '#E5E7EB' }, // 通常文字：プラチナシルバー
       { text: 'Atelier', color: '#F59E0B' } // Atelier：アンバーゴールド（創作・工房）
     ],
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontFamily: 'Cursive, Dancing Script, cursive',
     backgroundImagePath: undefined
   })
   const [isTitleEditOpen, setIsTitleEditOpen] = useState(false)

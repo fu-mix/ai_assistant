@@ -1,5 +1,10 @@
 @import './base.css';
 
+/* クラシック筆記体フォント */
+.classic-script {
+  font-family: 'Cursive', 'Dancing Script', cursive;
+}
+
 body {
   display: flex;
   align-items: center;

@@ -1,8 +1,8 @@
-# DesAIn_Assistant プロジェクト概要
+# AssIstant_Atelier プロジェクト概要
 
 ## プロジェクト構成
 
-DesAIn_Assistantは、Electron-Viteを使用したデスクトップアプリケーションで、React、TypeScript、Chakra-UI、Tailwind CSSを使用して構築されています。Google AI (Gemini)のAPIを活用したチャットアシスタント機能を提供します。
+AssIstant_Atelier（バージョン 1.0.0）は、Electron-Viteを使用したデスクトップアプリケーションで、React、TypeScript、Chakra-UI、Tailwind CSSを使用して構築されています。Google AI (Gemini)のAPIを活用したマルチエージェント型のAIアシスタントプラットフォームです。
 
 ### i18n（国際化）システム
 
@@ -96,7 +96,6 @@ DesAIn_Assistant/
 │       └── index.html  - HTMLテンプレート
 ├── .editorconfig      - エディター設定
 ├── .env                - 環境変数設定
-├── .env.local         - ローカル環境変数
 ├── .eslintignore      - ESLint除外設定
 ├── .eslintrc.cjs      - ESLint設定
 ├── .gitignore         - Git除外設定
@@ -168,14 +167,21 @@ DesAIn_Assistant/
 ## 技術スタック
 
 - **フレームワーク**: Electron (electron-vite)
-- **フロントエンド**: React, TypeScript
+- **フロントエンド**: React 18, TypeScript
 - **UIライブラリ**: 
   - Chakra-UI（メインUIコンポーネント）
   - Tailwind CSS（カスタムスタイリング）
+  - Emotion（CSS-in-JSエンジン）
 - **アイコン**: React Icons, Lucide React
 - **国際化**: react-i18next（多言語対応）
+- **AIライブラリ**:
+  - @google/genai: Google AI (Gemini) APIクライアント
+  - @modelcontextprotocol/sdk: Model Context Protocol SDK
+- **パフォーマンス最適化**:
+  - React Compiler（babel-plugin-react-compiler）
+  - react-compiler-runtime: React Compilerランタイム
 - **主要ライブラリ**:
-  - axios: APIリクエスト
+  - axios: HTTPリクエスト
   - react-markdown: マークダウンレンダリング
   - remark-gfm: GitHub Flavored Markdown対応
   - electron-store: データ永続化
@@ -184,6 +190,7 @@ DesAIn_Assistant/
   - mammoth: Wordファイル読み込み
   - adm-zip: ZIP圧縮解凍
   - https-proxy-agent: プロキシ対応
+  - i18next: 国際化フレームワーク
 
 ## 主要コンポーネント
 
@@ -237,12 +244,14 @@ Google AI (Gemini)のAPIとの通信を担当するモジュールです。メ�
 
 `.env`ファイルには以下の設定が含まれています：
 
-- `VITE_AI_API_ENDPOINT`: Google AI APIのエンドポイント
-- `VITE_ENABLE_EXTERNAL_API`: 外部API機能の有効/無効設定
-- `VITE_EXPIRY_DATE`: アプリケーションの有効期限
-- `MAIN_VITE_PROXY`: プロキシ設定
-- `MAIN_VITE_API_ENDPOINT`: メインプロセス用APIエンドポイント
+- `MAIN_VITE_PROXY`: プロキシ設定（企業環境での使用時）
+- `MAIN_VITE_API_ENDPOINT`: メインプロセス用APIエンドポイント（@google/genaiを使用するため現在は不要）
+- `VITE_EXPIRY_DATE`: アプリケーションの有効期限設定
 - `MAIN_VITE_DEBUG`: デバッグモード設定
+- `VITE_ENABLE_EXTERNAL_API`: 外部API機能の有効/無効設定
+- `VITE_AI_API_ENDPOINT`: レンダラープロセス用APIエンドポイント（@google/genaiを使用するため現在は不要）
+
+**注意**: Google AI (Gemini) APIには`@google/genai`ライブラリを使用しているため、従来のカスタムAPIエンドポイント設定（`MAIN_VITE_API_ENDPOINT`、`VITE_AI_API_ENDPOINT`）は不要となりました。APIキーの設定はアプリケーション内の設定画面から行います。
 
 ## 実行方法
 
@@ -365,6 +374,7 @@ npm run build:linux
 - **Electron Builder**: 各OS向けのパッケージング設定
 - **Vite**: 高速な開発サーバーとビルド
 - **PostCSS**: CSS処理とTailwind CSSの統合
+- **React Compiler**: パフォーマンス最適化のためのコンパイル時最適化（src/renderer/src/components/のファイルが対象）
 
 ## データ保存構造
 
