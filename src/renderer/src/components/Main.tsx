@@ -3129,11 +3129,22 @@ export const Main = () => {
             alignItems="center"
             fontFamily={titleSettings.fontFamily}
           >
-            {titleSettings.segments.map((seg, idx) => (
-              <Text as="span" key={idx} color={seg.color} whiteSpace="pre">
-                {seg.text}
-              </Text>
-            ))}
+            {(() => {
+              const shadow = headerBgDataUri
+                ? '0 0 2px rgba(0,0,0,0.55), 0 1px 6px rgba(0,0,0,0.35)'
+                : '0 1px 1px rgba(0,0,0,0.25)'
+              return titleSettings.segments.map((seg, idx) => (
+                <Text
+                  as="span"
+                  key={idx}
+                  color={seg.color}
+                  whiteSpace="pre"
+                  textShadow={shadow}
+                >
+                  {seg.text}
+                </Text>
+              ))
+            })()}
           </Heading>
           {titleHovered && (
             <IconButton
@@ -3216,6 +3227,10 @@ export const Main = () => {
               // @ts-ignore
               window.electronAPI.saveAgents(updatedChats).catch(console.error)
             }
+          }}
+          onApiKeySaved={(key) => {
+            // APIキー保存後に即時反映し、入力フォームのdisableを解除
+            setApiKey(key)
           }}
         />
       </Flex>
@@ -3905,7 +3920,20 @@ export const Main = () => {
         isOpen={isTitleEditOpen}
         onClose={() => setIsTitleEditOpen(false)}
         titleSettings={titleSettings}
-        onSave={setTitleSettings}
+        onSave={async (settings) => {
+          // 画面反映
+          setTitleSettings(settings)
+          // 永続化
+          try {
+            // @ts-ignore
+            if (window.electronAPI?.saveTitleSettings) {
+              // @ts-ignore
+              await window.electronAPI.saveTitleSettings(settings)
+            }
+          } catch (e) {
+            console.error('Failed to save TitleSettings:', e)
+          }
+        }}
       />
 
       {/* エクスポートモーダル */}

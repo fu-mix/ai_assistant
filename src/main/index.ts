@@ -392,21 +392,24 @@ ipcMain.handle('save-title-settings', (_event, newSettings: TitleSettings) => {
 // === ↓ ここから既存の「エクスポート／インポート機能」 ===
 //
 
-// ---------- ユーザー名置換ユーティリティ ----------
+// ---------- ユーザー名置換ユーティリティ（クロスプラットフォーム対応） ----------
+// エクスポート時: 実パス → トークン
 function replaceRealUserNameWithToken(originalData: any): any {
   const data = JSON.parse(JSON.stringify(originalData))
-  const userName = os.userInfo().username
-  const basePrefix = `C:\\Users\\${userName}\\AppData\\Roaming\\desain_assistant\\files`
-  const tokenPrefix = `C:\\Users\\{userName}\\AppData\\Roaming\\desain_assistant\\files`
+
+  // アプリのユーザーデータ配下の files ディレクトリをプレフィックスとして使用
+  const userDataFilesPrefix = path.join(app.getPath('userData'), 'files')
+  // 新トークン（OS非依存）
+  const genericToken = '{userDataFiles}'
 
   if (Array.isArray(data.agents)) {
     data.agents.forEach((agent: any) => {
       if (Array.isArray(agent.agentFilePaths)) {
         agent.agentFilePaths = agent.agentFilePaths.map((filePath: string) => {
-          if (filePath.startsWith(basePrefix)) {
-            return filePath.replace(basePrefix, tokenPrefix)
+          // 現在のOSの files パスで始まる場合のみ置換
+          if (filePath.startsWith(userDataFilesPrefix)) {
+            return filePath.replace(userDataFilesPrefix, genericToken)
           }
-
           return filePath
         })
       }
@@ -415,38 +418,47 @@ function replaceRealUserNameWithToken(originalData: any): any {
 
   if (data.titleSettings && data.titleSettings.backgroundImagePath) {
     const p = data.titleSettings.backgroundImagePath
-    if (p.startsWith(basePrefix)) {
-      data.titleSettings.backgroundImagePath = p.replace(basePrefix, tokenPrefix)
+    if (typeof p === 'string' && p.startsWith(userDataFilesPrefix)) {
+      data.titleSettings.backgroundImagePath = p.replace(userDataFilesPrefix, genericToken)
     }
   }
 
   return data
 }
 
+// インポート時: トークン → 実パス
 function replaceTokenWithRealUserName(originalData: any): any {
   const data = JSON.parse(JSON.stringify(originalData))
-  const userName = os.userInfo().username
-  const tokenPrefix = `C:\\Users\\{userName}\\AppData\\Roaming\\desain_assistant\\files`
-  const basePrefix = `C:\\Users\\${userName}\\AppData\\Roaming\\desain_assistant\\files`
+
+  const userDataFilesPrefix = path.join(app.getPath('userData'), 'files')
+
+  // 旧トークン（Windows 固定形式／後方互換のためサポート）
+  const legacyWindowsToken = `C:\\Users\\{userName}\\AppData\\Roaming\\desain_assistant\\files`
+  // 新トークン（OS非依存）
+  const genericToken = '{userDataFiles}'
+
+  const replaceIfToken = (p: string) => {
+    if (p.startsWith(genericToken)) {
+      return p.replace(genericToken, userDataFilesPrefix)
+    }
+    if (p.startsWith(legacyWindowsToken)) {
+      return p.replace(legacyWindowsToken, userDataFilesPrefix)
+    }
+    return p
+  }
 
   if (Array.isArray(data.agents)) {
     data.agents.forEach((agent: any) => {
       if (Array.isArray(agent.agentFilePaths)) {
-        agent.agentFilePaths = agent.agentFilePaths.map((fp: string) => {
-          if (fp.startsWith(tokenPrefix)) {
-            return fp.replace(tokenPrefix, basePrefix)
-          }
-
-          return fp
-        })
+        agent.agentFilePaths = agent.agentFilePaths.map((fp: string) => replaceIfToken(fp))
       }
     })
   }
 
   if (data.titleSettings && data.titleSettings.backgroundImagePath) {
     const p = data.titleSettings.backgroundImagePath
-    if (p.startsWith(tokenPrefix)) {
-      data.titleSettings.backgroundImagePath = p.replace(tokenPrefix, basePrefix)
+    if (typeof p === 'string') {
+      data.titleSettings.backgroundImagePath = replaceIfToken(p)
     }
   }
 

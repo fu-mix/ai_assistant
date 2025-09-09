@@ -48,22 +48,26 @@ export const ChatHeader = memo(
   }: ChatHeaderProps) => {
     const { t } = useTranslation()
     // タイトル要素のメモ化
-    const titleElements = useMemo(
-      () =>
-        titleSettings.segments.map((seg, idx) => (
-          <Text
-            key={idx}
-            as="span"
-            color={seg.color}
-            fontFamily={titleSettings.fontFamily}
-            fontSize="2xl"
-            fontWeight="bold"
-          >
-            {seg.text}
-          </Text>
-        )),
-      [titleSettings.segments, titleSettings.fontFamily]
-    )
+    const titleElements = useMemo(() => {
+      // 背景画像の有無でシャドウの強さを調整
+      const shadow = headerBgDataUri
+        ? '0 0 2px rgba(0,0,0,0.55), 0 1px 6px rgba(0,0,0,0.35)'
+        : '0 1px 1px rgba(0,0,0,0.25)'
+
+      return titleSettings.segments.map((seg, idx) => (
+        <Text
+          key={idx}
+          as="span"
+          color={seg.color}
+          fontFamily={titleSettings.fontFamily}
+          fontSize="2xl"
+          fontWeight="bold"
+          textShadow={shadow}
+        >
+          {seg.text}
+        </Text>
+      ))
+    }, [titleSettings.segments, titleSettings.fontFamily, headerBgDataUri])
 
     // 現在のチャットタイトルをメモ化
     const currentChatTitle = useMemo(() => {
